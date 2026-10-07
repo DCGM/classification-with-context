@@ -33,7 +33,7 @@ comma (e.g. `"40, 41"`), and empty fields are left empty.
 | 9 | page number | the printed page number, e.g. `12`, `[1a]`, `IV` |
 | 10 | date | e.g. `1933-09-01 00:00:00`; may be empty |
 | 11 | access | `public` or `private`; the access from the DB, and the only reliable one |
-| 12 | image path | `/homes/ikohut/naki.images/<root>/{library}/{document_dir}.images/{file}.jpg` |
+| 12 | image path | relative to the images base directory (the one holding `public.256/` and `private.256/`): `{root}/{library}/{document_dir}.images/{file}.jpg`, e.g. `private.256/knav/51bce29a-….images/cf085b84-….jpg`; `{root}` is where the image actually is |
 | 13 | annotated | `true` for an annotated page. All rows are `true` in the annotated files; in a context file, the annotated pages of that split are `true` |
 
 In the context files the page type is the Kramerius one, even for annotated pages. It
@@ -43,13 +43,14 @@ the label from the annotated file (match by library and page uuid).
 **Finding the embeddings of a record:**
 - text: key `f'{library}_{page_uuid}'` in the public or the private text LMDB
   (`2026-09-16.db_text_dump` / `2026-09-16.db_text_dump.private`)
-- image: key = the image path after `naki.images/<root>/`, i.e. `{library}/{document_dir}.images/{file}.jpg`.
+- image file: `os.path.join(images_base_dir, path)`
+- image embedding: the path without its first component, `{library}/{document_dir}.images/{file}.jpg`,
+  is the key in the image embedding LMDB of that root (`public.256` or `private.256`).
   The file name may be `uuid:{page_uuid}.jpg`, and the document directory may differ in letter case
-  from the uuid, so use the path rather than rebuilding it. Look it up in the image embeddings of
-  `public.256` and of `private.256`.
+  from the uuid, so use the path rather than rebuilding it.
 
-The `<root>` in the path and the LMDB a key is found in do not tell the access: about 2M records
-are stored under the other root. Use the access column.
+The root in the path (and the LMDB a key is found in) does not tell the access: about 2M
+images are stored under the other root. Use the access column.
 
 **Order caveats** (rare, mostly `mzk`): some documents number the orders in steps of 2
 (0, 2, 4, ... with consecutive page numbers), and some list every page twice in the DB; only the
