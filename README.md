@@ -12,7 +12,7 @@ split into trn and tst **by document**: no document has pages in both splits.
 |---|---|---|
 | `annotated.trn.256.final.csv` | 20,431 (10,193 documents) | annotated trn pages |
 | `annotated.tst.256.final.csv` | 2,256 (2,109 documents) | annotated tst pages |
-| `db.256.final.pruned.no_tst.csv` | 45,038,332 | trn context: all pages of all documents except the tst documents (annotated or not) |
+| `db.256.final.pruned.trn_docs.csv` | 45,038,332 | trn context: all pages of all documents except the tst documents (annotated or not) |
 | `db.256.final.pruned.tst_docs.csv` | 512,137 (2,149 documents) | tst context: all pages of the documents of the tst pages |
 
 The two context files together are the whole pruned DB dump. Each page appears in one of them only.
