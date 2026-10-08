@@ -29,17 +29,23 @@ Pages from the Kramerius DB dumps, kept only when the page has both an image emb
 (DINOv2) and a text embedding (mmBERT and the other text models). The annotated pages are
 split into trn and tst **by document**: no document has pages in both splits.
 
+The split per class, with N annotated pages of the class: N ≤ 200 → half in tst, half in trn;
+N > 200 → about 100 in tst (up to ~120, as whole documents move), the rest in trn. The tst pages
+are spread over as many documents as possible (at most 6 tst pages of one class come from one
+document). A document that holds a copy of a tst page (the same page uuid in another library) is a
+tst document too.
+
 | File | Rows | Content |
 |---|---|---|
-| `db.256.final.pruned.trn_docs.csv` | 45,035,974 | trn context: all pages of all documents except the tst documents (annotated or not) |
-| `annotated.trn.256.final.csv` | 20,927 (10,669 documents) | the annotated rows of the trn context file |
-| `db.256.final.pruned.tst_docs.csv` | 514,495 (2,158 documents) | tst context: all pages of the documents of the tst pages |
-| `annotated.tst.256.final.csv` | 2,266 (2,118 documents) | the annotated rows of the tst context file |
+| `db.256.final.pruned.trn_docs.csv` | 45,056,755 | trn context: all pages of all documents except the tst documents (annotated or not) |
+| `annotated.trn.256.final.csv` | 24,442 (13,146 documents) | the annotated rows of the trn context file |
+| `db.256.final.pruned.tst_docs.csv` | 493,714 (2,111 documents) | tst context: all pages of the documents of the tst pages |
+| `annotated.tst.256.final.csv` | 2,536 (2,103 documents) | the annotated rows of the tst context file |
 
 The two context files are the whole collection: together they are the pruned DB dump, and each
 page is in one of them only. The annotated files are subsets of them: an annotated file is just
 the rows of its context file whose annotated page type (column 7) is filled, i.e. a grep of the
-larger file: the same lines, only ordered as in the original annotation lists.
+larger file: the same lines, only in the annotation order.
 
 **Format:** CSV without a header, 13 columns. A field is quoted only when it contains a
 comma (e.g. `"40, 41"`), and empty fields are left empty.
@@ -73,93 +79,97 @@ images are stored under the other root. Use the access column.
 
 **Order caveats** (rare, mostly `mzk`): some documents number the orders in steps of 2
 (0, 2, 4, ... with consecutive page numbers), and some list every page twice in the DB; only the
-copy with text is kept. About 80 of the 12,302 documents with annotated pages have real gaps
-(pages missing in the DB or without text).
+copy with text is kept. A check of the documents with annotated pages (2026-10-07) found real gaps
+(pages missing in the DB or without text) in under 1% of them.
 
 ### Annotated vs DB page types
 
 How often the DB (Kramerius) page type differs from the annotated one, per annotated class.
 An empty DB type counts as a difference.
 
-**trn** (20,927 pages, 1,900 differ = 9.1%)
+**trn** (24,442 pages, 1,887 differ = 7.7%)
 
 | Annotated type | Pages | DB type differs | % | Most common DB types when different |
 |---|---:|---:|---:|---|
-| NormalPage | 2,656 | 1,117 | 42.1% | Table 405, Illustration 242, Map 125 |
-| TitlePage | 1,758 | 46 | 2.6% | (empty) 27, NormalPage 10, FrontCover 7 |
-| FrontCover | 1,745 | 99 | 5.7% | TitlePage 33, FrontJacket 32, (empty) 28 |
-| BackCover | 1,743 | 29 | 1.7% | (empty) 27, TitlePage 1, Jacket 1 |
-| BackEndSheet | 1,710 | 39 | 2.3% | (empty) 26, Blank 6, Jacket 3 |
-| FrontJacket | 1,357 | 5 | 0.4% | (empty) 3, Jacket 2 |
-| Map | 1,315 | 56 | 4.3% | FlyLeaf 50, (empty) 5, Illustration 1 |
-| Spine | 1,265 | 0 | 0.0% |  |
-| FlyLeaf | 1,211 | 6 | 0.5% | Map 3, (empty) 3 |
-| TableOfContents | 1,186 | 28 | 2.4% | (empty) 11, ListOfIllustrations 8, BackCover 3 |
-| Blank | 993 | 204 | 20.5% | NormalPage 119, Map 37, (empty) 22 |
-| Index | 838 | 9 | 1.1% | ListOfIllustrations 5, NormalPage 2, (empty) 1 |
-| Table | 718 | 17 | 2.4% | NormalPage 10, FlyLeaf 3, Index 1 |
-| Jacket | 497 | 1 | 0.2% | FrontJacket 1 |
-| CalibrationTable | 486 | 0 | 0.0% |  |
-| ListOfIllustrations | 436 | 7 | 1.6% | ListOfTables 4, ListOfMaps 3 |
-| FrontEndSheet | 274 | 39 | 14.2% | (empty) 25, FrontEndPaper 12, Jacket 2 |
-| Illustration | 217 | 31 | 14.3% | NormalPage 22, FlyLeaf 4, (empty) 2 |
-| Advertisement | 109 | 19 | 17.4% | NormalPage 14, Jacket 2, Map 1 |
-| Cover | 108 | 2 | 1.9% | TableOfContents 1, Jacket 1 |
-| BackEndPaper | 78 | 36 | 46.2% | NormalPage 36 |
-| SheetMusic | 53 | 52 | 98.1% | NormalPage 52 |
-| ListOfMaps | 40 | 1 | 2.5% | (empty) 1 |
-| Impressum | 30 | 29 | 96.7% | NormalPage 29 |
-| Bibliography | 27 | 7 | 25.9% | NormalPage 5, Table 1, ListOfIllustrations 1 |
-| ListOfTables | 27 | 1 | 3.7% | NormalPage 1 |
-| FrontEndPaper | 21 | 2 | 9.5% | NormalPage 2 |
-| Colophon | 10 | 10 | 100.0% | (empty) 6, NormalPage 4 |
-| Errata | 9 | 2 | 22.2% | FlyLeaf 1, NormalPage 1 |
-| Frontispiece | 4 | 4 | 100.0% | NormalPage 3, Illustration 1 |
-| Dedication | 3 | 2 | 66.7% | NormalPage 2 |
-| Preface | 2 | 0 | 0.0% |  |
+| CalibrationTable | 3,228 | 0 | 0.0% |  |
+| NormalPage | 2,669 | 1,151 | 43.1% | Table 409, Illustration 242, Map 138 |
+| TitlePage | 1,727 | 45 | 2.6% | (empty) 27, NormalPage 9, FrontCover 7 |
+| FrontCover | 1,688 | 84 | 5.0% | TitlePage 32, (empty) 27, FrontJacket 20 |
+| BackCover | 1,668 | 29 | 1.7% | (empty) 27, Jacket 1, TitlePage 1 |
+| BackEndSheet | 1,646 | 37 | 2.2% | (empty) 26, Blank 6, BackCover 2 |
+| FrontJacket | 1,361 | 4 | 0.3% | Jacket 2, (empty) 2 |
+| Map | 1,335 | 60 | 4.5% | FlyLeaf 55, (empty) 4, Illustration 1 |
+| Spine | 1,267 | 0 | 0.0% |  |
+| FlyLeaf | 1,219 | 5 | 0.4% | Map 3, (empty) 2 |
+| TableOfContents | 1,173 | 28 | 2.4% | (empty) 11, ListOfIllustrations 8, BackCover 3 |
+| Blank | 986 | 197 | 20.0% | NormalPage 113, Map 39, (empty) 22 |
+| SheetMusic | 952 | 31 | 3.3% | NormalPage 31 |
+| Index | 845 | 6 | 0.7% | ListOfIllustrations 3, NormalPage 2, (empty) 1 |
+| Table | 713 | 20 | 2.8% | NormalPage 11, ListOfTables 3, FlyLeaf 3 |
+| ListOfIllustrations | 443 | 6 | 1.4% | ListOfTables 4, ListOfMaps 2 |
+| Jacket | 429 | 1 | 0.2% | FrontJacket 1 |
+| FrontEndSheet | 277 | 28 | 10.1% | (empty) 25, FrontEndPaper 3 |
+| Illustration | 221 | 32 | 14.5% | NormalPage 22, FlyLeaf 4, CalibrationTable 2 |
+| Advertisement | 107 | 17 | 15.9% | NormalPage 14, BackCover 1, Jacket 1 |
+| Cover | 106 | 34 | 32.1% | FrontCover 32, Jacket 1, TableOfContents 1 |
+| ListOfMaps | 60 | 0 | 0.0% |  |
+| ListOfTables | 56 | 5 | 8.9% | ListOfIllustrations 2, NormalPage 1, TableOfContents 1 |
+| Errata | 55 | 2 | 3.6% | NormalPage 1, FlyLeaf 1 |
+| Frontispiece | 52 | 3 | 5.8% | NormalPage 3 |
+| BackEndPaper | 43 | 23 | 53.5% | NormalPage 23 |
+| Bibliography | 23 | 5 | 21.7% | NormalPage 4, Table 1 |
+| Impressum | 23 | 21 | 91.3% | NormalPage 21 |
+| Imprimatur | 14 | 0 | 0.0% |  |
+| FrontEndPaper | 13 | 0 | 0.0% |  |
+| Preface | 12 | 1 | 8.3% | Cover 1 |
+| Dedication | 11 | 2 | 18.2% | NormalPage 2 |
+| Colophon | 10 | 10 | 100.0% | (empty) 7, NormalPage 3 |
+| FragmentsOfBookbinding | 5 | 0 | 0.0% |  |
+| Appendix | 3 | 0 | 0.0% |  |
 | Abstract | 1 | 0 | 0.0% |  |
+| Edge | 1 | 0 | 0.0% |  |
 
-**tst** (2,266 pages, 245 differ = 10.8%)
+**tst** (2,536 pages, 260 differ = 10.3%)
 
 | Annotated type | Pages | DB type differs | % | Most common DB types when different |
 |---|---:|---:|---:|---|
-| Map | 120 | 8 | 6.7% | FlyLeaf 8 |
-| NormalPage | 113 | 87 | 77.0% | Table 25, Map 21, Illustration 10 |
-| Index | 110 | 0 | 0.0% |  |
-| FlyLeaf | 109 | 0 | 0.0% |  |
-| Blank | 107 | 37 | 34.6% | Map 31, FlyLeaf 4, NormalPage 2 |
-| ListOfIllustrations | 107 | 1 | 0.9% | ListOfMaps 1 |
-| Table | 106 | 3 | 2.8% | ListOfTables 2, NormalPage 1 |
-| FrontJacket | 105 | 0 | 0.0% |  |
-| TableOfContents | 105 | 2 | 1.9% | ListOfIllustrations 2 |
-| FrontEndSheet | 104 | 2 | 1.9% | Map 1, Bibliography 1 |
-| Illustration | 103 | 12 | 11.7% | FlyLeaf 8, NormalPage 2, Cover 1 |
-| Spine | 102 | 0 | 0.0% |  |
-| Errata | 100 | 0 | 0.0% |  |
-| Frontispiece | 100 | 0 | 0.0% |  |
-| Cover | 99 | 51 | 51.5% | FrontCover 51 |
-| Advertisement | 98 | 0 | 0.0% |  |
-| ListOfTables | 84 | 7 | 8.3% | ListOfIllustrations 5, Index 1, TableOfContents 1 |
-| ListOfMaps | 80 | 1 | 1.2% | ListOfIllustrations 1 |
-| TitlePage | 69 | 2 | 2.9% | Cover 1, FlyLeaf 1 |
-| CalibrationTable | 56 | 0 | 0.0% |  |
-| FrontCover | 43 | 7 | 16.3% | Cover 3, TitlePage 2, FlyLeaf 1 |
-| BackEndSheet | 41 | 2 | 4.9% | Map 1, Jacket 1 |
-| Jacket | 35 | 5 | 14.3% | Map 2, FlyLeaf 1, ListOfIllustrations 1 |
-| Imprimatur | 28 | 0 | 0.0% |  |
-| BackCover | 25 | 4 | 16.0% | FlyLeaf 2, Cover 1, Advertisement 1 |
-| Preface | 22 | 1 | 4.5% | Cover 1 |
-| Bibliography | 19 | 0 | 0.0% |  |
-| Dedication | 18 | 0 | 0.0% |  |
-| Impressum | 16 | 0 | 0.0% |  |
-| FragmentsOfBookbinding | 10 | 0 | 0.0% |  |
-| Colophon | 9 | 9 | 100.0% | (empty) 5, NormalPage 3, FrontEndSheet 1 |
-| BackEndPaper | 7 | 1 | 14.3% | FlyLeaf 1 |
-| Appendix | 6 | 0 | 0.0% |  |
-| FrontEndPaper | 5 | 1 | 20.0% | Map 1 |
-| Edge | 2 | 0 | 0.0% |  |
-| SheetMusic | 2 | 2 | 100.0% | FlyLeaf 2 |
+| TableOfContents | 118 | 2 | 1.7% | ListOfIllustrations 2 |
+| Blank | 114 | 44 | 38.6% | Map 29, NormalPage 8, FlyLeaf 3 |
+| Table | 111 | 0 | 0.0% |  |
+| BackEndSheet | 105 | 4 | 3.8% | Jacket 3, Map 1 |
+| Index | 103 | 3 | 2.9% | ListOfIllustrations 2, Map 1 |
+| Jacket | 103 | 5 | 4.9% | Map 2, Cover 1, ListOfIllustrations 1 |
+| Cover | 101 | 19 | 18.8% | FrontCover 19 |
+| FlyLeaf | 101 | 1 | 1.0% | (empty) 1 |
+| FrontEndSheet | 101 | 13 | 12.9% | FrontEndPaper 9, Jacket 2, Bibliography 1 |
+| FrontJacket | 101 | 1 | 1.0% | (empty) 1 |
+| Illustration | 101 | 13 | 12.9% | FlyLeaf 8, NormalPage 2, Cover 1 |
+| Advertisement | 100 | 2 | 2.0% | Map 1, Jacket 1 |
+| BackCover | 100 | 4 | 4.0% | FlyLeaf 2, Cover 1, Advertisement 1 |
+| CalibrationTable | 100 | 0 | 0.0% |  |
+| FrontCover | 100 | 22 | 22.0% | FrontJacket 13, Cover 4, TitlePage 3 |
+| ListOfIllustrations | 100 | 2 | 2.0% | ListOfMaps 2 |
+| Map | 100 | 4 | 4.0% | FlyLeaf 3, (empty) 1 |
+| NormalPage | 100 | 53 | 53.0% | Table 21, Illustration 10, Map 8 |
+| SheetMusic | 100 | 23 | 23.0% | NormalPage 21, FlyLeaf 2 |
+| Spine | 100 | 0 | 0.0% |  |
+| TitlePage | 100 | 3 | 3.0% | NormalPage 1, Cover 1, FlyLeaf 1 |
+| ListOfMaps | 60 | 2 | 3.3% | (empty) 1, ListOfIllustrations 1 |
+| ListOfTables | 55 | 3 | 5.5% | ListOfIllustrations 3 |
+| Errata | 54 | 0 | 0.0% |  |
+| Frontispiece | 52 | 1 | 1.9% | Illustration 1 |
+| BackEndPaper | 42 | 14 | 33.3% | NormalPage 13, FlyLeaf 1 |
+| Bibliography | 23 | 2 | 8.7% | NormalPage 1, ListOfIllustrations 1 |
+| Impressum | 23 | 8 | 34.8% | NormalPage 8 |
+| Imprimatur | 14 | 0 | 0.0% |  |
+| FrontEndPaper | 13 | 3 | 23.1% | NormalPage 2, Map 1 |
+| Preface | 12 | 0 | 0.0% |  |
+| Dedication | 10 | 0 | 0.0% |  |
+| Colophon | 9 | 9 | 100.0% | (empty) 4, NormalPage 4, FrontEndSheet 1 |
+| FragmentsOfBookbinding | 5 | 0 | 0.0% |  |
+| Appendix | 3 | 0 | 0.0% |  |
 | Abstract | 1 | 0 | 0.0% |  |
+| Edge | 1 | 0 | 0.0% |  |
 
 ## Page embeddings (LMDB)
 
@@ -233,47 +243,47 @@ all. Counts: annotated pages in trn and tst, and DB (Kramerius) page type over t
 | Page type | NDK | trn | tst | DB pages |
 |---|---|---:|---:|---:|
 | Abstract | logical part only | 1 | 1 | 147 |
-| Advertisement | page type | 109 | 98 | 353,062 |
-| Appendix | page type | 0 | 6 | 78 |
-| BackCover | page type | 1,743 | 25 | 135,341 |
-| BackEndPaper | page type | 78 | 7 | 4,774 |
-| BackEndSheet | page type | 1,710 | 41 | 133,867 |
-| Bibliography | page type | 27 | 19 | 1,154 |
-| Blank | page type | 993 | 107 | 283,334 |
-| CalibrationTable | no | 486 | 56 | 3,392 |
+| Advertisement | page type | 107 | 100 | 353,062 |
+| Appendix | page type | 3 | 3 | 78 |
+| BackCover | page type | 1,668 | 100 | 135,341 |
+| BackEndPaper | page type | 43 | 42 | 4,774 |
+| BackEndSheet | page type | 1,646 | 105 | 133,867 |
+| Bibliography | page type | 23 | 23 | 1,154 |
+| Blank | page type | 986 | 114 | 283,334 |
+| CalibrationTable | no | 3,228 | 100 | 3,392 |
 | Colophon | page type | 10 | 9 | 3 |
-| Cover | page type | 108 | 99 | 9,898 |
+| Cover | page type | 106 | 101 | 9,898 |
 | CustomInclude | no | 0 | 0 | 46 |
-| Dedication | page type | 3 | 18 | 1,546 |
-| Edge | page type | 0 | 2 | 4,149 |
-| Errata | page type | 9 | 100 | 836 |
-| FlyLeaf | page type | 1,211 | 109 | 21,344 |
-| FragmentsOfBookbinding | no | 0 | 10 | 52 |
-| FrontCover | page type | 1,745 | 43 | 137,513 |
-| FrontEndPaper | page type | 21 | 5 | 4,919 |
-| FrontEndSheet | page type | 274 | 104 | 137,628 |
-| Frontispiece | page type | 4 | 100 | 384 |
-| FrontJacket | page type | 1,357 | 105 | 20,655 |
-| Illustration | page type | 217 | 103 | 153,239 |
-| Impressum | page type | 30 | 16 | 266 |
-| Imprimatur | page type | 0 | 28 | 149 |
-| Index | page type | 838 | 110 | 282,718 |
-| Jacket | page type | 497 | 35 | 156,517 |
-| ListOfIllustrations | page type | 436 | 107 | 13,372 |
-| ListOfMaps | page type | 40 | 80 | 576 |
-| ListOfTables | page type | 27 | 84 | 1,280 |
-| Map | page type | 1,315 | 120 | 47,159 |
-| NormalPage | page type | 2,656 | 113 | 39,243,261 |
+| Dedication | page type | 11 | 10 | 1,546 |
+| Edge | page type | 1 | 1 | 4,149 |
+| Errata | page type | 55 | 54 | 836 |
+| FlyLeaf | page type | 1,219 | 101 | 21,344 |
+| FragmentsOfBookbinding | no | 5 | 5 | 52 |
+| FrontCover | page type | 1,688 | 100 | 137,513 |
+| FrontEndPaper | page type | 13 | 13 | 4,919 |
+| FrontEndSheet | page type | 277 | 101 | 137,628 |
+| Frontispiece | page type | 52 | 52 | 384 |
+| FrontJacket | page type | 1,361 | 101 | 20,655 |
+| Illustration | page type | 221 | 101 | 153,239 |
+| Impressum | page type | 23 | 23 | 266 |
+| Imprimatur | page type | 14 | 14 | 149 |
+| Index | page type | 845 | 103 | 282,718 |
+| Jacket | page type | 429 | 103 | 156,517 |
+| ListOfIllustrations | page type | 443 | 100 | 13,372 |
+| ListOfMaps | page type | 60 | 60 | 576 |
+| ListOfTables | page type | 56 | 55 | 1,280 |
+| Map | page type | 1,335 | 100 | 47,159 |
+| NormalPage | page type | 2,669 | 100 | 39,243,261 |
 | Obituary | logical part only | 0 | 0 | 3 |
-| Preface | page type | 2 | 22 | 2,371 |
-| SheetMusic | page type | 53 | 2 | 89,410 |
-| Spine | page type | 1,265 | 102 | 4,595 |
-| Table | page type | 718 | 106 | 437,761 |
-| TableOfContents | page type | 1,186 | 105 | 319,318 |
-| TitlePage | page type | 1,758 | 69 | 945,060 |
-| **total** | | 20,927 | 2,266 | 42,951,177 |
+| Preface | page type | 12 | 12 | 2,371 |
+| SheetMusic | page type | 952 | 100 | 89,410 |
+| Spine | page type | 1,267 | 100 | 4,595 |
+| Table | page type | 713 | 111 | 437,761 |
+| TableOfContents | page type | 1,173 | 118 | 319,318 |
+| TitlePage | page type | 1,727 | 100 | 945,060 |
+| **total** | | 24,442 | 2,536 | 42,951,177 |
 
-CustomInclude and Obituary have no annotated pages. Appendix, Edge, FragmentsOfBookbinding and Imprimatur are annotated only in tst. Two NDK page types are in neither the list nor the data: `afterword` and `conclusion`.
+CustomInclude and Obituary have no annotated pages. Every annotated class has pages in both trn and tst. Two NDK page types are in neither the list nor the data: `afterword` and `conclusion`.
 
 ### Extra page types in the DB dumps
 
@@ -312,19 +322,22 @@ overfitting), it reported:
 All of them come from scikit-learn, over the predictions (argmax of the logits) of the whole set:
 
 ```python
-import numpy as np
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 # gt:   the true class id of each page of the set (from the annotated page type), shape (n_pages,)
 # pred: the predicted class id of each page, the argmax of the model's logits, shape (n_pages,)
 # label2id: class name -> class id
-labels = list(range(len(label2id)))   # all class ids, also those missing in the set
-present = np.unique(gt)               # the class ids that have pages in the set
+labels = list(range(len(label2id)))   # all class ids
 accuracy = accuracy_score(gt, pred)
-# weighted: classes weighted by their number of pages
-w_precision, w_recall, w_fscore, _ = precision_recall_fscore_support(gt, pred, average='weighted', labels=present)
-# macro: every class weighted the same
-m_precision, m_recall, m_fscore, _ = precision_recall_fscore_support(gt, pred, average='macro', labels=present)
-# per class, for all class ids: fscore[i] is class id i
+# weighted: per-class values averaged with the number of pages of the class as the weight
+w_precision, w_recall, w_fscore, _ = precision_recall_fscore_support(gt, pred, average='weighted', labels=labels)
+# per class: fscore[i] is class id i
 precision, recall, fscore, support = precision_recall_fscore_support(gt, pred, average=None, labels=labels)
 ```
+
+**Why the weighted average.** The tst split is built so the weights mean something (see Data):
+every class with enough pages has ~100 tst pages, so these classes count the same, as in a plain
+(macro) average; a scarce class is split evenly between trn and tst, so it has fewer tst pages and
+counts less, in proportion to how much data there is for it, in tst and in trn alike. This
+also damps the noise of the tiny classes, where a single page changes the class F1 a lot. A
+class without tst pages has weight 0, so passing all class ids in `labels` changes nothing.
