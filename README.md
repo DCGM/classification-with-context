@@ -9,12 +9,15 @@
 │   ├── text/<model>/       text embeddings of the pages in the public text dump
 │   └── image/<model>/      image embeddings of the images in public.256
 └── private/
-    ├── text/<model>/       text embeddings of the pages in the private text dump (none yet)
+    ├── text/<model>/       text embeddings of the pages in the private text dump
     └── image/<model>/      image embeddings of the images in private.256
 ```
 
 Each `<model>` folder holds `lmdb/` and `meta.json`, plus the logs of the run that made it. The
-models computed so far are listed in [Page embeddings](#page-embeddings-lmdb).
+models computed so far, each for both `public/` and `private/` (6 LMDBs), are listed in
+[Page embeddings](#page-embeddings-lmdb):
+- text: `mmBERT-base`, `Qwen3-Embedding-0.6B`
+- image: `vitb14_dinov2_2026-09-20_public_private_2`
 The page images themselves (the images base directory of the CSV paths) are in
 `/homes/ihradis/naki.images/` (`public.256/`, `private.256/`).
 
