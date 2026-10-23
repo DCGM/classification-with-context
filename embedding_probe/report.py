@@ -29,6 +29,7 @@ logger = logging.getLogger('REPORT')
 PER_CLASS_COLUMNS = 6
 COMPLETENESS = ('full', 'left cut', 'right cut', 'both cut')
 DB_SUFFIX = ' (DB labels)'
+CUE_PAIRS = (('mmBERT+DINOv2', 'mmBERT+DINOv2 +cues'), ('layout stats', 'text cues'))
 
 
 def parse_arguments(argv=None):
@@ -111,6 +112,22 @@ def annotations_vs_db(scores: Dict[str, Dict]) -> List[str]:
     return lines
 
 
+def pair_section(scores: Dict[str, Dict], base: str, variant: str) -> List[str]:
+    """Per-class F1 of an experiment and of its variant (e.g. with the text cues), ordered by the gain."""
+    if base not in scores or variant not in scores:
+        return []
+    a, b = scores[base], scores[variant]
+    lines = ['', f'### {variant} vs {base}', '',
+             f'Weighted F1 {b["weighted_fscore"]:.3f} vs {a["weighted_fscore"]:.3f} '
+             f'({b["weighted_fscore"] - a["weighted_fscore"]:+.3f}); per class, ordered by the gain:', '',
+             f'| Page type | tst pages | {base} | {variant} | Gain |', '|---|---:|---:|---:|---:|']
+    gain = {c: b['per_class'].get(c, {}).get('fscore', 0.0) - v['fscore'] for c, v in a['per_class'].items()}
+    for c in sorted(gain, key=lambda c: (-gain[c], c)):
+        lines.append(f'| {c} | {a["per_class"][c]["support"]} | {a["per_class"][c]["fscore"]:.2f} | '
+                     f'{b["per_class"].get(c, {}).get("fscore", 0.0):.2f} | {gain[c]:+.2f} |')
+    return lines
+
+
 def report_context(work_dir: Path, pages: pl.DataFrame, context: int) -> Dict[str, Dict]:
     tst = pages.filter(pl.col('split') == 'tst')
     files = load_predictions(work_dir / f'k{context}' / 'predictions', tst['key'].to_list())
@@ -135,6 +152,8 @@ def report_context(work_dir: Path, pages: pl.DataFrame, context: int) -> Dict[st
         columns.append('DB page type')
     lines += ['', '### Per-class F1 of the best experiments', ''] + per_class_table(scores, columns)
     lines += annotations_vs_db(scores)
+    for base, variant in CUE_PAIRS:
+        lines += pair_section(scores, base, variant)
     if context > 0:
         lines += ['', '### Accuracy by window completeness', '',
                   'Whether the window of a tst page reaches past its document\'s start (left cut), end '

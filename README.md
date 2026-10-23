@@ -392,9 +392,22 @@ window completeness (full, left cut, right cut, both cut).
   decay chosen) on the DB page types of the same trn pages instead of their annotations, the pages
   without a DB type left out. Scored on the annotated tst pages, it shows what the annotators'
   corrections bring; the report puts both side by side.
+- `text cues` and `mmBERT+DINOv2 +cues` (`probe_text_cues`): the cheap text cues of
+  `text_cues.py`, alone (gradient boosting) and added to the linear probe on the embeddings. These
+  are 106 numbers per page:
+  - 23 multilingual keyword groups (TOC, index, errata, preface, dedication, imprimatur, imprint,
+    lists, music, maps, library stamps, ...), counted on the whole page and flagged in the first
+    and in the last 3 lines;
+  - 8 regex patterns (ISBN, price, year, map scale, dot leader + page number, ...);
+  - line statistics.
 
-**Private text.** Nobody may look at the private page text (see `CLAUDE.md`). `text_baselines` is
-developed and debugged on the public text: without `--private-text-lmdb` it reads only the public
-text LMDB and scores the pages whose text is public (output `*.public_only`). With the private LMDB
-it runs on the same pages as all other experiments. The text stays in memory and only predicted
-labels are written.
+  The cues were designed on public text only, with `build_dev_sample.py` (a DB-labelled sample
+  of pages with public text from the trn context), `explore_public_text.py` and `cue_dev_report.py`.
+  On that sample, 3 lines gave the most specific heading flags: going from 1 to 2 lines catches
+  headings below a page number or running header, while more than 3 lines mostly add false alarms.
+
+**Private text.** Nobody may look at the private page text (see `CLAUDE.md`). `text_baselines` and
+`probe_text_cues` are developed and debugged on the public text: without `--private-text-lmdb` they
+read only the public text LMDB and score the pages whose text is public (output `*.public_only`).
+With the private LMDB they run on the same pages as all other experiments. The text stays in
+memory and only predicted labels are written.

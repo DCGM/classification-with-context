@@ -8,7 +8,9 @@ start of a word (OCR and inflection variants: 'predmluv' matches 'předmluva', '
 The vector (CUE_FEATURES names its entries):
   kw_<group>       log(1 + number of keyword hits) on the whole page
   head_<group>     1 if a keyword of the group is in the first 3 non-empty lines (headings)
+  foot_<group>     1 if a keyword of the group is in the last 3 non-empty lines (footers: imprints, end marks)
   pat_<pattern>    log(1 + number of matching lines) of a regex pattern (ISBN, price, year, ...)
+  foot_pat_<p>     1 if the pattern matches one of the last 3 lines
   layout stats     the 17 line statistics of text_baselines.py, plus alphabetical line order
                    (indexes), numeric lines and multi-number lines (tables, TOCs)
 
@@ -74,6 +76,7 @@ KEYWORDS: Dict[str, Tuple[str, ...]] = {
               'bibliotheca', 'ex libris', 'exlibris', 'majetek', 'razitko'),
     'table': ('tab ', 'tabulka', 'tabelle', 'celkem', 'summa', 'prumer', 'soucet', 'zusammen', 'total'),
     'cover': ('cena ', 'brozovan', 'vazan', 'edice', 'knihovna', 'svazek', 'sesit', 'heft', 'lieferung'),
+    'end': ('konec', 'ende ', 'finis', 'the end', 'fin ', 'explicit', 'tiskem', 'vytiskl', 'vytisk'),
 }
 
 PATTERNS: Dict[str, re.Pattern] = {
@@ -88,8 +91,10 @@ PATTERNS: Dict[str, re.Pattern] = {
 }
 
 EXTRA_LAYOUT = ('alphabetical_lines', 'numeric_lines', 'multi_number_lines', 'first_line_caps')
+EDGE_LINES = 3  # heading = first 3, footer = last 3 non-empty lines (chosen on public text, see the README)
 CUE_FEATURES = (tuple(f'kw_{g}' for g in KEYWORDS) + tuple(f'head_{g}' for g in KEYWORDS)
-                + tuple(f'pat_{p}' for p in PATTERNS) + LAYOUT_FEATURES + EXTRA_LAYOUT)
+                + tuple(f'foot_{g}' for g in KEYWORDS) + tuple(f'pat_{p}' for p in PATTERNS)
+                + tuple(f'foot_pat_{p}' for p in PATTERNS) + LAYOUT_FEATURES + EXTRA_LAYOUT)
 
 _WORD_START = {g: [re.compile(r'(?<![^\W\d_])' + re.escape(k)) for k in keys] for g, keys in KEYWORDS.items()}
 
@@ -126,12 +131,24 @@ def cue_vector(text: str) -> List[float]:
     folded_lines = [line.strip() for line in fold(text).split('\n') if line.strip()]
     norm_lines = [line.strip() for line in normalize(text).split('\n') if line.strip()]
     padded = ' ' + ' '.join(norm_lines) + ' '  # trailing space lets 'viz ' match at a line end
-    head = ' ' + ' '.join(norm_lines[:3]) + ' '
+    head = ' ' + ' '.join(norm_lines[:EDGE_LINES]) + ' '
+    # a page of up to EDGE_LINES lines has a heading but no separate footer
+    foot = ' ' + ' '.join(norm_lines[-EDGE_LINES:]) + ' ' if len(norm_lines) > EDGE_LINES else ' '
+    foot_folded = folded_lines[-EDGE_LINES:] if len(folded_lines) > EDGE_LINES else []
     kw = [float(np.log1p(_hits(padded, g))) for g in KEYWORDS]
     head_kw = [float(_hits(head, g) > 0) for g in KEYWORDS]
+    foot_kw = [float(_hits(foot, g) > 0) for g in KEYWORDS]
     pat = [float(np.log1p(sum(1 for line in folded_lines if p.search(line)))) for p in PATTERNS.values()]
-    return kw + head_kw + pat + layout_features(text) + extra_layout(raw_lines)
+    foot_pat = [float(any(p.search(line) for line in foot_folded)) for p in PATTERNS.values()]
+    return kw + head_kw + foot_kw + pat + foot_pat + layout_features(text) + extra_layout(raw_lines)
 
 
-def cue_matrix(texts: Sequence[str]) -> np.ndarray:
-    return np.array([cue_vector(t) for t in texts], dtype=np.float32)
+def cue_matrix(texts: Sequence[str], workers: int = None) -> np.ndarray:
+    """Cue vectors of many texts, computed by parallel worker processes (the texts are passed in memory)."""
+    import os
+    from concurrent.futures import ProcessPoolExecutor
+    workers = workers or min(os.cpu_count() or 1, 12)
+    if workers <= 1 or len(texts) < 2000:
+        return np.array([cue_vector(t) for t in texts], dtype=np.float32)
+    with ProcessPoolExecutor(workers) as pool:
+        return np.array(list(pool.map(cue_vector, texts, chunksize=500)), dtype=np.float32)
