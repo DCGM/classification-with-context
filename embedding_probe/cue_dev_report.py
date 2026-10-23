@@ -6,8 +6,9 @@ type). Reads only the public text LMDB.
   1. Spotting: per keyword group, the share of the pages of each page type on which the group fires
      in the headings (first 3 lines) and anywhere; the types with the highest rates are listed.
   2. Classifier: gradient boosting on the 17 layout statistics, the text cues (on the text LMDB's
-     line order), the OCR XML layout features (ocr_layout.py, from PAGE XML and, where fetched, ALTO)
-     and the cues on the XML lines sorted top to bottom + the layout features together, trained
+     line order), and the cues on the ALTO lines sorted top to bottom + the ALTO layout features
+     (ocr_layout.py) by feature group (lines only, + word confidences, + word boxes, all), for the
+     original ALTO and the ALTO converted from PAGE XML, trained
      on 75% of the sample documents and scored on the other 25% (per-class F1). Labels are DB types,
      so this is for comparing the two feature sets, not an absolute score.
 
@@ -24,10 +25,14 @@ import polars as pl
 
 from embedding_probe.common import PUBLIC_TEXT_LMDB, WORK_DIR, evaluate, label_ids
 from embedding_probe.text_baselines import LAYOUT_FEATURES
-from embedding_probe.ocr_layout import layout_vector, ocr_text_lines
+from embedding_probe.ocr_layout import (LAYOUT_XML_FEATURES, LINE_FEATURES, WORD_CONF_FEATURES, WORD_GEOMETRY_FEATURES,
+                                        layout_vector, ocr_text_lines)
 from embedding_probe.text_cues import CUE_FEATURES, KEYWORDS, cue_matrix
 
-PUBLIC_OCR_LMDBS = {'PAGE XML': PUBLIC_TEXT_LMDB.parent / 'page_xml', 'ALTO': PUBLIC_TEXT_LMDB.parent / 'alto'}
+# the original ALTO of matylda0, and the ALTO converted from its PAGE XML (as for zfs1)
+PUBLIC_OCR_LMDBS = {'ALTO': PUBLIC_TEXT_LMDB.parent / 'alto', 'converted ALTO': PUBLIC_TEXT_LMDB.parent / 'alto_converted'}
+LAYOUT_GROUPS = {'lines': LINE_FEATURES, 'lines + word conf': LINE_FEATURES + WORD_CONF_FEATURES,
+                 'lines + word boxes': LINE_FEATURES + WORD_GEOMETRY_FEATURES, 'all': LAYOUT_XML_FEATURES}
 
 
 def parse_arguments(argv=None):
@@ -81,9 +86,11 @@ def main(argv=None):
     layout_cols = [col[f] for f in LAYOUT_FEATURES]
     scores = {}
     feature_sets = [('layout stats', x[:, layout_cols]), ('text cues', x)]
+    layout_col = {name: i for i, name in enumerate(LAYOUT_XML_FEATURES)}
     for kind in layouts:
-        feature_sets += [(f'{kind} layout', layouts[kind]),
-                         (f'{kind}-order cues + {kind} layout', np.hstack([xml_cues[kind], layouts[kind]]))]
+        for group, names in LAYOUT_GROUPS.items():
+            cols = [layout_col[n] for n in names]
+            feature_sets.append((f'cues + {kind}: {group}', np.hstack([xml_cues[kind], layouts[kind][:, cols]])))
     for name, features in feature_sets:
         model = HistGradientBoostingClassifier(max_iter=300, early_stopping=False, class_weight='balanced',
                                                random_state=0).fit(features[~test], y[~test])

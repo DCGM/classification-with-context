@@ -27,6 +27,13 @@ median line height, so scans of any resolution compare. Designed on PUBLIC pages
   short_words                                       share of words of 1-2 characters
   top_band_lines, bottom_band_lines                 share of lines in the top / bottom 15% of the page
   has_ocr_xml                                       1 if the page has OCR XML
+  word_gap_med, wide_gap_lines, char_width_ratio    word boxes: median gap between words / median line
+                                                    height; share of lines with a gap over 2 line heights
+                                                    (columns, TOC spacing); median character width / line
+                                                    height (zeros without word boxes, e.g. PAGE XML)
+
+WORD_CONF_FEATURES and WORD_GEOMETRY_FEATURES need words beyond the line text; LINE_FEATURES (all the
+others) need only line boxes and line text, so they work with any ALTO that has lines.
 
 Nothing here keeps text: layout_vector() maps one XML document to numbers (see CLAUDE.md for the
 private pages).
@@ -43,7 +50,12 @@ LAYOUT_XML_FEATURES = (
     'line_height_med', 'line_height_max_ratio', 'large_lines', 'top_line_ratio', 'top_line_centered',
     'centered_lines', 'right_aligned_lines', 'indented_lines', 'full_width_lines', 'columns',
     'line_gap_med', 'line_gap_max', 'right_numbers', 'conf_mean', 'conf_low', 'short_words',
-    'top_band_lines', 'bottom_band_lines', 'has_ocr_xml')
+    'top_band_lines', 'bottom_band_lines', 'has_ocr_xml', 'word_gap_med', 'wide_gap_lines', 'char_width_ratio')
+# the features that need words beyond the line text: word confidences and word boxes. All others use only
+# the line boxes and the line text, so they work with any ALTO that has lines.
+WORD_CONF_FEATURES = ('conf_mean', 'conf_low')
+WORD_GEOMETRY_FEATURES = ('word_gap_med', 'wide_gap_lines', 'char_width_ratio')
+LINE_FEATURES = tuple(f for f in LAYOUT_XML_FEATURES if f not in WORD_CONF_FEATURES + WORD_GEOMETRY_FEATURES)
 NUMBER = re.compile(r'^[\divxlcIVXLC]+[.,]?$')
 POINT = re.compile(r'(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)')
 
@@ -63,7 +75,9 @@ def _parse_alto(root):
         if tag == 'TextBlock':
             blocks += 1
         elif tag == 'TextLine':
-            words = [(s.get('CONTENT', ''), float(s.get('WC', 1) or 1)) for s in element if _local(s.tag) == 'String']
+            words = [(s.get('CONTENT', ''), float(s.get('WC', 1) or 1),
+                      float(s.get('HPOS', 0) or 0), float(s.get('WIDTH', 0) or 0))
+                     for s in element if _local(s.tag) == 'String']
             box = [float(element.get(k, 0) or 0) for k in ('HPOS', 'VPOS', 'WIDTH', 'HEIGHT')]
             if box[2] > 0 and box[3] > 0:
                 lines.append((*box, words))
@@ -94,13 +108,14 @@ def _parse_page_xml(root):
                 text = (unicode.text or '') if unicode is not None else ''
             box = [min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)]
             if box[2] > 0 and box[3] > 0:
-                lines.append((*box, [(word, conf) for word in text.split()]))
+                lines.append((*box, [(word, conf, None, None) for word in text.split()]))
     return width, height, blocks, lines
 
 
 def parse_ocr_xml(xml: bytes):
     """(page width, page height, number of blocks, lines) from PAGE XML or ALTO; a line is
-    (left, top, width, height, words), a word (content, confidence). None if there is no page."""
+    (left, top, width, height, words), a word (content, confidence, left, width); a PAGE XML word has no
+    box (left and width None). None if there is no page."""
     root = ET.fromstring(xml)
     return _parse_page_xml(root) if _local(root.tag) == 'PcGts' else _parse_alto(root)
 
@@ -154,7 +169,26 @@ def layout_vector(xml: Optional[bytes]) -> List[float]:
         float(np.mean(right_numbers)), float(conf.mean()), float(np.mean(conf < 0.5)),
         float(np.mean([len(word[0]) <= 2 for word in words])) if words else 0.0,
         float(np.mean(y0 < 0.15 * height)), float(np.mean(y1 > 0.85 * height)), 1.0,
+        *word_geometry(lines, med_h),
     ]
+
+
+def word_geometry(lines, med_h: float) -> List[float]:
+    """word_gap_med, wide_gap_lines, char_width_ratio from the word boxes (zeros without word boxes)."""
+    gaps, wide, char_widths, with_boxes = [], [], [], 0
+    for line in lines:
+        boxes = [(w[2], w[3], len(w[0])) for w in line[4] if w[2] is not None and w[3]]
+        if not boxes:
+            continue
+        with_boxes += 1
+        boxes.sort()
+        line_gaps = [max(b[0] - (a[0] + a[1]), 0.0) / med_h for a, b in zip(boxes, boxes[1:])]
+        gaps += line_gaps
+        wide.append(any(g > 2 for g in line_gaps))
+        char_widths += [w / max(n, 1) / med_h for _, w, n in boxes]
+    if not with_boxes:
+        return [0.0, 0.0, 0.0]
+    return [float(np.median(gaps)) if gaps else 0.0, float(np.mean(wide)), float(np.median(char_widths))]
 
 
 def ocr_text_lines(xml: bytes) -> List[str]:

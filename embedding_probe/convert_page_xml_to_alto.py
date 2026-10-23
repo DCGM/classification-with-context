@@ -2,9 +2,12 @@
 PageLayout, into another LMDB with the same keys ({library}_{page uuid}) and zlib-compressed values.
 
 For the pages on zfs1, which has PAGE XML but no ALTO zips. The result matches PERO's own ALTO export
-(as on matylda0) in lines, words and boxes, except that PAGE XML keeps no OCR logits: words cannot
-be aligned inside a line from the logits, and every word confidence (WC) is 1.0. Features built on
-the word confidences are therefore not comparable between converted and original ALTO.
+(as on matylda0) in lines and words. PAGE XML keeps no OCR logits, so PERO cannot align the words
+inside a line (its fallback gives all words of a line the same width, overrunning the line); the
+words are therefore placed here by their length: each word gets the share of the line width of its
+characters, a space counting as one character, with SP elements between words like PERO's own
+export. Every word gets the confidence of its line (PAGE XML TextEquiv conf) as WC, since PAGE XML
+has no word confidences.
 
 Runs in the pero-ocr venv (pero_ocr, lmdb). Parallel worker processes; a rerun converts only the
 keys not in the output yet. Logs hold counts only, never XML content.
@@ -38,16 +41,63 @@ def parse_arguments(argv=None):
     return parser.parse_args(argv)
 
 
+def line_confidences(page_xml: bytes) -> dict:
+    """PAGE XML TextLine id -> its TextEquiv conf."""
+    from lxml import etree
+    result = {}
+    for line in etree.fromstring(page_xml).iter('{*}TextLine'):
+        equiv = line.find('{*}TextEquiv')
+        if equiv is not None and equiv.get('conf') is not None:
+            result[line.get('id')] = equiv.get('conf')
+    return result
+
+
+def place_words(alto: bytes, confidences: dict) -> bytes:
+    """Re-places the words of every ALTO TextLine by their character counts and sets WC to the line's
+    confidence; SP elements between the words, one character wide."""
+    from lxml import etree
+    root = etree.fromstring(alto)
+    for line in root.iter('{*}TextLine'):
+        strings = line.findall('{*}String')
+        for sp in line.findall('{*}SP'):
+            line.remove(sp)
+        if not strings:
+            continue
+        hpos, vpos = float(line.get('HPOS', 0)), line.get('VPOS', '0')
+        width, height = float(line.get('WIDTH', 0)), line.get('HEIGHT', '0')
+        lengths = [max(len(s.get('CONTENT', '')), 1) for s in strings]
+        unit = width / (sum(lengths) + len(lengths) - 1)
+        conf = confidences.get(line.get('ID', '').removeprefix('line_'))
+        x = hpos
+        for i, (string, n) in enumerate(zip(strings, lengths)):
+            string.set('HPOS', str(int(round(x))))
+            string.set('WIDTH', str(int(round(n * unit))))
+            string.set('VPOS', vpos)
+            string.set('HEIGHT', height)
+            if conf is not None:
+                string.set('WC', conf)
+            x += n * unit
+            if i < len(strings) - 1:
+                sp = etree.Element(string.tag[:-len('String')] + 'SP')
+                sp.set('WIDTH', str(int(round(unit))))
+                sp.set('VPOS', vpos)
+                sp.set('HPOS', str(int(round(x))))
+                string.addnext(sp)
+                x += unit
+    return etree.tostring(root, pretty_print=True, encoding='utf-8', xml_declaration=True)
+
+
 def convert(item: Tuple[bytes, bytes]) -> Tuple[bytes, Optional[bytes]]:
     """(key, compressed PAGE XML) -> (key, compressed ALTO, or None if the conversion failed)."""
     from pero_ocr.core.layout import PageLayout
     key, value = item
     page_uuid = key.decode('utf-8').rsplit('_', 1)[1]
     try:
+        page_xml = zlib.decompress(value)
         layout = PageLayout()
-        layout.from_pagexml_string(zlib.decompress(value).decode('utf-8'))
+        layout.from_pagexml_string(page_xml.decode('utf-8'))
         alto = layout.to_altoxml_string(page_uuid=page_uuid)
-        return key, zlib.compress(alto.encode('utf-8'), 6)
+        return key, zlib.compress(place_words(alto.encode('utf-8'), line_confidences(page_xml)), 6)
     except Exception:  # noqa: BLE001 -- counted, never logged with content
         return key, None
 
