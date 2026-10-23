@@ -385,7 +385,13 @@ window completeness (full, left cut, right cut, both cut).
 - `<text>+<image>`: the linear probe on the text and the image embeddings together.
 - `layout stats`: gradient boosting on 17 statistics of the OCR lines of each window page.
 - `TF-IDF words`: a linear SVM on word TF-IDF of each window page.
-- `DB page type`: the Kramerius page type taken as the prediction, as a reference.
+- `DB page type`: the Kramerius page type taken as the prediction, as a reference. The annotators
+  mostly corrected the hard and rare pages, so its agreement with the annotations is high by
+  construction and says little about the task.
+- `<experiment> (DB labels)`: with `--train-labels db`, the same experiment trained (and its weight
+  decay chosen) on the DB page types of the same trn pages instead of their annotations, the pages
+  without a DB type left out. Scored on the annotated tst pages, it shows what the annotators'
+  corrections bring; the report puts both side by side.
 
 **Private text.** Nobody may look at the private page text (see `CLAUDE.md`). `text_baselines` is
 developed and debugged on the public text: without `--private-text-lmdb` it reads only the public
