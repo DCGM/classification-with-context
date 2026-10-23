@@ -141,6 +141,18 @@ def test_layout_features():
     assert dict(zip(LAYOUT_FEATURES, layout_features(' \n\n')))['empty'] == 1.0
 
 
+def test_text_cues_spot_headings_patterns_and_word_starts():
+    from embedding_probe.text_cues import CUE_FEATURES, cue_vector
+    cues = dict(zip(CUE_FEATURES, cue_vector('PŘEDMLUVA\nNapsal Jan\nÚvod ........ 5\nISBN 80-86286-64-9\n'
+                                               'Cena 25 Kčs\nMěřítko 1 : 25 000\n')))
+    assert len(cue_vector('')) == len(CUE_FEATURES)
+    assert cues['head_preface'] == 1 and cues['head_toc'] == 0
+    assert cues['pat_isbn'] > 0 and cues['pat_price'] > 0 and cues['pat_scale'] > 0 and cues['pat_leader_number'] > 0
+    assert cues['kw_map'] > 0  # 'měřítko' without diacritics
+    no_cues = dict(zip(CUE_FEATURES, cue_vector('Kapitola o kindexu\n')))
+    assert no_cues['kw_index'] == 0  # keywords match word starts only
+
+
 def test_training_labels_db_drops_pages_without_db_type_but_keeps_tst():
     pages = pl.DataFrame({'split': ['trn', 'trn', 'tst', 'tst'], 'label': ['Blank', 'Index', 'Map', 'Map'],
                           'db_type': ['NormalPage', None, None, 'Map']})
