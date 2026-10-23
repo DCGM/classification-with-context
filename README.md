@@ -344,3 +344,51 @@ every class with enough pages has ~100 tst pages, so these classes count the sam
 counts less, in proportion to how much data there is for it, in tst and in trn alike. This
 also damps the noise of the tiny classes, where a single page changes the class F1 a lot. A
 class without tst pages has weight 0, so passing all class ids in `labels` changes nothing.
+
+## Embedding probe experiments
+
+`embedding_probe/` checks what the frozen page embeddings know about page types, before any
+training: simple classifiers trained on the annotated trn pages and scored on the annotated tst
+pages with the metrics above. Every experiment takes a **context window K**: the page and the K
+pages before and after it in the same document (K = 0: the page alone). Rerunning with another K
+is the only change needed to test more context. It replaces the embedding evaluation in MetaKat
+(`metakat/page_type/training/text_embeddings/evaluate_embeddings.py`), which trained on the noisy
+DB page types and could score only the few annotated pages with public text.
+
+Run it with the MetaKat venv (`/home/ikohut/python_env/metakat/bin/python3`: polars, lmdb,
+scikit-learn, torch). The working files are on the SSD:
+`/run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/embedding_probe/` (`--work-dir`).
+The embeddings are read from the copy of `digiknihovna.data` on `/mnt/kolosus/data/`, because
+random reads of matylda0 over sshfs are too slow.
+
+```bash
+python -m embedding_probe.build_pages --max-context 3   # pages.parquet: annotated pages, windows up to K = 3
+python -m embedding_probe.extract_vectors               # vectors/<model>.npz: every vector these windows need
+for k in 0 1 2 3; do
+    python -m embedding_probe.probe_embeddings --context $k   # k<K>/predictions/embeddings.parquet
+    python -m embedding_probe.text_baselines --context $k \
+        --private-text-lmdb .../2026-09-16.db_text_dump.private/lmdb  # k<K>/predictions/text_baselines.parquet
+done
+python -m embedding_probe.report                        # k<K>/report.md per K, report.md over all K
+```
+
+**Windows.** A window never crosses into another document. Where it runs past the document's
+start or end, the slot is empty: zero features (the mean, after standardization) and, for K > 0,
+a flag per offset that says whether the slot holds a page. The report also gives the accuracy by
+window completeness (full, left cut, right cut, both cut).
+
+**Experiments** per K:
+- `<model>` (`mmBERT`, `Qwen3`, `DINOv2`): a linear probe on the window's embeddings, i.e.
+  multinomial logistic regression with class-balanced loss weights. Its L2 weight decay is chosen
+  on a 15% holdout of the trn documents, never on tst.
+- `<model> kNN`: a cosine k-nearest-neighbour vote (k = 10) over the trn pages.
+- `<text>+<image>`: the linear probe on the text and the image embeddings together.
+- `layout stats`: gradient boosting on 17 statistics of the OCR lines of each window page.
+- `TF-IDF words`: a linear SVM on word TF-IDF of each window page.
+- `DB page type`: the Kramerius page type taken as the prediction, as a reference.
+
+**Private text.** Nobody may look at the private page text (see `CLAUDE.md`). `text_baselines` is
+developed and debugged on the public text: without `--private-text-lmdb` it reads only the public
+text LMDB and scores the pages whose text is public (output `*.public_only`). With the private LMDB
+it runs on the same pages as all other experiments. The text stays in memory and only predicted
+labels are written.
