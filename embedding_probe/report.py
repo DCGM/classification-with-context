@@ -137,7 +137,7 @@ def main(argv=None):
     setup_logging('REPORT')
     pages = pl.read_parquet(args.work_dir / 'pages.parquet')
     contexts = sorted(int(m.group(1)) for d in args.work_dir.glob('k*/predictions')
-                      if (m := re.fullmatch(r'k(\d+)', d.parent.name)))
+                      if (m := re.fullmatch(r'k(\d+)', d.parent.name)) and any(d.glob('*.parquet')))
     by_context = {k: report_context(args.work_dir, pages, k) for k in contexts}
 
     experiments = list(dict.fromkeys(e for scores in by_context.values() for e in scores))

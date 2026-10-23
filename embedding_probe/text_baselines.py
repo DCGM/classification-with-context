@@ -164,7 +164,9 @@ def main(argv=None):
 
     layout = np.array([layout_features(texts[k]) for k in unique], dtype=np.float32)
     x = np.hstack([window_dense(layout, rows), flags])
-    model = HistGradientBoostingClassifier(class_weight='balanced', random_state=0).fit(x[trn], y[trn])
+    # no early stopping: its stratified validation split fails for classes with a single trn page
+    model = HistGradientBoostingClassifier(class_weight='balanced', max_iter=200, early_stopping=False,
+                                           random_state=0).fit(x[trn], y[trn])
     predictions['layout stats'] = names(model.predict(x[tst]))
     logger.info(f'layout stats: {x.shape[1]} features, {time.time() - started:.0f}s')
     del layout, x
