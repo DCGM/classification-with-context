@@ -65,6 +65,9 @@ def parse_arguments(argv=None):
                         help='Only look the pages up in the DB and print the zip path prefixes (first 4 directories '
                              'components) with page counts, to choose --path-map/--path-prefix; opens no file '
                              'and writes nothing.')
+    parser.add_argument('--diagnose', type=int, default=0,
+                        help='For the first N documents whose ALTO zip is missing, log the names of the files '
+                             'next to it (<docdir>.*), to see how the storage names things; names only.')
     parser.add_argument('--threads', type=int, default=16)
     parser.add_argument('--map-size-gb', type=int, default=100)
     parser.add_argument('--commit-every', type=int, default=2000, help='Pages per LMDB commit.')
@@ -205,6 +208,16 @@ def main(argv=None):
     if pending:
         flush()
     env.close()
+    if args.diagnose:
+        missing = [z for z, ps in by_zip.items() if not os.path.exists(z)][:args.diagnose]
+        for zip_path in missing:
+            docdir = zip_path[:-len('.alto_xml.zip')]
+            parent, stem = os.path.dirname(docdir), os.path.basename(docdir)
+            try:
+                siblings = sorted(n for n in os.listdir(parent) if n.startswith(stem))
+            except OSError as exc:
+                siblings = [f'<cannot list {parent}: {exc.__class__.__name__}>']
+            logger.info(f'diagnose: missing {zip_path}; next to it: {siblings or "nothing named " + stem + "*"}')
     logger.info(f'finished: {dict(status)}, {time.time() - started:.0f}s')
 
 
