@@ -13,6 +13,12 @@ It must never write or log text, snippets, tokens, vocabularies or per-page text
 logs are not to be inspected for text. `embedding_probe/text_baselines.py` reads the private text
 only when `--private-text-lmdb` is given explicitly.
 
+## zfs1 (private library storage)
+
+Never access `/mnt/zfs1` in any way: no listing, no existence checks (`test -e`, `stat`, `find`),
+no inspecting the mount, no reading files. Scripts for it (e.g. `run_fetch_private_alto.sh`) are run
+by the user; diagnose only from the DB metadata and what the user reports.
+
 ## matylda0
 
 `/mnt/matylda0` is under the user's supervision: read only, never write there. Working files go to
