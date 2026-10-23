@@ -19,6 +19,10 @@ The linear probe is multinomial logistic regression (full-batch L-BFGS, on the G
 with class-balanced loss weights. Its L2 weight decay is chosen per experiment on a holdout of the
 trn documents (15%, never tst), then the probe is refitted on all trn pages.
 
+With --train-labels db the classifiers are trained (and their weight decay chosen) on the DB page
+types of the same trn pages instead of the annotations, to measure what the annotators' corrections
+bring; these experiments are named '<experiment> (DB labels)' and written to embeddings.db_labels.parquet.
+
 Writes <work-dir>/k<K>/predictions/embeddings.parquet (key, label and one column per experiment,
 tst pages) and embeddings.selection.json (the chosen weight decay and its holdout scores). Scores
 are computed by report.py.
@@ -48,6 +52,9 @@ WEIGHT_DECAYS = (1e-5, 1e-4, 1e-3, 1e-2)
 def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--context', type=int, default=0, help='Context window K: pages on each side.')
+    parser.add_argument('--train-labels', choices=('annotated', 'db'), default='annotated',
+                        help='Train on the annotated page types, or on the DB page types of the same trn pages '
+                             '(those without a DB type left out); tst is always scored on the annotations.')
     parser.add_argument('--models', nargs='+', default=list(MODELS), choices=list(MODELS))
     parser.add_argument('--work-dir', type=Path, default=WORK_DIR)
     parser.add_argument('--knn-k', type=int, default=10)
@@ -55,6 +62,17 @@ def parse_arguments(argv=None):
     parser.add_argument('--device', default=None, help='torch device (default: cuda if available)')
     parser.add_argument('--only', nargs='*', default=None, help='Run only these experiments (by name).')
     return parser.parse_args(argv)
+
+
+TRAIN_LABEL_SUFFIX = {'annotated': '', 'db': ' (DB labels)'}
+
+
+def training_labels(pages: pl.DataFrame, train_labels: str):
+    """Class ids to train on (-1 where unusable), the trn mask (pages with a usable label) and the tst mask."""
+    assert (label_ids(pages['label'].to_list()) >= 0).all()
+    y = label_ids(pages['label' if train_labels == 'annotated' else 'db_type'].to_list())
+    split = pages['split'].to_numpy()
+    return y, (split == 'trn') & (y >= 0), split == 'tst'
 
 
 def stable_fraction(text: str) -> float:
@@ -184,29 +202,29 @@ def main(argv=None):
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
 
     pages = pl.read_parquet(args.work_dir / 'pages.parquet')
-    y = label_ids(pages['label'].to_list())
-    assert (y >= 0).all()
-    trn = (pages['split'] == 'trn').to_numpy()
-    tst = ~trn
-    holdout = holdout_documents(pages, args.holdout_fraction)
-    logger.info(f'K={args.context}: trn {trn.sum()} pages ({holdout.sum()} in the holdout documents), '
-                f'tst {tst.sum()}; device {device}')
+    y, trn, tst = training_labels(pages, args.train_labels)
+    holdout = holdout_documents(pages, args.holdout_fraction) & trn
+    suffix = TRAIN_LABEL_SUFFIX[args.train_labels]
+    logger.info(f'K={args.context}, {args.train_labels} labels: trn {trn.sum()} pages ({holdout.sum()} in the '
+                f'holdout documents), tst {tst.sum()}; device {device}')
     vectors: Dict[str, Vectors] = {m: Vectors(args.work_dir, m) for m in args.models}
 
     wanted = (lambda name: args.only is None or name in args.only)
     predictions = {'key': pages['key'].to_numpy()[tst], 'label': pages['label'].to_numpy()[tst]}
     selection = {}
-    if wanted('DB page type'):
+    if wanted('DB page type') and args.train_labels == 'annotated':
         predictions['DB page type'] = pages['db_type'].fill_null('').to_numpy()[tst]
     for model in args.models:
         name = f'{model} kNN'
         if wanted(name):
+            name += suffix
             x = knn_features(pages, vectors[model], args.context)
             predictions[name] = names(knn_predict(x[trn], y[trn], x[tst], args.knn_k))
             logger.info(f'{name}: {x.shape[1]} features')
     for name, models in linear_experiments(args.models):
         if not wanted(name):
             continue
+        name += suffix
         started = time.time()
         x = linear_features(pages, [vectors[m] for m in models], args.context, trn)
         pred, selection[name] = linear_probe(x, y, trn, holdout, tst, device)
@@ -216,9 +234,10 @@ def main(argv=None):
         del x
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    pl.DataFrame({k: list(v) for k, v in predictions.items()}).write_parquet(out_dir / 'embeddings.parquet')
-    (out_dir / 'embeddings.selection.json').write_text(json.dumps(selection, indent=2), encoding='utf-8')
-    logger.info(f'wrote {out_dir / "embeddings.parquet"}')
+    stem = 'embeddings' + ('.db_labels' if args.train_labels == 'db' else '')
+    pl.DataFrame({k: list(v) for k, v in predictions.items()}).write_parquet(out_dir / f'{stem}.parquet')
+    (out_dir / f'{stem}.selection.json').write_text(json.dumps(selection, indent=2), encoding='utf-8')
+    logger.info(f'wrote {out_dir / f"{stem}.parquet"}')
 
 
 if __name__ == '__main__':

@@ -28,6 +28,7 @@ from embedding_probe.common import PAGE_TYPES, WORK_DIR, evaluate, setup_logging
 logger = logging.getLogger('REPORT')
 PER_CLASS_COLUMNS = 6
 COMPLETENESS = ('full', 'left cut', 'right cut', 'both cut')
+DB_SUFFIX = ' (DB labels)'
 
 
 def parse_arguments(argv=None):
@@ -85,6 +86,31 @@ def completeness_table(full: pl.DataFrame, experiments: List[str]) -> List[str]:
     return rows
 
 
+def annotations_vs_db(scores: Dict[str, Dict]) -> List[str]:
+    """Each experiment trained on the annotations next to the same experiment trained on the DB page types."""
+    pairs = [e for e in scores if e + DB_SUFFIX in scores]
+    if not pairs:
+        return []
+    pairs.sort(key=lambda e: -scores[e]['weighted_fscore'])
+    lines = ['', '### Trained on the annotations vs on the DB page types', '',
+             'The same experiment trained on the annotated page types of the trn pages, or on their DB page '
+             'types (the pages without one left out); both scored on the annotated tst pages. The gain is '
+             'what the annotators\' corrections bring.', '',
+             '| Experiment | Weighted F1, annotations | Weighted F1, DB types | Gain |', '|---|---:|---:|---:|']
+    for e in pairs:
+        a, b = scores[e]['weighted_fscore'], scores[e + DB_SUFFIX]['weighted_fscore']
+        lines.append(f'| {e} | {a:.3f} | {b:.3f} | {a - b:+.3f} |')
+    best = pairs[0]
+    a, b = scores[best]['per_class'], scores[best + DB_SUFFIX]['per_class']
+    gain = {c: a[c]['fscore'] - b.get(c, {}).get('fscore', 0.0) for c in a}
+    lines += ['', f'Per-class F1 of {best}, ordered by the gain:', '',
+              '| Page type | tst pages | Annotations | DB types | Gain |', '|---|---:|---:|---:|---:|']
+    for c in sorted(gain, key=lambda c: (-gain[c], c)):
+        lines.append(f'| {c} | {a[c]["support"]} | {a[c]["fscore"]:.2f} | '
+                     f'{b.get(c, {}).get("fscore", 0.0):.2f} | {gain[c]:+.2f} |')
+    return lines
+
+
 def report_context(work_dir: Path, pages: pl.DataFrame, context: int) -> Dict[str, Dict]:
     tst = pages.filter(pl.col('split') == 'tst')
     files = load_predictions(work_dir / f'k{context}' / 'predictions', tst['key'].to_list())
@@ -104,15 +130,16 @@ def report_context(work_dir: Path, pages: pl.DataFrame, context: int) -> Dict[st
              f'{"the page alone" if context == 0 else f"the page and {context} page(s) on each side"}. '
              f'Prediction files: {", ".join(sorted(files))}.', '', '## All tst pages', '']
     lines += summary_table(scores)
-    columns = ranked[:PER_CLASS_COLUMNS]
+    columns = [e for e in ranked if not e.endswith(DB_SUFFIX)][:PER_CLASS_COLUMNS]
     if 'DB page type' in scores and 'DB page type' not in columns:
         columns.append('DB page type')
     lines += ['', '### Per-class F1 of the best experiments', ''] + per_class_table(scores, columns)
+    lines += annotations_vs_db(scores)
     if context > 0:
         lines += ['', '### Accuracy by window completeness', '',
                   'Whether the window of a tst page reaches past its document\'s start (left cut), end '
                   '(right cut) or both; the page count in brackets.', '']
-        lines += completeness_table(full, ranked)
+        lines += completeness_table(full, [e for e in ranked if not e.endswith(DB_SUFFIX)])
     metrics = {'all tst pages': scores}
 
     for stem, frame in partial.items():

@@ -15,6 +15,9 @@ that carries text (snippets, tokens, vocabularies, per-page features). Develop a
 public text: without --private-text-lmdb, pages whose text is not in the public LMDB are left out
 of trn and tst (and empty as neighbours), and the output is named *.public_only.
 
+With --train-labels db the baselines are trained on the DB page types of the same trn pages (named
+'<baseline> (DB labels)', written to text_baselines.db_labels.parquet).
+
 Writes <work-dir>/k<K>/predictions/text_baselines[.public_only].parquet (key, label and one column
 per baseline, for the tst pages with text). Scores are computed by report.py.
 
@@ -34,8 +37,8 @@ import lmdb
 import numpy as np
 import polars as pl
 
-from embedding_probe.common import PUBLIC_TEXT_LMDB, WORK_DIR, label_ids, setup_logging, window_ids
-from embedding_probe.probe_embeddings import names
+from embedding_probe.common import PUBLIC_TEXT_LMDB, WORK_DIR, setup_logging, window_ids
+from embedding_probe.probe_embeddings import TRAIN_LABEL_SUFFIX, names, training_labels
 
 logger = logging.getLogger('TEXT BASELINES')
 
@@ -52,6 +55,8 @@ LAYOUT_FEATURES = ('log_chars', 'log_lines', 'empty', 'mean_line_len', 'std_line
 def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--context', type=int, default=0, help='Context window K: pages on each side.')
+    parser.add_argument('--train-labels', choices=('annotated', 'db'), default='annotated',
+                        help='Train on the annotated or on the DB page types (see probe_embeddings.py).')
     parser.add_argument('--work-dir', type=Path, default=WORK_DIR)
     parser.add_argument('--public-text-lmdb', type=Path, default=PUBLIC_TEXT_LMDB)
     parser.add_argument('--private-text-lmdb', type=Path, default=None,
@@ -135,7 +140,7 @@ def presence_flags(rows: List[np.ndarray], context: int) -> np.ndarray:
 
 def main(argv=None):
     args = parse_arguments(argv)
-    suffix = '' if args.private_text_lmdb else '.public_only'
+    suffix = ('.db_labels' if args.train_labels == 'db' else '') + ('' if args.private_text_lmdb else '.public_only')
     setup_logging('TEXT BASELINES', args.work_dir / 'logs' / f'text_baselines.k{args.context}{suffix}.txt')
     import scipy.sparse as sp
     from sklearn.ensemble import HistGradientBoostingClassifier
@@ -156,9 +161,8 @@ def main(argv=None):
     for s in ('trn', 'tst'):
         logger.info(f'{s}: {int(keep[split == s].sum())} of {int((split == s).sum())} annotated pages with text')
     pages, rows = pages.filter(pl.Series(keep)), [r[keep] for r in rows]
-    y = label_ids(pages['label'].to_list())
-    trn = (pages['split'] == 'trn').to_numpy()
-    tst = ~trn
+    y, trn, tst = training_labels(pages, args.train_labels)
+    suffix_name = TRAIN_LABEL_SUFFIX[args.train_labels]
     flags = presence_flags(rows, args.context)
     predictions = {'key': pages['key'].to_numpy()[tst], 'label': pages['label'].to_numpy()[tst]}
 
@@ -167,7 +171,7 @@ def main(argv=None):
     # no early stopping: its stratified validation split fails for classes with a single trn page
     model = HistGradientBoostingClassifier(class_weight='balanced', max_iter=200, early_stopping=False,
                                            random_state=0).fit(x[trn], y[trn])
-    predictions['layout stats'] = names(model.predict(x[tst]))
+    predictions['layout stats' + suffix_name] = names(model.predict(x[tst]))
     logger.info(f'layout stats: {x.shape[1]} features, {time.time() - started:.0f}s')
     del layout, x
 
@@ -178,7 +182,7 @@ def main(argv=None):
     del tfidf, texts
     x = sp.hstack([window_sparse(words, rows), sp.csr_matrix(flags)], format='csr')
     model = LinearSVC(C=0.5, class_weight='balanced', max_iter=5000).fit(x[trn], y[trn])
-    predictions['TF-IDF words'] = names(model.predict(x[tst]))
+    predictions['TF-IDF words' + suffix_name] = names(model.predict(x[tst]))
     logger.info(f'TF-IDF words: {x.shape[1]} features, {time.time() - started:.0f}s')
     del words, x, model
 

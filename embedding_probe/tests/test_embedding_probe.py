@@ -9,7 +9,7 @@ from embedding_probe.build_pages import windows
 from embedding_probe.common import LABEL2ID, PAGE_TYPES, evaluate, image_key, label_ids, window_completeness, window_ids
 from embedding_probe.extract_vectors import Vectors, read_vectors
 from embedding_probe.probe_embeddings import (class_weights, fit_linear, knn_features, knn_predict, linear_features,
-                                              predict_linear, standardized)
+                                              predict_linear, standardized, training_labels)
 from embedding_probe.text_baselines import (LAYOUT_FEATURES, layout_features, presence_flags, slot_rows,
                                             window_dense, window_sparse)
 
@@ -139,3 +139,13 @@ def test_layout_features():
     assert toc['number_only_lines'] == pytest.approx(2 / 6)
     assert toc['dot_leader_lines'] == pytest.approx(1 / 6)
     assert dict(zip(LAYOUT_FEATURES, layout_features(' \n\n')))['empty'] == 1.0
+
+
+def test_training_labels_db_drops_pages_without_db_type_but_keeps_tst():
+    pages = pl.DataFrame({'split': ['trn', 'trn', 'tst', 'tst'], 'label': ['Blank', 'Index', 'Map', 'Map'],
+                          'db_type': ['NormalPage', None, None, 'Map']})
+    y, trn, tst = training_labels(pages, 'db')
+    assert y[0] == LABEL2ID['NormalPage'] and trn.tolist() == [True, False, False, False]
+    assert tst.tolist() == [False, False, True, True]  # a tst page without a DB type is still scored
+    y, trn, tst = training_labels(pages, 'annotated')
+    assert y[0] == LABEL2ID['Blank'] and trn.tolist() == [True, True, False, False]
