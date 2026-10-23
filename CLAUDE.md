@@ -16,7 +16,7 @@ only when `--private-text-lmdb` is given explicitly.
 ## zfs1 (private library storage)
 
 Never access `/mnt/zfs1` in any way: no listing, no existence checks (`test -e`, `stat`, `find`),
-no inspecting the mount, no reading files. Scripts for it (e.g. `run_fetch_private_alto.sh`) are run
+no inspecting the mount, no reading files. Scripts for it (e.g. `run_fetch_private_page_xml.sh`) are run
 by the user; diagnose only from the DB metadata and what the user reports.
 
 ## matylda0

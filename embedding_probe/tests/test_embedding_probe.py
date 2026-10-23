@@ -153,11 +153,12 @@ def test_text_cues_spot_headings_patterns_and_word_starts():
     assert no_cues['kw_index'] == 0  # keywords match word starts only
 
 
-def test_fetch_alto_paths_and_members(tmp_path):
+def test_fetch_ocr_xml_paths_and_members(tmp_path):
     import zipfile
     import zlib
-    from embedding_probe.fetch_alto import alto_zip_path, map_path, read_members
-    assert alto_zip_path('/mnt/x/mzk/doc1.images/p1.jpg') == '/mnt/x/mzk/doc1.alto_xml.zip'
+    from embedding_probe.fetch_ocr_xml import map_path, ocr_zip_path, read_members
+    assert ocr_zip_path('/mnt/x/mzk/doc1.images/p1.jpg') == '/mnt/x/mzk/doc1.page_xml.zip'
+    assert ocr_zip_path('/mnt/x/mzk/doc1.images/p1.jpg', 'alto_xml') == '/mnt/x/mzk/doc1.alto_xml.zip'
     assert map_path('/mnt/zfs1/library-downloads/mzk/a.zip', [('/mnt/zfs1/library-downloads', '/media/p')]) == \
         '/media/p/mzk/a.zip'
     with zipfile.ZipFile(tmp_path / 'doc1.alto_xml.zip', 'w') as zf:
@@ -178,15 +179,28 @@ ALTO = b'''<alto xmlns="http://www.loc.gov/standards/alto/ns-v2#"><Layout>
 </TextBlock></PrintSpace></Page></Layout></alto>'''
 
 
-def test_alto_features_geometry():
-    from embedding_probe.alto_features import ALTO_FEATURES, alto_text_lines, alto_vector
-    f = dict(zip(ALTO_FEATURES, alto_vector(ALTO)))
-    assert f['page_aspect'] == pytest.approx(0.5) and f['has_alto'] == 1
+PAGE_XML = b'''<PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15">
+<Page imageWidth="1000" imageHeight="2000">
+<TextRegion><Coords points="300,100 700,100 700,180 300,180"/><TextLine><Coords points="300,100 700,100 700,180 300,180"/>
+<TextEquiv conf="0.9"><Unicode>OBSAH</Unicode></TextEquiv></TextLine></TextRegion>
+<TextRegion><TextLine><Coords points="100,300 900,300 900,340 100,340"/>
+<TextEquiv conf="1.0"><Unicode>Kapitola 5</Unicode></TextEquiv></TextLine>
+<TextLine><Coords points="100,360 900,360 900,400 100,400"/>
+<TextEquiv conf="0.2"><Unicode>Rejstrik 12</Unicode></TextEquiv></TextLine></TextRegion>
+</Page></PcGts>'''
+
+
+# PAGE XML has one confidence per line, so both words of the 0.2 line are low-confidence; ALTO has one per word
+@pytest.mark.parametrize('xml, low', [(ALTO, 1 / 5), (PAGE_XML, 2 / 5)], ids=['alto', 'page_xml'])
+def test_ocr_layout_geometry(xml, low):
+    from embedding_probe.ocr_layout import LAYOUT_XML_FEATURES, layout_vector, ocr_text_lines
+    f = dict(zip(LAYOUT_XML_FEATURES, layout_vector(xml)))
+    assert f['page_aspect'] == pytest.approx(0.5) and f['has_ocr_xml'] == 1 and f['n_blocks'] == pytest.approx(np.log1p(2))
     assert f['top_line_ratio'] == pytest.approx(2.0) and f['top_line_centered'] == 1  # a large centred heading
-    assert f['right_numbers'] == pytest.approx(2 / 3) and f['wc_low'] == pytest.approx(1 / 5)
+    assert f['right_numbers'] == pytest.approx(2 / 3) and f['conf_low'] == pytest.approx(low)
     assert f['text_top'] == pytest.approx(0.05) and f['text_left'] == pytest.approx(0.1)
-    assert alto_text_lines(ALTO) == ['OBSAH', 'Kapitola 5', 'Rejstrik 12']
-    assert alto_vector(None) == [0.0] * len(ALTO_FEATURES)
+    assert ocr_text_lines(xml) == ['OBSAH', 'Kapitola 5', 'Rejstrik 12']
+    assert layout_vector(None) == [0.0] * len(LAYOUT_XML_FEATURES)
 
 
 def test_training_labels_db_drops_pages_without_db_type_but_keeps_tst():

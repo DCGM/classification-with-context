@@ -1,35 +1,34 @@
-"""Fetches the ALTO XML of given pages from the document ALTO zips into an LMDB.
+"""Fetches the OCR XML (PAGE XML by default, or ALTO) of given pages from the document zips into an LMDB.
 
-The page list (library <TAB> page uuid, from write_alto_page_list.py) is looked up in the library
-metadata DB (meta_records.image_path, via the tunnel on localhost:5888). The ALTO zip of a page is
-derived from its image path like the PAGE-XML zip of the text dump (the DB path columns may be stale):
+The page list (library <TAB> page uuid, from write_ocr_page_list.py) is looked up in the library
+metadata DB (meta_records.image_path, via the tunnel on localhost:5888). The zip of a page is derived
+from its image path like the PAGE-XML zip of the text dump (the DB path columns may be stale):
 
-    .../<docdir>.images/<page>.jpg  ->  .../<docdir>.alto_xml.zip  (member <page>.xml)
+    .../<docdir>.images/<page>.jpg  ->  .../<docdir>.<kind>.zip  (member <page>.xml)
 
+with <kind> page_xml (default) or alto_xml. Both storages have the PAGE XML (the text dumps were
+extracted from it); only matylda0 also has ALTO, so the experiments use PAGE XML everywhere.
 <docdir> is the document or a higher level (e.g. a whole periodical), so one zip serves many pages.
 --path-map OLD=NEW rewrites the start of the DB paths (for storage mounted elsewhere), and only zips
 under --path-prefix are opened; pages outside it are counted and skipped. Zips are read in parallel
 threads, each reading only the members it needs.
 
-Output: an LMDB (--out-lmdb, e.g. <text dump>/alto next to <text dump>/lmdb) with key
-'{library}_{page uuid}' (the text LMDB key) and value the zlib-compressed ALTO XML, plus
+Output: an LMDB (--out-lmdb, e.g. <text dump>/page_xml next to <text dump>/lmdb) with key
+'{library}_{page uuid}' (the text LMDB key) and value the zlib-compressed XML, plus
 <out-lmdb>/progress.tsv (library, page, zip path, status: done | missing_zip | missing_member |
-bad_zip | no_image_path | outside_prefix). A rerun skips pages already done.
+bad_zip | no_image_path). Pages outside --path-prefix are only counted (outside_prefix), not
+recorded, so a run for another storage can fetch them. A rerun skips pages already done.
 
 Only the standard library, lmdb and psycopg2 are needed (e.g. the db_text_dump venv). Logs hold
-counts and paths only, never ALTO content.
+counts and paths only, never XML content.
 
-Public pages (the run for the experiments):
-    /home/ikohut/python_env/db_text_dump/bin/python3 -m embedding_probe.fetch_alto \\
-        --pages /run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/embedding_probe/alto_pages.tsv \\
-        --path-prefix /mnt/matylda0/ihradis/digiknihovna_public \\
-        --out-lmdb /run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/2026-09-16.db_text_dump/alto
+matylda0 pages (the run for the experiments):
+    /home/ikohut/python_env/db_text_dump/bin/python3 -m embedding_probe.fetch_ocr_xml \\
+        --pages /run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/embedding_probe/ocr_pages.tsv \\
+        --path-prefix /mnt/matylda0 \\
+        --out-lmdb /run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/2026-09-16.db_text_dump/page_xml
 
-Private pages (run by the user, with the private storage mapped):
-    /home/ikohut/python_env/db_text_dump/bin/python3 -m embedding_probe.fetch_alto \\
-        --pages .../embedding_probe/alto_pages.tsv \\
-        --path-map <DB path prefix>=<local mount> --path-prefix <local mount> \\
-        --out-lmdb /run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/2026-09-16.db_text_dump.private/alto
+zfs1 pages: run by the user, see run_fetch_private_page_xml.sh.
 """
 import argparse
 import logging
@@ -47,7 +46,7 @@ from typing import Dict, List, Optional, Tuple
 
 import lmdb
 
-logger = logging.getLogger('FETCH ALTO')
+logger = logging.getLogger('FETCH OCR XML')
 UUID = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
 DEFAULT_DB_URL = 'postgresql://librarymetadata_all:@localhost:5888/librarymetadata_all'
 
@@ -56,17 +55,19 @@ def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--pages', type=Path, required=True, help='TSV: library <TAB> page uuid.')
     parser.add_argument('--out-lmdb', type=Path, required=True, help='Output LMDB directory.')
+    parser.add_argument('--kind', choices=('page_xml', 'alto_xml'), default='page_xml',
+                        help='Which zips to read: <docdir>.page_xml.zip or <docdir>.alto_xml.zip.')
     parser.add_argument('--path-prefix', required=True,
                         help='Only zips whose (mapped) path starts with this are opened.')
     parser.add_argument('--path-map', action='append', default=[],
                         help='OLD=NEW: rewrite DB paths starting with OLD to start with NEW (repeatable).')
     parser.add_argument('--db-url', default=os.environ.get('DATABASE_URL', DEFAULT_DB_URL))
     parser.add_argument('--dry-run', action='store_true',
-                        help='Only look the pages up in the DB and print the zip path prefixes (first 4 directories '
-                             'components) with page counts, to choose --path-map/--path-prefix; opens no file '
+                        help='Only look the pages up in the DB and print the zip path prefixes (first 4 directories)'
+                             ' with page counts, to choose --path-map/--path-prefix; opens no file '
                              'and writes nothing.')
     parser.add_argument('--diagnose', type=int, default=0,
-                        help='For the first N documents whose ALTO zip is missing, log the names of the files '
+                        help='For the first N documents whose zip is missing, log the names of the files '
                              'next to it (<docdir>.*), to see how the storage names things; names only.')
     parser.add_argument('--threads', type=int, default=16)
     parser.add_argument('--map-size-gb', type=int, default=100)
@@ -74,12 +75,12 @@ def parse_arguments(argv=None):
     return parser.parse_args(argv)
 
 
-def alto_zip_path(image_path: str) -> str:
-    """.../<docdir>.images/<page>.jpg -> .../<docdir>.alto_xml.zip"""
+def ocr_zip_path(image_path: str, kind: str = 'page_xml') -> str:
+    """.../<docdir>.images/<page>.jpg -> .../<docdir>.<kind>.zip"""
     parent = os.path.dirname(image_path)
     if parent.endswith('.images'):
         parent = parent[:-len('.images')]
-    return parent + '.alto_xml.zip'
+    return f'{parent}.{kind}.zip'
 
 
 def map_path(path: str, path_map: List[Tuple[str, str]]) -> str:
@@ -117,7 +118,7 @@ def image_paths(db_url: str, pages: List[Tuple[str, str]], batch: int = 5000) ->
 
 
 def read_members(zip_path: str, pages: List[Tuple[str, str]]):
-    """[(library, page, status, compressed ALTO or None)] for the pages of one zip."""
+    """[(library, page, status, compressed XML or None)] for the pages of one zip."""
     if not os.path.exists(zip_path):
         return [(lib, page, 'missing_zip', None) for lib, page in pages]
     try:
@@ -138,7 +139,7 @@ def read_members(zip_path: str, pages: List[Tuple[str, str]]):
 def main(argv=None):
     args = parse_arguments(argv)
     args.out_lmdb.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(level=logging.INFO, format='FETCH ALTO - %(asctime)s - %(message)s',
+    logging.basicConfig(level=logging.INFO, format='FETCH OCR XML - %(asctime)s - %(message)s',
                         handlers=[logging.StreamHandler(sys.stdout),
                                   logging.FileHandler(args.out_lmdb / 'log.txt', encoding='utf-8')])
     logger.info(' '.join(sys.argv))
@@ -153,7 +154,7 @@ def main(argv=None):
 
     paths = image_paths(args.db_url, pages)
     if args.dry_run:
-        prefixes = Counter('/'.join(alto_zip_path(p).split('/')[:5]) for p in paths.values())
+        prefixes = Counter('/'.join(ocr_zip_path(p, args.kind).split('/')[:5]) for p in paths.values())
         logger.info(f'{len(paths)} of {len(pages)} pages have an image path; zip path prefixes:')
         for prefix, n in prefixes.most_common():
             mapped = map_path(prefix, path_map)
@@ -169,7 +170,7 @@ def main(argv=None):
                 status['no_image_path'] += 1
                 progress.write(f'{lib}\t{page}\t\tno_image_path\n')
                 continue
-            zip_path = map_path(alto_zip_path(path), path_map)
+            zip_path = map_path(ocr_zip_path(path, args.kind), path_map)
             if not zip_path.startswith(args.path_prefix):
                 status['outside_prefix'] += 1  # not recorded: another run (another prefix) may fetch it
                 continue
@@ -211,7 +212,7 @@ def main(argv=None):
     if args.diagnose:
         missing = [z for z, ps in by_zip.items() if not os.path.exists(z)][:args.diagnose]
         for zip_path in missing:
-            docdir = zip_path[:-len('.alto_xml.zip')]
+            docdir = zip_path[:-len(f'.{args.kind}.zip')]
             parent, stem = os.path.dirname(docdir), os.path.basename(docdir)
             try:
                 siblings = sorted(n for n in os.listdir(parent) if n.startswith(stem))

@@ -1,12 +1,12 @@
-"""Writes the list of pages whose ALTO the experiments need, for fetch_alto.py: the annotated pages
+"""Writes the list of pages whose OCR XML the experiments need, for fetch_ocr_xml.py: the annotated pages
 with their context windows (pages.parquet, up to its max context) and the DB-labelled public
 development sample (dev/dev_pages.parquet, if built).
 
-Output <work-dir>/alto_pages.tsv: library <TAB> page uuid, one page per line, sorted, no header.
+Output <work-dir>/ocr_pages.tsv: library <TAB> page uuid, one page per line, sorted, no header.
 Page ids only -- no paths, no text.
 
 Example:
-    python -m embedding_probe.write_alto_page_list
+    python -m embedding_probe.write_ocr_page_list
 """
 import argparse
 from pathlib import Path
@@ -32,8 +32,8 @@ def main(argv=None):
     if dev.exists():
         parts.append(pl.read_parquet(dev).select('library', 'page'))
     result = pl.concat(parts).unique().sort('library', 'page')
-    result.write_csv(args.work_dir / 'alto_pages.tsv', separator='\t', include_header=False)
-    print(f'{len(result)} pages ({len(window.unique())} from the annotated windows) -> {args.work_dir / "alto_pages.tsv"}')
+    result.write_csv(args.work_dir / 'ocr_pages.tsv', separator='\t', include_header=False)
+    print(f'{len(result)} pages ({len(window.unique())} from the annotated windows) -> {args.work_dir / "ocr_pages.tsv"}')
 
 
 if __name__ == '__main__':

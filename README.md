@@ -412,24 +412,32 @@ read only the public text LMDB and score the pages whose text is public (output 
 With the private LMDB they run on the same pages as all other experiments. The text stays in
 memory and only predicted labels are written.
 
-**ALTO.** The OCR also exists as ALTO XML (PERO OCR, with line and word boxes and word
-confidences), one zip per document directory, `<docdir>.alto_xml.zip`, next to the page images.
-`alto_features.py` turns a page's ALTO into 30 layout numbers:
+**ALTO.** The layout features come from the ALTO XML of the OCR (PERO OCR, with line and word
+boxes and word confidences), the format of the later pipeline. `ocr_layout.py` turns a page's ALTO
+(or PAGE XML) into 30 layout numbers:
 - the text box, the line heights (headings), the centred, right-aligned and indented lines;
 - columns, right-aligned page numbers;
 - the OCR confidence and the share of noise words.
 
-The ALTO of the pages the experiments need (the annotated windows up to K = 3, plus the public
-development sample; `write_alto_page_list.py` → `embedding_probe/alto_pages.tsv`) is fetched by
-`fetch_alto.py` into an LMDB next to each text LMDB: key `{library}_{page uuid}`, value the
-zlib-compressed ALTO XML. It finds the zip from `meta_records.image_path` in the library metadata
-DB (tunnel on localhost:5888):
-- `2026-09-16.db_text_dump/alto/`: everything stored on matylda0, 42,184 pages (all under
-  `/mnt/matylda0/ihradis/digiknihovna_public`);
-- `2026-09-16.db_text_dump.private/alto/`: everything stored on zfs1, 92,967 pages, whose zips are
-  under `/mnt/zfs1/library-downloads/{mzk,knav}` in the DB. Fetch them with
-  `embedding_probe/run_fetch_private_alto.sh` (`--dry-run` first; `PRIVATE_MOUNT=<mount>` if the
-  storage isn't mounted at the DB path).
+The OCR XML sits next to the page images, one zip per document directory. The scripts find the
+zip from `meta_records.image_path` in the library metadata DB (tunnel on localhost:5888). They
+handle the pages the experiments need: the annotated windows up to K = 3 plus the public
+development sample (`write_ocr_page_list.py` → `embedding_probe/ocr_pages.tsv`). Each storage's
+OCR goes into an LMDB next to its text LMDB, with key `{library}_{page uuid}` and value the
+zlib-compressed XML:
+- matylda0 (42,184 pages, all under `/mnt/matylda0/ihradis/digiknihovna_public`) has
+  `<docdir>.alto_xml.zip`. `fetch_ocr_xml.py --kind alto_xml` puts its ALTO into
+  `2026-09-16.db_text_dump/alto/`.
+- zfs1 (92,967 pages under `/mnt/zfs1/library-downloads/{mzk,knav}` in the DB) has only
+  `<docdir>.page_xml.zip`.
+  - The user fetches its PAGE XML with `embedding_probe/run_fetch_private_page_xml.sh` (`--dry-run`
+    first) into `2026-09-16.db_text_dump.private/page_xml/`.
+  - `convert_page_xml_to_alto.py` (pero-ocr venv) converts it into `2026-09-16.db_text_dump.private/alto/`.
+
+  PAGE XML keeps no OCR logits, so the converted ALTO has every word confidence at 1.0. On 55
+  matylda0 pages with both formats, the converted and the original ALTO have the same lines and
+  words, and the geometry features differ by a few percent at most. The confidence features
+  (`conf_mean`, `conf_low`) are therefore not comparable across the storages.
 
 The split is by storage, like the text dumps', not by the DB's public/private flag: the storage
 paths predate an archival update, and the access column of the CSV is the current one.
