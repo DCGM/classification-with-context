@@ -153,6 +153,42 @@ def test_text_cues_spot_headings_patterns_and_word_starts():
     assert no_cues['kw_index'] == 0  # keywords match word starts only
 
 
+def test_fetch_alto_paths_and_members(tmp_path):
+    import zipfile
+    import zlib
+    from embedding_probe.fetch_alto import alto_zip_path, map_path, read_members
+    assert alto_zip_path('/mnt/x/mzk/doc1.images/p1.jpg') == '/mnt/x/mzk/doc1.alto_xml.zip'
+    assert map_path('/mnt/zfs1/library-downloads/mzk/a.zip', [('/mnt/zfs1/library-downloads', '/media/p')]) == \
+        '/media/p/mzk/a.zip'
+    with zipfile.ZipFile(tmp_path / 'doc1.alto_xml.zip', 'w') as zf:
+        zf.writestr('p1.xml', b'<alto/>')
+    result = read_members(str(tmp_path / 'doc1.alto_xml.zip'), [('mzk', 'p1'), ('mzk', 'p2')])
+    assert [r[2] for r in result] == ['done', 'missing_member'] and zlib.decompress(result[0][3]) == b'<alto/>'
+    assert read_members(str(tmp_path / 'none.zip'), [('mzk', 'p1')])[0][2] == 'missing_zip'
+
+
+ALTO = b'''<alto xmlns="http://www.loc.gov/standards/alto/ns-v2#"><Layout>
+<Page WIDTH="1000" HEIGHT="2000"><PrintSpace>
+<TextBlock><TextLine HPOS="300" VPOS="100" WIDTH="400" HEIGHT="80">
+<String CONTENT="OBSAH" WIDTH="400" WC="0.9"/></TextLine></TextBlock>
+<TextBlock><TextLine HPOS="100" VPOS="300" WIDTH="800" HEIGHT="40">
+<String CONTENT="Kapitola" WIDTH="300" WC="1"/><String CONTENT="5" WIDTH="20" WC="1"/></TextLine>
+<TextLine HPOS="100" VPOS="360" WIDTH="800" HEIGHT="40">
+<String CONTENT="Rejstrik" WIDTH="300" WC="0.2"/><String CONTENT="12" WIDTH="30" WC="1"/></TextLine>
+</TextBlock></PrintSpace></Page></Layout></alto>'''
+
+
+def test_alto_features_geometry():
+    from embedding_probe.alto_features import ALTO_FEATURES, alto_text_lines, alto_vector
+    f = dict(zip(ALTO_FEATURES, alto_vector(ALTO)))
+    assert f['page_aspect'] == pytest.approx(0.5) and f['has_alto'] == 1
+    assert f['top_line_ratio'] == pytest.approx(2.0) and f['top_line_centered'] == 1  # a large centred heading
+    assert f['right_numbers'] == pytest.approx(2 / 3) and f['wc_low'] == pytest.approx(1 / 5)
+    assert f['text_top'] == pytest.approx(0.05) and f['text_left'] == pytest.approx(0.1)
+    assert alto_text_lines(ALTO) == ['OBSAH', 'Kapitola 5', 'Rejstrik 12']
+    assert alto_vector(None) == [0.0] * len(ALTO_FEATURES)
+
+
 def test_training_labels_db_drops_pages_without_db_type_but_keeps_tst():
     pages = pl.DataFrame({'split': ['trn', 'trn', 'tst', 'tst'], 'label': ['Blank', 'Index', 'Map', 'Map'],
                           'db_type': ['NormalPage', None, None, 'Map']})

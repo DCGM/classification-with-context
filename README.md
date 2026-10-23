@@ -411,3 +411,21 @@ window completeness (full, left cut, right cut, both cut).
 read only the public text LMDB and score the pages whose text is public (output `*.public_only`).
 With the private LMDB they run on the same pages as all other experiments. The text stays in
 memory and only predicted labels are written.
+
+**ALTO.** The OCR also exists as ALTO XML (PERO OCR, with line and word boxes and word
+confidences), one zip per document directory, `<docdir>.alto_xml.zip`, next to the page images.
+`alto_features.py` turns a page's ALTO into 30 layout numbers:
+- the text box, the line heights (headings), the centred, right-aligned and indented lines;
+- columns, right-aligned page numbers;
+- the OCR confidence and the share of noise words.
+
+The ALTO of the pages the experiments need (the annotated windows up to K = 3, plus the public
+development sample; `write_alto_page_list.py` → `embedding_probe/alto_pages.tsv`) is fetched by
+`fetch_alto.py` into an LMDB next to each text LMDB: key `{library}_{page uuid}`, value the
+zlib-compressed ALTO XML. It finds the zip from `meta_records.image_path` in the library metadata
+DB (tunnel on localhost:5888):
+- public: `2026-09-16.db_text_dump/alto/`, 42,184 pages from
+  `/mnt/matylda0/ihradis/digiknihovna_public`;
+- private: `2026-09-16.db_text_dump.private/alto/`, 92,967 pages, whose zips are under
+  `/mnt/zfs1/library-downloads/{mzk,knav}` in the DB. Fetch them with
+  `PRIVATE_MOUNT=<mount> embedding_probe/run_fetch_private_alto.sh` (`--dry-run` first).
