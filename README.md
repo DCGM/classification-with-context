@@ -424,8 +424,12 @@ development sample; `write_alto_page_list.py` → `embedding_probe/alto_pages.ts
 `fetch_alto.py` into an LMDB next to each text LMDB: key `{library}_{page uuid}`, value the
 zlib-compressed ALTO XML. It finds the zip from `meta_records.image_path` in the library metadata
 DB (tunnel on localhost:5888):
-- public: `2026-09-16.db_text_dump/alto/`, 42,184 pages from
-  `/mnt/matylda0/ihradis/digiknihovna_public`;
-- private: `2026-09-16.db_text_dump.private/alto/`, 92,967 pages, whose zips are under
-  `/mnt/zfs1/library-downloads/{mzk,knav}` in the DB. Fetch them with
-  `PRIVATE_MOUNT=<mount> embedding_probe/run_fetch_private_alto.sh` (`--dry-run` first).
+- `2026-09-16.db_text_dump/alto/`: everything stored on matylda0, 42,184 pages (all under
+  `/mnt/matylda0/ihradis/digiknihovna_public`);
+- `2026-09-16.db_text_dump.private/alto/`: everything stored on zfs1, 92,967 pages, whose zips are
+  under `/mnt/zfs1/library-downloads/{mzk,knav}` in the DB. Fetch them with
+  `embedding_probe/run_fetch_private_alto.sh` (`--dry-run` first; `PRIVATE_MOUNT=<mount>` if the
+  storage isn't mounted at the DB path).
+
+The split is by storage, like the text dumps', not by the DB's public/private flag: the storage
+paths predate an archival update, and the access column of the CSV is the current one.

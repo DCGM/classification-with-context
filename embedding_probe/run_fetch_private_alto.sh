@@ -1,11 +1,13 @@
 #!/bin/bash
-# Fetches the ALTO XML of the private pages the experiments need (the annotated pages with their
-# context windows up to K = 3, see write_alto_page_list.py) into an LMDB next to the private text
+# Fetches the ALTO XML of the experiment pages (the annotated pages with their context windows up to
+# K = 3, see write_alto_page_list.py) that are stored on zfs1, into an LMDB next to the private text
 # LMDB: <private text dump>/alto (key {library}_{page uuid}, value the zlib-compressed ALTO XML).
 #
-# In the DB (meta_records.image_path) these pages lie under /mnt/zfs1/library-downloads/{mzk,knav}
-# (92,967 pages, ~11.5k document zips <docdir>.alto_xml.zip). Mount that storage, set PRIVATE_MOUNT
-# to where it is mounted here, and run:
+# The split is by storage, not by the DB's public/private flag (the storage paths predate an
+# archival update): everything on matylda0 is in <public text dump>/alto (fetched by fetch_alto.py
+# with --path-prefix /mnt/matylda0), everything on zfs1 goes here. In the DB (meta_records.image_path)
+# the zfs1 pages lie under /mnt/zfs1/library-downloads/{mzk,knav} (92,967 pages, ~11.5k document
+# zips <docdir>.alto_xml.zip). Mount that storage (PRIVATE_MOUNT defaults to the DB path) and run:
 #
 #   embedding_probe/run_fetch_private_alto.sh --dry-run   # DB lookup only: page counts per path prefix
 #   embedding_probe/run_fetch_private_alto.sh             # the fetch; a rerun resumes
