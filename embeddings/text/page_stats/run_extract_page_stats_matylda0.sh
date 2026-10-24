@@ -1,7 +1,8 @@
 #!/bin/bash
 # Page statistics of all matylda0 pages (the "public" storage) -> <data>/2026-09-16.db_page_stats_dump.
-# Streams the document zips (ALTO, else PAGE XML converted in memory); stores only the sparse vectors.
+# Streams the document zips (each page from ALTO, else from PAGE XML); stores only the sparse vectors.
 # Resumable: rerun to continue. Extra arguments go to extract_to_lmdb.py (e.g. --workers 8, --max-zips 100; keep at most 10 workers).
+# Pages recorded missing (e.g. while matylda0 was unmounted) are retried with: --retry-statuses missing
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"

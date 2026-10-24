@@ -4,14 +4,19 @@ vector per page, streaming the OCR zips of the documents (nothing else is stored
 
 Modelled on semAnt's librarymetadata/db/getters/extract_page_text_to_lmdb.py, and using its mapping file
 (library, page id, zip path; sorted, so that the pages of one zip are consecutive), split by storage with
---path-prefix and resumable from the progress file. Per document zip, in a worker process:
+--path-prefix and resumable from the progress file. Per document zip, in a worker process, each page:
 
-  - <doc>.alto_xml.zip if it exists: the page's ALTO (<page id>.xml);
-  - otherwise <doc>.page_xml.zip: the page's PAGE XML, read with embeddings/ocr_xml.py (the words placed
-    along each line by their length and given the line's confidence; the same vector as from its ALTO
-    conversion with ocr_xml.to_alto());
+  - from <doc>.alto_xml.zip if it has the page's ALTO (<page id>.xml);
+  - otherwise from <doc>.page_xml.zip: the page's PAGE XML, read with embeddings/ocr_xml.py (the words
+    placed along each line by their length and given the line's confidence; the same vector as from its
+    ALTO conversion with ocr_xml.to_alto());
 
-then embed_ocr() and to_sparse(). LMDB: key '{library}_{page id}', value the sparse vector, plus the
+then embed_ocr() and to_sparse(). A page in neither zip is recorded 'missing' (member_missing,
+archive_missing). If neither zip nor the document's directory exists, the storage is taken to be gone
+(e.g. unmounted): the run stops without recording those pages, and a rerun continues. Pages recorded
+missing by an earlier run are retried with --retry-statuses missing.
+
+LMDB: key '{library}_{page id}', value the sparse vector, plus the
 key '__metadata__' (JSON: version, feature names, keyword groups, storage format). Progress lines and
 logs hold only page ids, zip paths, statuses and exception type names, never text or XML content.
 
@@ -101,28 +106,39 @@ def open_zip(path: str) -> Optional[zipfile.ZipFile]:
         return zipfile.ZipFile(io.BytesIO(f.read()))
 
 
+class StorageUnavailable(RuntimeError):
+    """A document directory is gone (the storage got unmounted): stop rather than record its pages missing."""
+
+
 def process_zip(unit: WorkUnit, path_map: Optional[Tuple[str, str]] = None) -> List[PageResult]:
+    """Each page from the ALTO zip, or from the PAGE XML zip when the ALTO zip lacks it or does not exist."""
     zip_path, pages = unit
     local = zip_path.replace(path_map[0], path_map[1], 1) if path_map else zip_path
-    kind = 'alto'
-    try:
-        archive = open_zip(alto_zip_path(local))
-        if archive is None:
-            kind, archive = 'page_xml', open_zip(local)
-    except (OSError, zipfile.BadZipFile) as exc:
-        return [PageResult(lib, page, zip_path, 'missing', f'archive_error:{type(exc).__name__}', None)
-                for lib, page in pages]
-    if archive is None:
-        return [PageResult(lib, page, zip_path, 'missing', 'archive_missing', None) for lib, page in pages]
-    names = set(archive.namelist())
+    paths = {'alto': alto_zip_path(local), 'page_xml': local}
+    if not any(os.path.exists(p) for p in paths.values()) and not os.path.isdir(os.path.dirname(local)):
+        raise StorageUnavailable(os.path.dirname(zip_path))
+    archives: Dict[str, Optional[zipfile.ZipFile]] = {}
+    errors: Dict[str, str] = {}
+
+    def members(kind: str) -> Dict[str, zipfile.ZipInfo]:  # the zip is read on first use only
+        if kind not in archives:
+            try:
+                archives[kind] = open_zip(paths[kind])
+            except (OSError, zipfile.BadZipFile) as exc:
+                archives[kind], errors[kind] = None, f'archive_error:{type(exc).__name__}'
+        return archives[kind].NameToInfo if archives[kind] is not None else {}
+
     results = []
     for library, page_id in pages:
         member = f'{page_id}.xml'
-        if member not in names:
-            results.append(PageResult(library, page_id, zip_path, 'missing', f'{kind}_member_missing', None))
+        kind = next((k for k in ('alto', 'page_xml') if member in members(k)), None)
+        if kind is None:
+            reason = (errors.get('alto') or errors.get('page_xml')
+                      or ('member_missing' if any(archives.values()) else 'archive_missing'))
+            results.append(PageResult(library, page_id, zip_path, 'missing', reason, None))
             continue
         try:
-            value = to_sparse(embed_ocr(archive.read(member)))
+            value = to_sparse(embed_ocr(archives[kind].read(member)))
         except Exception as exc:  # noqa: BLE001 -- the type only, never the message (it may quote content)
             results.append(PageResult(library, page_id, zip_path, 'failed', f'{kind}:{type(exc).__name__}', None))
             continue
@@ -177,12 +193,17 @@ def run(args) -> None:
     try:
         buffer: List[PageResult] = []
         with multiprocessing.Pool(workers, initializer=quiet_worker) as pool:
-            for results in pool.imap_unordered(functools.partial(process_zip, path_map=path_map), units(),
-                                               chunksize=1):
-                buffer.extend(results)
-                if len(buffer) >= args.commit_every:
-                    flush(buffer)
-                    buffer = []
+            try:
+                for results in pool.imap_unordered(functools.partial(process_zip, path_map=path_map), units(),
+                                                   chunksize=1):
+                    buffer.extend(results)
+                    if len(buffer) >= args.commit_every:
+                        flush(buffer)
+                        buffer = []
+            except StorageUnavailable as exc:
+                flush(buffer)  # the pages finished before; the rest stays unrecorded, a rerun continues there
+                logger.error(f'storage unavailable ({exc}): stopped, rerun when it is back')
+                raise
         flush(buffer)
         env.sync()
     finally:
