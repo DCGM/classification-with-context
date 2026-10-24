@@ -35,7 +35,7 @@ if ! import_error=$("$PYTHON" -c "import numpy, lmdb, embeddings.text.page_stats
     echo "$import_error" | tail -n 3 >&2
     echo "Install the repository into that environment (or set PYTHON to one that has it):" >&2
     echo "  $PYTHON -m pip install -e \"$REPO_ROOT[dev]\"" >&2
-    echo "  PYTHON=~/python_env/classification-with-context/bin/python $0 $*" >&2
+    echo "then rerun: PYTHON=$PYTHON $0 $*" >&2
     exit 1
 fi
 if [ -n "${MAPPING:-}" ] && [ ! -f "$MAPPING" ]; then
