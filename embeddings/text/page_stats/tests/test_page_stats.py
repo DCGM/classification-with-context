@@ -23,7 +23,7 @@ def stats():
 
 def test_full_vector_counts_hits_per_stem(stats):
     full = dict(zip(FEATURES, stats.embed_text(TEXT)))
-    assert len(FEATURES) == 3 * len(STEMS) + 2 * 8 + 21 + 33 and len(set(FEATURES)) == len(FEATURES)
+    assert len(FEATURES) == 3 * len(STEMS) + 3 * 8 + 22 + 32 and len(set(FEATURES)) == len(FEATURES)
     assert full['head_kw:predmluv'] == 1 and full['head_kw:predml'] == 1 and full['kw:napsal'] == 1
     assert full['kw:obsah'] == 1 and full['head_kw:obsah'] == 0  # 'Obsahem' (word start), not in the header
     assert full['kw:rejstrik'] == 1 and full['kw:rejstr'] == 1  # nested stems both count
@@ -36,7 +36,7 @@ def test_alto_lines_are_read_top_to_bottom(stats):
     assert full['head_kw:obsah'] == 1 and full['has_ocr_xml'] == 1
     assert full['page_aspect'] == pytest.approx(0.5) and full['conf_low'] == pytest.approx(1 / 5)
     # the text features see the lines top to bottom, although the XML has Rejstrik before Kapitola
-    n_text = len(FEATURES) - 33
+    n_text = len(FEATURES) - 32
     np.testing.assert_array_equal(stats.embed_alto(ALTO)[:n_text], stats.embed_text('OBSAH\nKapitola 5\nRejstrik 12')[:n_text])
 
 
@@ -48,10 +48,10 @@ def test_grouped_view_and_selection(stats):
     assert g['head_preface'] == 1 and g['kw_preface'] == pytest.approx(np.log1p(3))  # 'predmluv', 'predml', 'uvod'
     assert g['kw_index'] == pytest.approx(np.log1p(2)) and g['foot_pat_scale'] == 1
     x, names = stats.view(full, include=['alto_lines', 'kw:obsah'], exclude=['has_ocr_xml'])
-    assert 'kw:obsah' in names and 'has_ocr_xml' not in names and len(names) == 28
+    assert 'kw:obsah' in names and 'has_ocr_xml' not in names and len(names) == 27
     assert x[0, names.index('kw:obsah')] == pytest.approx(np.log1p(1))
     x, names = stats.view(full, grouped=True, include=['head_*'], exclude=['head_toc'])
-    assert len(names) == len(KEYWORD_GROUPS) - 1
+    assert len(names) == len(KEYWORD_GROUPS) - 1 + 8  # head_<group> and head_pat_<pattern>
     raw, _ = stats.view(full.astype(np.float16), log_counts=False)  # e.g. read back from an LMDB
     assert raw[0, FEATURES.index('kw:obsah')] == 1
 
@@ -66,12 +66,46 @@ def test_custom_groups_regroup_stored_vectors(stats):
         stats.view(np.zeros((1, 10)))
 
 
-def test_grouped_view_reproduces_the_experiment_vector(stats):
-    """The grouped view equals the cues + ALTO features evaluated in embedding_probe (probe_text_cues --alto-lmdb)."""
-    from embedding_probe.ocr_layout import layout_vector, ocr_text_lines
-    from embedding_probe.text_cues import CUE_FEATURES, cue_vector
+def test_old_groups_reproduce_the_experiment_vector():
+    """Regrouped with the keyword groups of the experiments, the stored vector gives the cues + ALTO features
+    evaluated in embedding_probe (probe_text_cues --alto-lmdb): every old stem is still extracted. Only the
+    hyphenated stems, which could never match, are gone."""
+    from embedding_probe.ocr_layout import LAYOUT_XML_FEATURES, layout_vector, ocr_text_lines
+    from embedding_probe.text_cues import CUE_FEATURES, KEYWORDS as OLD_KEYWORDS, cue_vector
+    missing = {s for stems in OLD_KEYWORDS.values() for s in stems} - set(STEMS)
+    assert missing == {'avant-propos', 'x-rite'}
+    old_stats = PageStats({g: [s for s in stems if s not in missing] for g, stems in OLD_KEYWORDS.items()})
     for alto in (ALTO, ALTO.replace(b'OBSAH', b'Seznam map a Vorwort')):
         old = np.array(cue_vector('\n'.join(ocr_text_lines(alto))) + layout_vector(alto), dtype=np.float32)
-        new, names = stats.view(stats.embed_alto(alto), grouped=True)
-        assert names[:len(CUE_FEATURES)] == CUE_FEATURES
-        np.testing.assert_allclose(new[0], old, rtol=1e-6)
+        new, names = old_stats.view(old_stats.embed_alto(alto), grouped=True)
+        old = dict(zip(CUE_FEATURES + LAYOUT_XML_FEATURES, old))  # compared by name: short_words moved
+        new = {n: v for n, v in zip(names, new[0]) if not n.startswith('head_pat_')}  # new in version 1
+        assert set(new) == set(old)
+        if alto != ALTO:  # short_words now counts the text's tokens, the old one ALTO String elements
+            old.pop('short_words')
+        np.testing.assert_allclose([new[n] for n in old], list(old.values()), rtol=1e-6)
+
+
+def test_readme_lists_the_current_keywords():
+    from pathlib import Path
+    from embeddings.text.page_stats.page_stats import keyword_table
+    readme = (Path(__file__).parents[1] / 'README.md').read_text(encoding='utf-8')
+    assert keyword_table() in readme, 'regenerate the README keyword tables (--keyword-table)'
+
+
+def test_sparse_storage_round_trip(stats):
+    from embeddings.text.page_stats.page_stats import from_sparse, to_sparse
+    full = stats.embed_alto(ALTO)
+    data = to_sparse(full)
+    assert len(data) == 4 * np.count_nonzero(full)
+    np.testing.assert_allclose(from_sparse(data), full.astype(np.float16), rtol=0)
+    np.testing.assert_array_equal(stats.decode([data, to_sparse(np.zeros(len(FEATURES)))])[1], 0)
+
+
+def test_trie_matches_the_word_start_regex():
+    import re
+    from embeddings.text.page_stats.page_stats import normalize, stem_counts
+    text = ' ' + normalize('Rejstřík jmen; obsahuje viz str. 5, kap. 3 — Vorwort; x-rite; 2rejstr; místo čti; '
+                           'Содержание; tabulky tabulek; seznam map a plany\nINDEX alphabétique') + ' '
+    expected = [len(re.findall(r'(?<![^\W\d_])' + re.escape(s), text)) for s in STEMS]
+    assert stem_counts(text) == expected and sum(expected) > 10
