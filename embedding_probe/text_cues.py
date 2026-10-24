@@ -126,15 +126,22 @@ def extra_layout(lines: Sequence[str]) -> List[float]:
             float(sum(c.isalpha() for c in first) >= 3 and first.upper() == first)]
 
 
-def cue_vector(text: str) -> List[float]:
+def cue_vector(text: str, head_lines: int = None, foot_lines: int = None) -> List[float]:
+    """The cue vector of a page text (one line per text line, top to bottom). The heading is the first
+    head_lines non-empty lines and the footer the last foot_lines (default EDGE_LINES each, a page of up to
+    EDGE_LINES lines having no separate footer); with OCR geometry they can come from the layout instead
+    (ocr_layout.header_footer_counts)."""
     raw_lines = [line.strip() for line in text.split('\n') if line.strip()]
     folded_lines = [line.strip() for line in fold(text).split('\n') if line.strip()]
     norm_lines = [line.strip() for line in normalize(text).split('\n') if line.strip()]
+    if head_lines is None:
+        head_lines = EDGE_LINES
+    if foot_lines is None:
+        foot_lines = EDGE_LINES if len(norm_lines) > EDGE_LINES else 0
     padded = ' ' + ' '.join(norm_lines) + ' '  # trailing space lets 'viz ' match at a line end
-    head = ' ' + ' '.join(norm_lines[:EDGE_LINES]) + ' '
-    # a page of up to EDGE_LINES lines has a heading but no separate footer
-    foot = ' ' + ' '.join(norm_lines[-EDGE_LINES:]) + ' ' if len(norm_lines) > EDGE_LINES else ' '
-    foot_folded = folded_lines[-EDGE_LINES:] if len(folded_lines) > EDGE_LINES else []
+    head = ' ' + ' '.join(norm_lines[:head_lines]) + ' '
+    foot = ' ' + ' '.join(norm_lines[len(norm_lines) - foot_lines:]) + ' ' if foot_lines else ' '
+    foot_folded = folded_lines[len(folded_lines) - foot_lines:] if foot_lines else []
     kw = [float(np.log1p(_hits(padded, g))) for g in KEYWORDS]
     head_kw = [float(_hits(head, g) > 0) for g in KEYWORDS]
     foot_kw = [float(_hits(foot, g) > 0) for g in KEYWORDS]
@@ -143,12 +150,17 @@ def cue_vector(text: str) -> List[float]:
     return kw + head_kw + foot_kw + pat + foot_pat + layout_features(text) + extra_layout(raw_lines)
 
 
-def cue_matrix(texts: Sequence[str], workers: int = None) -> np.ndarray:
-    """Cue vectors of many texts, computed by parallel worker processes (the texts are passed in memory)."""
+def _cue_vector_item(item) -> List[float]:
+    return cue_vector(item) if isinstance(item, str) else cue_vector(*item)
+
+
+def cue_matrix(texts: Sequence, workers: int = None) -> np.ndarray:
+    """Cue vectors of many texts (or (text, head_lines, foot_lines) tuples), computed by parallel worker
+    processes (the texts are passed in memory)."""
     import os
     from concurrent.futures import ProcessPoolExecutor
     workers = workers or min(os.cpu_count() or 1, 12)
     if workers <= 1 or len(texts) < 2000:
-        return np.array([cue_vector(t) for t in texts], dtype=np.float32)
+        return np.array([_cue_vector_item(t) for t in texts], dtype=np.float32)
     with ProcessPoolExecutor(workers) as pool:
-        return np.array(list(pool.map(cue_vector, texts, chunksize=500)), dtype=np.float32)
+        return np.array(list(pool.map(_cue_vector_item, texts, chunksize=500)), dtype=np.float32)

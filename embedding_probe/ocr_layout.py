@@ -197,3 +197,52 @@ def ocr_text_lines(xml: bytes) -> List[str]:
     if parsed is None:
         return []
     return [' '.join(word[0] for word in line[4]) for line in sorted(parsed[3], key=lambda line: line[1])]
+
+
+EDGE_METHODS = ('first3', 'gap1', 'gap', 'band', 'gap+size')
+
+
+def header_footer_counts(xml: bytes, method: str = 'gap') -> tuple:
+    """(header lines, footer lines) of a page, counted on its lines sorted top to bottom (as ocr_text_lines).
+
+      first3     the first and last 3 lines (as for plain text)
+      gap1       the lines above the first vertical gap of over 1.5 median line heights from the top,
+                 within the top 6 lines, and below the first such gap from the bottom, within the bottom 6;
+                 without such a gap, the lines in the top (bottom) 10% of the text box
+      gap        as gap1 but the last such gap within the top (bottom) 6 lines, so that a running header
+                 or page number and a heading below it are both in the header
+      band       the lines starting in the top 15% of the text box, and ending in its bottom 15%
+      gap+size   gap, extended by the consecutive tall lines (over 1.3x the median) that follow it
+    """
+    parsed = parse_ocr_xml(xml)
+    if parsed is None or not parsed[3]:
+        return 0, 0
+    lines = sorted(parsed[3], key=lambda line: line[1])
+    n = len(lines)
+    if method == 'first3':
+        return min(3, n), (3 if n > 3 else 0)
+    top = np.array([line[1] for line in lines])
+    bottom = top + np.array([line[3] for line in lines])
+    height = np.array([line[3] for line in lines])
+    med_h = float(np.median(height))
+    text_top, text_bottom = top.min(), bottom.max()
+    text_h = max(text_bottom - text_top, 1.0)
+    if method == 'band':
+        head = int(np.sum(top < text_top + 0.15 * text_h))
+        foot = int(np.sum(bottom > text_bottom - 0.15 * text_h))
+        return head, min(foot, n - head)
+    gaps = top[1:] - bottom[:-1]  # gaps[i]: between line i and line i + 1
+    big_top = [i for i in range(min(6, n - 1)) if gaps[i] > 1.5 * med_h]
+    big_bottom = [i for i in range(n - 2, max(n - 8, -1), -1) if gaps[i] > 1.5 * med_h]  # from the bottom up
+    if big_top:
+        head = (big_top[0] if method == 'gap1' else big_top[-1]) + 1
+    else:
+        head = max(1, int(np.sum(top < text_top + 0.10 * text_h)))
+    if big_bottom:
+        foot = n - 1 - (big_bottom[0] if method == 'gap1' else big_bottom[-1])
+    else:
+        foot = int(np.sum(bottom > text_bottom - 0.10 * text_h))
+    if method == 'gap+size':
+        while head < n and height[head] > 1.3 * med_h:
+            head += 1
+    return head, max(0, min(foot, n - head))
