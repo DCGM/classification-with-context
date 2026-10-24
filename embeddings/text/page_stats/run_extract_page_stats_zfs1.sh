@@ -5,7 +5,7 @@
 # by length) and only the sparse statistics vector is stored. No text or XML is written or logged.
 # Resumable: rerun to continue. Extra arguments go to extract_to_lmdb.py, e.g.
 #   --max-zips 20          a trial on the first 20 documents (then rerun without it; done pages are skipped)
-#   --workers 12           worker processes (default here 16)
+#   --workers 8            worker processes (default here 10; keep it at most 10)
 #   --path-map /mnt/zfs1=/media/zfs1   if zfs1 is mounted elsewhere
 set -euo pipefail
 
@@ -22,5 +22,5 @@ cd "$REPO_ROOT"
     --lmdb-dir "$OUT_DIR/lmdb" \
     --progress-file "$OUT_DIR/progress.tsv" \
     --log-file "$OUT_DIR/log.txt" \
-    --workers 16 \
+    --workers 10 \
     "$@"

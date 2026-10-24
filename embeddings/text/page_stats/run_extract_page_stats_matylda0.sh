@@ -1,7 +1,7 @@
 #!/bin/bash
 # Page statistics of all matylda0 pages (the "public" storage) -> <data>/2026-09-16.db_page_stats_dump.
 # Streams the document zips (ALTO, else PAGE XML converted in memory); stores only the sparse vectors.
-# Resumable: rerun to continue. Extra arguments go to extract_to_lmdb.py (e.g. --workers 16, --max-zips 100).
+# Resumable: rerun to continue. Extra arguments go to extract_to_lmdb.py (e.g. --workers 8, --max-zips 100; keep at most 10 workers).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -17,5 +17,5 @@ cd "$REPO_ROOT"
     --lmdb-dir "$OUT_DIR/lmdb" \
     --progress-file "$OUT_DIR/progress.tsv" \
     --log-file "$OUT_DIR/log.txt" \
-    --workers 24 \
+    --workers 10 \
     "$@"
