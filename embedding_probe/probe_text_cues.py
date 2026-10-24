@@ -13,17 +13,30 @@ PRIVATE TEXT: as in text_baselines.py, the private text LMDB is read only when -
 given; texts and cue vectors stay in memory, and only counts and predicted labels are written or
 logged. Without it only pages with public text are used and the output is named *.public_only.
 
-Writes <work-dir>/k<K>/predictions/text_cues[.db_labels][.public_only].parquet. Scores: report.py.
+With --alto-lmdb (the ALTO LMDBs of both storages, same keys as the text LMDBs) the cues are computed
+on the ALTO line texts sorted top to bottom instead of the plain text, and the ALTO line features
+(ocr_layout.LINE_FEATURES) are appended to each page's cue vector; the experiments are then named
+'text cues +ALTO' and '<embeddings> +cues +ALTO'. The XML is parsed in worker processes that return
+only the feature vectors.
+
+Writes <work-dir>/k<K>/predictions/text_cues[.alto][.db_labels][.public_only].parquet. Scores: report.py.
 
 Example:
     python -m embedding_probe.probe_text_cues --context 0 --private-text-lmdb \\
         /run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/2026-09-16.db_text_dump.private/lmdb
+    python -m embedding_probe.probe_text_cues --context 0 --alto-lmdb \
+        /run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/2026-09-16.db_text_dump/alto \
+        /run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/2026-09-16.db_text_dump.private/alto
 """
 import argparse
 import logging
+import os
 import time
+import zlib
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
+import lmdb
 import numpy as np
 import polars as pl
 
@@ -32,7 +45,8 @@ from embedding_probe.extract_vectors import Vectors
 from embedding_probe.probe_embeddings import (TRAIN_LABEL_SUFFIX, holdout_documents, linear_features, linear_probe,
                                               names, standardized, training_labels)
 from embedding_probe.text_baselines import presence_flags, read_texts, slot_rows
-from embedding_probe.text_cues import cue_matrix
+from embedding_probe.ocr_layout import LAYOUT_XML_FEATURES, LINE_FEATURES, layout_vector, ocr_text_lines
+from embedding_probe.text_cues import cue_matrix, cue_vector
 
 logger = logging.getLogger('PROBE TEXT CUES')
 
@@ -47,6 +61,9 @@ def parse_arguments(argv=None):
     parser.add_argument('--public-text-lmdb', type=Path, default=PUBLIC_TEXT_LMDB)
     parser.add_argument('--private-text-lmdb', type=Path, default=None,
                         help='The private text LMDB; read only by this script, never to be looked at.')
+    parser.add_argument('--alto-lmdb', type=Path, nargs='+', default=None,
+                        help='ALTO LMDBs (public and private); cues from ALTO lines plus ALTO line features. '
+                             'Read only by this script, never to be looked at.')
     parser.add_argument('--holdout-fraction', type=float, default=0.15)
     parser.add_argument('--device', default=None)
     return parser.parse_args(argv)
@@ -62,9 +79,50 @@ def window_cues(cues: np.ndarray, rows, fit_rows: np.ndarray) -> np.ndarray:
     return np.hstack(parts)
 
 
+_alto_envs = []
+LINE_COLUMNS = [LAYOUT_XML_FEATURES.index(n) for n in LINE_FEATURES]
+
+
+def _open_alto(paths):
+    _alto_envs.extend(lmdb.open(str(p), readonly=True, lock=False, readahead=False) for p in paths)
+
+
+def _alto_vectors(keys):
+    """(found keys, their cue vectors on the ALTO lines + ALTO line features), in a worker process."""
+    found, vectors = [], []
+    for key in keys:
+        value = None
+        for env in _alto_envs:
+            with env.begin() as txn:
+                value = txn.get(key.encode('utf-8'))
+            if value is not None:
+                break
+        if value is None:
+            continue
+        xml = zlib.decompress(value)
+        layout = layout_vector(xml)
+        found.append(key)
+        vectors.append(cue_vector('\n'.join(ocr_text_lines(xml))) + [layout[i] for i in LINE_COLUMNS])
+    return found, vectors
+
+
+def alto_features(keys, paths, workers: int = None):
+    """key -> row, matrix of cue vectors on the ALTO lines + ALTO line features, for the keys with ALTO."""
+    workers = workers or min(os.cpu_count() or 1, 12)
+    chunks = [keys[i:i + 1000] for i in range(0, len(keys), 1000)]
+    found, vectors = [], []
+    with ProcessPoolExecutor(workers, initializer=_open_alto, initargs=(paths,)) as pool:
+        for f, v in pool.map(_alto_vectors, chunks):
+            found += f
+            vectors += v
+    return found, np.array(vectors, dtype=np.float32)
+
+
 def main(argv=None):
     args = parse_arguments(argv)
-    suffix = ('.db_labels' if args.train_labels == 'db' else '') + ('' if args.private_text_lmdb else '.public_only')
+    alto = args.alto_lmdb is not None
+    suffix = (('.alto' if alto else '') + ('.db_labels' if args.train_labels == 'db' else '')
+              + ('' if args.private_text_lmdb or alto else '.public_only'))
     setup_logging('PROBE TEXT CUES', args.work_dir / 'logs' / f'probe_text_cues.k{args.context}{suffix}.txt')
     import torch
     from sklearn.ensemble import HistGradientBoostingClassifier
@@ -74,10 +132,13 @@ def main(argv=None):
     slots = window_ids(pages, 'text', args.context)
     keys = sorted({k for slot in slots for k in slot if k is not None})
     started = time.time()
-    texts = read_texts(keys, args.public_text_lmdb, args.private_text_lmdb)
-    unique = sorted(texts)
-    cues = cue_matrix([texts[k] for k in unique])
-    del texts
+    if alto:
+        unique, cues = alto_features(keys, args.alto_lmdb)
+    else:
+        texts = read_texts(keys, args.public_text_lmdb, args.private_text_lmdb)
+        unique = sorted(texts)
+        cues = cue_matrix([texts[k] for k in unique])
+        del texts
     logger.info(f'K={args.context}: cues of {len(unique)} of {len(keys)} window pages, {cues.shape[1]} each, '
                 f'{time.time() - started:.0f}s')
     rows = slot_rows(slots, {k: i for i, k in enumerate(unique)})
@@ -85,8 +146,9 @@ def main(argv=None):
     pages, rows = pages.filter(pl.Series(keep)), [r[keep] for r in rows]
     y, trn, tst = training_labels(pages, args.train_labels)
     holdout = holdout_documents(pages, args.holdout_fraction) & trn
-    name_suffix = TRAIN_LABEL_SUFFIX[args.train_labels]
-    logger.info(f'trn {trn.sum()} ({holdout.sum()} holdout), tst {tst.sum()} pages with text; device {device}')
+    name_suffix = (' +ALTO' if alto else '') + TRAIN_LABEL_SUFFIX[args.train_labels]
+    logger.info(f'trn {trn.sum()} ({holdout.sum()} holdout), tst {tst.sum()} pages with {"ALTO" if alto else "text"}; '
+                f'device {device}')
 
     predictions = {'key': pages['key'].to_numpy()[tst], 'label': pages['label'].to_numpy()[tst]}
     flags = presence_flags(rows, args.context)

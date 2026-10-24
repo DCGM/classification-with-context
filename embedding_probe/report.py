@@ -29,7 +29,8 @@ logger = logging.getLogger('REPORT')
 PER_CLASS_COLUMNS = 6
 COMPLETENESS = ('full', 'left cut', 'right cut', 'both cut')
 DB_SUFFIX = ' (DB labels)'
-CUE_PAIRS = (('mmBERT+DINOv2', 'mmBERT+DINOv2 +cues'), ('layout stats', 'text cues'))
+CUE_PAIRS = (('mmBERT+DINOv2', 'mmBERT+DINOv2 +cues'), ('layout stats', 'text cues'),
+             ('mmBERT+DINOv2 +cues', 'mmBERT+DINOv2 +cues +ALTO'), ('text cues', 'text cues +ALTO'))
 
 
 def parse_arguments(argv=None):

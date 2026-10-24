@@ -414,10 +414,31 @@ memory and only predicted labels are written.
 
 **ALTO.** The layout features come from the ALTO XML of the OCR (PERO OCR, with line and word
 boxes and word confidences), the format of the later pipeline. `ocr_layout.py` turns a page's ALTO
-(or PAGE XML) into 30 layout numbers:
-- the text box, the line heights (headings), the centred, right-aligned and indented lines;
-- columns, right-aligned page numbers;
-- the OCR confidence and the share of noise words.
+(or PAGE XML) into 33 layout numbers:
+- 28 from the lines alone (`LINE_FEATURES`): the text box, the line heights (headings), the
+  centred, right-aligned and indented lines, columns, right-aligned page numbers, the share of
+  noise words;
+- 2 from the word confidences and 3 from the word boxes.
+
+Only the line features are used: on the public development sample (`cue_dev_report.py`) the word
+confidences and word boxes add nothing (weighted F1 0.613–0.628 vs 0.620 for the lines alone), and
+lines are what any OCR's ALTO can be expected to have. The text cues take the ALTO line texts
+sorted top to bottom, the header and footer being the first and last 3 lines; header/footer from
+the geometry (vertical gaps, text box bands, tall lines; `edge_dev_report.py`) was not better.
+
+`probe_text_cues --alto-lmdb <public alto> <private alto>` runs `text cues +ALTO` and
+`mmBERT+DINOv2 +cues +ALTO` this way (134 numbers per page). Weighted F1 on all annotated tst
+pages:
+
+| Experiment | K = 0 | K = 2 |
+|---|---:|---:|
+| text cues | 0.461 | 0.651 |
+| text cues +ALTO | 0.566 | 0.713 |
+| mmBERT+DINOv2 +cues | 0.732 | 0.803 |
+| mmBERT+DINOv2 +cues +ALTO | 0.733 | 0.811 |
+
+Alone, the ALTO line features help a lot (covers, jackets, spines, illustrations); next to
+DINOv2, which already sees the layout, they add little.
 
 The OCR XML sits next to the page images, one zip per document directory. The scripts find the
 zip from `meta_records.image_path` in the library metadata DB (tunnel on localhost:5888). They
@@ -434,10 +455,10 @@ zlib-compressed XML:
     first) into `2026-09-16.db_text_dump.private/page_xml/`.
   - `convert_page_xml_to_alto.py` (pero-ocr venv) converts it into `2026-09-16.db_text_dump.private/alto/`.
 
-  PAGE XML keeps no OCR logits, so the converted ALTO has every word confidence at 1.0. On 55
-  matylda0 pages with both formats, the converted and the original ALTO have the same lines and
-  words, and the geometry features differ by a few percent at most. The confidence features
-  (`conf_mean`, `conf_low`) are therefore not comparable across the storages.
+  PAGE XML keeps no OCR logits, so the converter places the words along the line by their
+  character count and gives each word its line's confidence; the converted ALTO thus has the
+  same structure as the original. Converted from matylda0's PAGE XML, it scores the same as the
+  original ALTO on the development sample (lines: 0.624 vs 0.620).
 
 The split is by storage, like the text dumps', not by the DB's public/private flag: the storage
 paths predate an archival update, and the access column of the CSV is the current one.
