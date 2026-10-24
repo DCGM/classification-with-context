@@ -359,8 +359,8 @@ KEYWORDS: Dict[str, Dict[str, Tuple[str, ...]]] = {
         'dan': ('pris ', 'hefte', 'samling', 'aarsberetning', 'program'),
     },
     'end': {
-        'ces': ('konec', 'tiskem', 'vytiskl', 'vytisk'),
-        'deu': ('ende ', 'schluss'),
+        'ces': ('konec', 'konec ', 'tiskem', 'vytiskl', 'vytisk'),
+        'deu': ('ende ', 'schluss', 'schluss '),
         'eng': ('the end',),
         'fra': ('fin ', 'acheve d imprimer'),
         'lat': ('finis', 'explicit', 'laus deo'),
@@ -372,13 +372,20 @@ KEYWORDS: Dict[str, Dict[str, Tuple[str, ...]]] = {
         'dan': ('slut',),
     },
 }
-# group -> stems (all languages) and language -> stems (all groups); both usable as PageStats(groups=...)
+# All stems of KEYWORDS are extracted. WEAK_STEMS fire often on public pages but rarely on their group's
+# page types (stem_frequencies.md): they are left out of the default grouping, so that they do not swamp
+# their group's sum, but stay in the full vector, per stem and in LANGUAGE_GROUPS.
+WEAK_STEMS = frozenset({'konec', 'schluss', 'ende ', 'program', 'personen', 'zpev', 'sever', 'zusammen'})
+# group -> stems (all languages, without WEAK_STEMS: the default grouping) and language -> stems (all
+# groups); both usable as PageStats(groups=...)
 KEYWORD_GROUPS: Dict[str, Tuple[str, ...]] = {
-    g: tuple(dict.fromkeys(s for stems in by_language.values() for s in stems)) for g, by_language in KEYWORDS.items()}
+    g: tuple(dict.fromkeys(s for stems in by_language.values() for s in stems if s not in WEAK_STEMS))
+    for g, by_language in KEYWORDS.items()}
 LANGUAGE_GROUPS: Dict[str, Tuple[str, ...]] = {
     lang: tuple(dict.fromkeys(s for by_language in KEYWORDS.values() for s in by_language.get(lang, ())))
     for lang in ('any',) + LANGUAGES}
-STEMS: Tuple[str, ...] = tuple(dict.fromkeys(s for stems in KEYWORD_GROUPS.values() for s in stems))
+STEMS: Tuple[str, ...] = tuple(dict.fromkeys(
+    s for by_language in KEYWORDS.values() for stems in by_language.values() for s in stems))
 
 # regex patterns, matched per line on the lower-cased text without diacritics (punctuation kept)
 PATTERNS: Dict[str, re.Pattern] = {
@@ -490,7 +497,7 @@ _check_stems()
 
 
 def stem_counts(text: str) -> List[int]:
-    """Hits per stem (STEMS order) in a normalized text: at every word start, all stems that the text
+    r"""Hits per stem (STEMS order) in a normalized text: at every word start, all stems that the text
     continues with. Equal to counting each stem's matches of r'(?<![^\W\d_])stem', in one pass."""
     counts = [0] * len(STEMS)
     n = len(text)
@@ -812,7 +819,8 @@ def keyword_table() -> str:
     rows = []
     for group, by_language in KEYWORDS.items():
         rows += [f'#### {group}', '', '| language | stems |', '|---|---|']
-        rows += [f'| {lang} | ' + ', '.join(f'`{s}`' for s in stems) + ' |' for lang, stems in by_language.items()]
+        rows += [f'| {lang} | ' + ', '.join(f'`{s}`' + ('°' if s in WEAK_STEMS else '') for s in stems) + ' |'
+                 for lang, stems in by_language.items()]
         rows.append('')
     return '\n'.join(rows).rstrip('\n')
 

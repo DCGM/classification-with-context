@@ -139,6 +139,11 @@ types. A stem in several groups or languages is extracted once. The grouping is 
 
 A *new* stem, however, needs re-extraction.
 
+**Weak stems** (`WEAK_STEMS`, marked ° in the tables) are extracted and stored like all others, but are
+left out of the default grouping. They fire often on public pages but rarely on their group's page types,
+so in a group's sum they would drown its specific stems (`konec` also starts *konečně*, "finally"). For
+`konec` and `schluss`, the word-end variants `konec ` and `schluss ` are in the default groups.
+
 **Where the stems come from:**
 - **The original 23 groups:** designed on public text, on the annotated training pages and the
   DB-labelled public development sample (`embedding_probe/explore_public_text.py`,
@@ -189,7 +194,7 @@ vectors of private pages.
 | language | stems |
 |---|---|
 | ces | `rejstrik`, `registrik`, `rejstr`, `jmenny`, `vecny`, `ukazatel`, `viz `, `abecedn`, `osobnich`, `mistnich`, `jmen osob`, `seznam jmen` |
-| deu | `register`, `sachregister`, `namenregister`, `personenregister`, `ortsregister`, `sachverzeichnis`, `namensverzeichnis`, `siehe `, `alphabetisch`, `personen`, `ortsnamen` |
+| deu | `register`, `sachregister`, `namenregister`, `personenregister`, `ortsregister`, `sachverzeichnis`, `namensverzeichnis`, `siehe `, `alphabetisch`, `personen`°, `ortsnamen` |
 | eng | `index`, `see also`, `alphabetical`, `names of persons`, `subject index` |
 | fra | `index`, `table alphabetique`, `voir `, `alphabetique`, `noms de personnes`, `noms de lieux` |
 | lat | `index`, `index rerum`, `index nominum`, `vide `, `alphabetic`, `nominum`, `locorum` |
@@ -435,7 +440,7 @@ vectors of private pages.
 | language | stems |
 |---|---|
 | any | `allegro`, `andante`, `moderato`, `adagio`, `presto`, `largo`, `lento`, `vivace`, `piano`, `pianoforte`, `forte`, `cresc`, `cres `, `dim `, `decresc`, `rit `, `rall`, `pizz`, `arco`, `fine `, `coda`, `tempo`, `dolce`, `maestoso`, `andantino`, `allegretto`, `violin`, `soprano`, `alto `, `tenor`, `basso` |
-| ces | `klavir`, `zpev`, `pisen`, `housle` |
+| ces | `klavir`, `zpev`°, `pisen`, `housle` |
 | deu | `singstimme`, `klavier`, `gesang`, `lied` |
 | eng | `voice`, `song` |
 | fra | `chant`, `chanson` |
@@ -451,7 +456,7 @@ vectors of private pages.
 
 | language | stems |
 |---|---|
-| ces | `meritko`, `mapa`, `vrstevnic`, `legenda`, `souradnic`, `poledni`, `severni`, `km `, `kilometr`, `sever` |
+| ces | `meritko`, `mapa`, `vrstevnic`, `legenda`, `souradnic`, `poledni`, `severni`, `km `, `kilometr`, `sever`° |
 | deu | `karte`, `massstab`, `masstab`, `zeichenerklarung`, `nordlich`, `dienstgebrauch`, `planzeiger` |
 | eng | `map `, `scale`, `statute miles`, `legend`, `miles`, `north` |
 | fra | `carte`, `echelle`, `legende` |
@@ -484,7 +489,7 @@ vectors of private pages.
 | language | stems |
 |---|---|
 | ces | `tab `, `tabulka`, `celkem`, `prumer`, `soucet`, `uhrn`, `pocet`, `poznamka`, `cis ` |
-| deu | `tabelle`, `zusammen`, `summe`, `durchschnitt`, `anzahl`, `bemerkung`, `gesamt` |
+| deu | `tabelle`, `zusammen`°, `summe`, `durchschnitt`, `anzahl`, `bemerkung`, `gesamt` |
 | eng | `total`, `table `, `average`, `number`, `remarks` |
 | fra | `tableau`, `total`, `moyenne`, `nombre`, `observations` |
 | lat | `summa`, `tabula`, `numerus` |
@@ -499,24 +504,24 @@ vectors of private pages.
 
 | language | stems |
 |---|---|
-| ces | `cena `, `brozovan`, `vazan`, `edice`, `knihovna`, `svazek`, `sesit`, `vyrocni zprava`, `program`, `spisy`, `sbirka` |
+| ces | `cena `, `brozovan`, `vazan`, `edice`, `knihovna`, `svazek`, `sesit`, `vyrocni zprava`, `program`°, `spisy`, `sbirka` |
 | deu | `heft`, `lieferung`, `preis`, `sammlung`, `jahresbericht`, `programm`, `schulnachrichten` |
 | eng | `price`, `series`, `annual report` |
 | fra | `prix`, `collection`, `livraison`, `fascicule`, `rapport annuel`, `programme` |
 | lat | `fasciculus`, `programma` |
-| pol | `cena `, `zeszyt`, `seria`, `sprawozdanie`, `program` |
+| pol | `cena `, `zeszyt`, `seria`, `sprawozdanie`, `program`° |
 | hun | `fuzet`, `sorozat`, `evkonyv`, `ertesito` |
 | rus | `цена`, `выпуск`, `серия`, `отчет`, `программа` |
 | ita | `prezzo`, `fascicolo`, `collana`, `annuario`, `programma` |
 | spa | `precio`, `coleccion`, `cuaderno`, `anuario`, `memoria anual`, `programa` |
-| dan | `pris `, `hefte`, `samling`, `aarsberetning`, `program` |
+| dan | `pris `, `hefte`, `samling`, `aarsberetning`, `program`° |
 
 #### end
 
 | language | stems |
 |---|---|
-| ces | `konec`, `tiskem`, `vytiskl`, `vytisk` |
-| deu | `ende `, `schluss` |
+| ces | `konec`°, `konec `, `tiskem`, `vytiskl`, `vytisk` |
+| deu | `ende `°, `schluss`°, `schluss ` |
 | eng | `the end` |
 | fra | `fin `, `acheve d imprimer` |
 | lat | `finis`, `explicit`, `laus deo` |

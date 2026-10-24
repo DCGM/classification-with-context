@@ -109,3 +109,12 @@ def test_trie_matches_the_word_start_regex():
                            'Содержание; tabulky tabulek; seznam map a plany\nINDEX alphabétique') + ' '
     expected = [len(re.findall(r'(?<![^\W\d_])' + re.escape(s), text)) for s in STEMS]
     assert stem_counts(text) == expected and sum(expected) > 10
+
+
+def test_weak_stems_are_extracted_but_not_in_the_default_groups(stats):
+    from embeddings.text.page_stats.page_stats import WEAK_STEMS
+    assert WEAK_STEMS <= set(STEMS) and not WEAK_STEMS & {s for g in KEYWORD_GROUPS.values() for s in g}
+    full = dict(zip(FEATURES, stats.embed_text('Úvod\nkonečně jsme u konce\nKONEC\n')))
+    assert full['kw:konec'] == 2 and full['kw:konec '] == 1  # 'konecne' and 'konec'; the noun only
+    x, names = stats.view(stats.embed_text('Úvod\nkonečně\nkonečně\n'), grouped=True, include=['kw_end'])
+    assert x[0, 0] == 0
