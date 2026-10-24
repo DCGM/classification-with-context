@@ -1,0 +1,17 @@
+numpy
+lmdb
+
+[db]
+psycopg2-binary
+
+[dev]
+pytest
+
+[experiments]
+polars
+scikit-learn
+torch
+
+[extract]
+lxml
+pero-ocr @ git+https://github.com/DCGM/pero-ocr.git@3924ff1e355ead7c0aa66f6e564c7c9be449a01a

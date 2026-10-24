@@ -70,6 +70,7 @@ def test_old_groups_reproduce_the_experiment_vector():
     """Regrouped with the keyword groups of the experiments, the stored vector gives the cues + ALTO features
     evaluated in embedding_probe (probe_text_cues --alto-lmdb): every old stem is still extracted. Only the
     hyphenated stems, which could never match, are gone."""
+    pytest.importorskip('polars', reason='embedding_probe needs the experiments extra')
     from embedding_probe.ocr_layout import LAYOUT_XML_FEATURES, layout_vector, ocr_text_lines
     from embedding_probe.text_cues import CUE_FEATURES, KEYWORDS as OLD_KEYWORDS, cue_vector
     missing = {s for stems in OLD_KEYWORDS.values() for s in stems} - set(STEMS)

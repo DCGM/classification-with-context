@@ -37,5 +37,5 @@ done
 echo
 echo "Copied $(wc -l < "$DST/progress.tsv") progress lines to $DST."
 echo "On the other machine (repository pulled, branch embedding-experiments):"
-echo "  PYTHON=<python with pero-ocr, lmdb, numpy, lxml> embeddings/text/page_stats/run_extract_page_stats_zfs1.sh"
+echo "  PYTHON=<venv>/bin/python embeddings/text/page_stats/run_extract_page_stats_zfs1.sh"
 echo "When it has finished, copy $DST back to $SRC (e.g. rsync -a)."

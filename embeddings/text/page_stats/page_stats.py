@@ -22,10 +22,11 @@ import argparse
 import fnmatch
 import re
 import unicodedata
-import xml.etree.ElementTree as ET
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
+
+from embeddings.ocr_xml import read_ocr
 
 VERSION = '1'
 
@@ -568,33 +569,17 @@ def text_vector(text: str) -> List[float]:
 
 
 # ---------------------------------------------------------------------------------------------------------
-# ALTO
+# OCR XML (ALTO, or PAGE XML with the words placed along each line by their length: embeddings/ocr_xml.py)
 # ---------------------------------------------------------------------------------------------------------
-def _local(tag: str) -> str:
-    return tag.rsplit('}', 1)[-1]
-
-
-def parse_alto(alto: Union[bytes, str]):
-    """(page width, page height, number of text blocks, lines) of an ALTO page; a line is
+def parse_ocr(xml: Union[bytes, str]):
+    """(page width, page height, number of text blocks, lines) of an ALTO or PAGE XML page; a line is
     (left, top, width, height, words), a word (content, confidence, left, width). None without a Page."""
-    root = ET.fromstring(alto)
-    page = next((e for e in root.iter() if _local(e.tag) == 'Page'), None)
+    page = read_ocr(xml)
     if page is None:
         return None
-    width, height = float(page.get('WIDTH', 0) or 0), float(page.get('HEIGHT', 0) or 0)
-    blocks, lines = 0, []
-    for element in page.iter():
-        tag = _local(element.tag)
-        if tag == 'TextBlock':
-            blocks += 1
-        elif tag == 'TextLine':
-            words = [(s.get('CONTENT', ''), float(s.get('WC', 1) or 1),
-                      float(s.get('HPOS', 0) or 0), float(s.get('WIDTH', 0) or 0))
-                     for s in element if _local(s.tag) == 'String']
-            box = [float(element.get(k, 0) or 0) for k in ('HPOS', 'VPOS', 'WIDTH', 'HEIGHT')]
-            if box[2] > 0 and box[3] > 0:
-                lines.append((*box, words))
-    return width, height, blocks, lines
+    return page.width, page.height, len(page.blocks), [
+        (line.left, line.top, line.width, line.height, [(w.text, w.conf, w.left, w.width) for w in line.words])
+        for line in page.lines]
 
 
 def alto_text(parsed) -> str:
@@ -698,10 +683,14 @@ def from_sparse(data: bytes) -> np.ndarray:
 # ---------------------------------------------------------------------------------------------------------
 # The model
 # ---------------------------------------------------------------------------------------------------------
-def embed_alto(alto: Union[bytes, str]) -> np.ndarray:
-    """The full vector of a page from its ALTO."""
-    parsed = parse_alto(alto)
+def embed_ocr(xml: Union[bytes, str]) -> np.ndarray:
+    """The full vector of a page from its ALTO or PAGE XML. PAGE XML gives the same vector as its ALTO
+    conversion with embeddings.ocr_xml.to_alto()."""
+    parsed = parse_ocr(xml)
     return np.array(text_vector(alto_text(parsed)) + alto_features(parsed), dtype=np.float32)
+
+
+embed_alto = embed_ocr
 
 
 def embed_text(text: str) -> np.ndarray:

@@ -453,7 +453,9 @@ zlib-compressed XML:
   `<docdir>.page_xml.zip`.
   - The user fetches its PAGE XML with `embedding_probe/run_fetch_private_page_xml.sh` (`--dry-run`
     first) into `2026-09-16.db_text_dump.private/page_xml/`.
-  - `convert_page_xml_to_alto.py` (pero-ocr venv) converts it into `2026-09-16.db_text_dump.private/alto/`.
+  - `convert_page_xml_to_alto.py` converts it into `2026-09-16.db_text_dump.private/alto/` with
+    `embeddings/ocr_xml.py` (standard library; lines and boxes as in PERO OCR's own ALTO export, words
+    placed by length).
 
   PAGE XML keeps no OCR logits, so the converter places the words along the line by their
   character count and gives each word its line's confidence; the converted ALTO thus has the

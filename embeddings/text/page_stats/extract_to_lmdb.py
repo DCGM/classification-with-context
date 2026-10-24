@@ -7,15 +7,15 @@ Modelled on semAnt's librarymetadata/db/getters/extract_page_text_to_lmdb.py, an
 --path-prefix and resumable from the progress file. Per document zip, in a worker process:
 
   - <doc>.alto_xml.zip if it exists: the page's ALTO (<page id>.xml);
-  - otherwise <doc>.page_xml.zip: the page's PAGE XML, converted to ALTO in memory with PERO, the words
-    placed along each line by their length and given the line's confidence (as
-    embedding_probe/convert_page_xml_to_alto.py does);
+  - otherwise <doc>.page_xml.zip: the page's PAGE XML, read with embeddings/ocr_xml.py (the words placed
+    along each line by their length and given the line's confidence; the same vector as from its ALTO
+    conversion with ocr_xml.to_alto());
 
-then embed_alto() and to_sparse(). LMDB: key '{library}_{page id}', value the sparse vector, plus the
+then embed_ocr() and to_sparse(). LMDB: key '{library}_{page id}', value the sparse vector, plus the
 key '__metadata__' (JSON: version, feature names, keyword groups, storage format). Progress lines and
 logs hold only page ids, zip paths, statuses and exception type names, never text or XML content.
 
-Runs in the pero-ocr venv (pero_ocr, lxml, lmdb, numpy), from the repository root.
+Needs only numpy and lmdb (pip install -e . in the repository root).
 
 Run with run_extract_page_stats_matylda0.sh and run_extract_page_stats_zfs1.sh (output next to the text
 dumps: <data>/2026-09-16.db_page_stats_dump[.private]/{lmdb,progress.tsv,log.txt}).
@@ -36,7 +36,7 @@ from typing import Dict, Iterator, List, Optional, Set, Tuple
 
 import lmdb
 
-from embeddings.text.page_stats.page_stats import PageStats, embed_alto, to_sparse
+from embeddings.text.page_stats.page_stats import PageStats, embed_ocr, to_sparse
 
 logger = logging.getLogger('PAGE STATS LMDB')
 
@@ -94,16 +94,6 @@ def load_progress(progress_path: Path, retry: Set[str]) -> Set[str]:
     return recorded
 
 
-def page_xml_to_alto(page_xml: bytes, page_id: str) -> bytes:
-    """PAGE XML -> ALTO with PERO, words placed by length (embedding_probe/convert_page_xml_to_alto.py)."""
-    from pero_ocr.core.layout import PageLayout
-    from embedding_probe.convert_page_xml_to_alto import line_confidences, place_words
-    layout = PageLayout()
-    layout.from_pagexml_string(page_xml.decode('utf-8'))
-    alto = layout.to_altoxml_string(page_uuid=page_id)
-    return place_words(alto.encode('utf-8'), line_confidences(page_xml))
-
-
 def open_zip(path: str) -> Optional[zipfile.ZipFile]:
     if not os.path.exists(path):
         return None
@@ -132,10 +122,7 @@ def process_zip(unit: WorkUnit, path_map: Optional[Tuple[str, str]] = None) -> L
             results.append(PageResult(library, page_id, zip_path, 'missing', f'{kind}_member_missing', None))
             continue
         try:
-            xml = archive.read(member)
-            if kind == 'page_xml':
-                xml = page_xml_to_alto(xml, page_id)
-            value = to_sparse(embed_alto(xml))
+            value = to_sparse(embed_ocr(archive.read(member)))
         except Exception as exc:  # noqa: BLE001 -- the type only, never the message (it may quote content)
             results.append(PageResult(library, page_id, zip_path, 'failed', f'{kind}:{type(exc).__name__}', None))
             continue
@@ -144,8 +131,6 @@ def process_zip(unit: WorkUnit, path_map: Optional[Tuple[str, str]] = None) -> L
 
 
 def quiet_worker():
-    # PERO warns about every line it cannot align without logits; expected for PAGE XML without them
-    logging.getLogger('pero_ocr').setLevel(logging.ERROR)
     logging.getLogger().setLevel(logging.ERROR)
 
 

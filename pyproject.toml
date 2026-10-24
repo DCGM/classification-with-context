@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "classification-with-context"
+version = "0.1.0"
+description = "Page type classification with document context: page embeddings, page statistics and probes"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "lmdb",
+]
+
+# numpy and lmdb are all that the page statistics, the OCR readers (embeddings/ocr_xml.py) and the LMDB
+# extraction and copy scripts need
+[project.optional-dependencies]
+# the experiments in embedding_probe/
+experiments = [
+    "polars",
+    "scikit-learn",
+    "torch",
+]
+# scripts that query the library metadata DB (fetch_ocr_xml.py, build_keyword_sample.py, ...)
+db = [
+    "psycopg2-binary",
+]
+dev = [
+    "pytest",
+]
+
+[tool.setuptools.packages.find]
+include = ["embeddings*", "embedding_probe*"]
+
+[tool.pytest.ini_options]
+testpaths = ["embeddings", "embedding_probe/tests"]

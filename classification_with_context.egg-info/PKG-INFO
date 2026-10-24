@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: classification-with-context
+Version: 0.1.0
+Summary: Page type classification with document context: page embeddings, page statistics and probes
+Requires-Python: >=3.10
+Requires-Dist: numpy
+Requires-Dist: lmdb
+Provides-Extra: extract
+Requires-Dist: lxml; extra == "extract"
+Requires-Dist: pero-ocr @ git+https://github.com/DCGM/pero-ocr.git@3924ff1e355ead7c0aa66f6e564c7c9be449a01a ; extra == "extract"
+Provides-Extra: experiments
+Requires-Dist: polars; extra == "experiments"
+Requires-Dist: scikit-learn; extra == "experiments"
+Requires-Dist: torch; extra == "experiments"
+Provides-Extra: db
+Requires-Dist: psycopg2-binary; extra == "db"
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
