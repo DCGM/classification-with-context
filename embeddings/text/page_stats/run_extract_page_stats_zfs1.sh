@@ -30,10 +30,11 @@ if [ -z "${MAPPING:-}" ]; then
 fi
 
 cd "$REPO_ROOT"
-if ! "$PYTHON" -c "import numpy, lmdb, embeddings.text.page_stats" 2> /dev/null; then
-    echo "$PYTHON cannot import numpy, lmdb and this repository. Create the environment and set PYTHON:" >&2
-    echo "  python3 -m venv ~/python_env/classification-with-context" >&2
-    echo "  ~/python_env/classification-with-context/bin/pip install -e \"$REPO_ROOT[dev]\" numpy==2.5.4 lmdb==3.0.0" >&2
+if ! import_error=$("$PYTHON" -c "import numpy, lmdb, embeddings.text.page_stats" 2>&1); then
+    echo "$PYTHON cannot import numpy, lmdb and this repository:" >&2
+    echo "$import_error" | tail -n 3 >&2
+    echo "Install the repository into that environment (or set PYTHON to one that has it):" >&2
+    echo "  $PYTHON -m pip install -e \"$REPO_ROOT[dev]\"" >&2
     echo "  PYTHON=~/python_env/classification-with-context/bin/python $0 $*" >&2
     exit 1
 fi
