@@ -56,3 +56,27 @@ def pagination_dropout(features, window_probability=0., page_probability=0.):
     if page_probability:
         keep &= torch.rand(x.shape[:-1], device=x.device) >= page_probability
     return dict(features, pagination=x * keep.unsqueeze(-1))
+
+
+def scattered_dropout(features, modality_probability=0., page_probability=0.):
+    """Independent page/modality failures, then complete-page failures; no rescue.
+
+    Complete pages lose every feature including pagination and presence, but their
+    attention positions and supervision remain intact. Uses checkpointed Torch RNG.
+    """
+    probabilities = (modality_probability, page_probability)
+    if any(not math.isfinite(p) or not 0 <= p <= 1 for p in probabilities):
+        raise ValueError('scattered dropout probabilities must be finite and in [0, 1]')
+    if not any(probabilities):
+        return features
+    flags = features['presence']
+    keep = torch.ones_like(flags)
+    if modality_probability:
+        keep = (torch.rand(flags.shape, device=flags.device) >= modality_probability).to(flags.dtype)
+    result = dict(features, presence=flags * keep)
+    for i, name in enumerate(('image', 'text', 'stats')):
+        result[name] = features[name] * keep[..., i:i + 1]
+    if page_probability:
+        page_keep = (torch.rand(flags.shape[:-1], device=flags.device) >= page_probability).unsqueeze(-1)
+        result = {name: value * page_keep for name, value in result.items()}
+    return result

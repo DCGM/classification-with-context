@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from page_sequence.augmentation import modality_dropout, pagination_dropout
+from page_sequence.augmentation import modality_dropout, pagination_dropout, scattered_dropout
 from page_sequence.runner import load_checkpoint, rng_state, restore_rng, train
 from page_sequence.smoke import prepare_fixture
 from page_sequence.tests.test_pagination import sidecar
@@ -48,6 +48,8 @@ def test_dropout_resume_matches_uninterrupted_and_final_ablation(tmp_path):
                                     'single_probability': .09},
                   pagination_dropout={'window_probability': .2, 'page_probability': .2},
                   pagination_robustness_evaluation=True,
+                  scattered_dropout={'modality_probability': .1, 'page_probability': .05},
+                  robustness_evaluation=True,
                   context_evaluation={'enabled': True, 'sample_pages': 20, 'final_sample_pages': 20})
     train(config)
     original, _ = load_checkpoint(Path(config['run_dir']) / 'latest.pt')
@@ -64,6 +66,12 @@ def test_dropout_resume_matches_uninterrupted_and_final_ablation(tmp_path):
     assert missing['complete'] and missing['pagination'] == 'omitted'
     assert missing['panel_sha256'] == available['panel_sha256']
     assert missing['checkpoint_step'] == available['checkpoint_step']
+    reports = list(Path(config['run_dir']).glob('final-robustness-*.json'))
+    assert len(reports) == 9
+    paired = json.loads((Path(config['run_dir']) / 'final-robustness-normal_paired.json').read_text())
+    scattered = json.loads((Path(config['run_dir']) / 'final-robustness-scattered.json').read_text())
+    assert paired['corruption']['mask_sha256'] == scattered['corruption']['mask_sha256']
+    assert all(json.loads(p.read_text())['complete'] for p in reports if 'summary' not in p.name)
 
 
 def test_modality_subsets_rates_window_consistency_and_rng():
@@ -100,3 +108,34 @@ def test_modality_natural_missingness_never_loses_last_signal():
 def test_modality_reject_invalid_distribution(probabilities):
     with pytest.raises(ValueError, match='probabilities'):
         modality_dropout({}, *probabilities)
+
+
+def test_scattered_rates_complete_pages_and_no_rescue():
+    features = {name: torch.ones(1000, 64, 5) for name in ('image', 'text', 'stats', 'pagination')}
+    features['presence'] = torch.ones(1000, 64, 3)
+    before = rng_state()
+    assert scattered_dropout(features) is features
+    torch.testing.assert_close(before['torch'], rng_state()['torch'])
+    a = scattered_dropout(features, .1, .05)
+    restore_rng(before)
+    b = scattered_dropout(features, .1, .05)
+    for key in a:
+        torch.testing.assert_close(a[key], b[key], rtol=0, atol=0)
+        assert features[key].all()
+    missing = a['pagination'][..., 4] == 0
+    assert abs(float(missing.float().mean()) - .05) < .005
+    for i, key in enumerate(('image', 'text', 'stats')):
+        assert not a[key][missing].any()
+        assert (a[key] == a['presence'][..., i:i + 1]).all()
+    assert abs(float(a['presence'][~missing].mean()) - .9) < .01
+    assert all(not x.any() for x in scattered_dropout(features, 0, 1).values())
+    single = dict(features, presence=features['presence'] * torch.tensor([1, 0, 0]))
+    dropped = scattered_dropout(single, 1, 0)
+    assert not dropped['presence'].any()  # no rescue of the last modality
+    assert dropped['pagination'].all()  # modality-only failures do not remove pagination
+
+
+@pytest.mark.parametrize('p', [-.1, 1.1, float('nan'), float('inf')])
+def test_scattered_reject_invalid_probability(p):
+    with pytest.raises(ValueError, match='probabilities'):
+        scattered_dropout({}, p, 0)

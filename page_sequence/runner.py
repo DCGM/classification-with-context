@@ -28,7 +28,7 @@ from .models import BertBackbone, PageBackbone, PageTagger, from_specification
 from .sampling import WindowSampler
 from .schema import PAGE_TYPES, PLACEMENTS, Page
 from .precision import autocast
-from .augmentation import modality_dropout, pagination_dropout
+from .augmentation import modality_dropout, pagination_dropout, scattered_dropout
 
 
 def make_dataset(index, features, config):
@@ -172,6 +172,9 @@ def train(config, resume=None, stop_after=None):
     pagination_dropout({'pagination': torch.zeros(0, 0, 5)}, **dropout)
     modality_config = config.get('modality_dropout', {})
     modality_dropout({'presence': torch.zeros(0, 0, 3)}, **modality_config)
+    scattered_config = config.get('scattered_dropout', {})
+    scattered_dropout({name: torch.zeros(0, 0, 3) for name in ('presence', 'image', 'text', 'stats')},
+                      **scattered_config)
     if any(dropout.values()) and not config.get('pagination'):
         raise ValueError('pagination dropout requires pagination configuration')
     precision = config.get('precision', 'float32')
@@ -282,6 +285,7 @@ def train(config, resume=None, stop_after=None):
                     optimizer.zero_grad(set_to_none=True)
                     augmented = pagination_dropout(batch['features'], **dropout)
                     augmented = modality_dropout(augmented, **modality_config)
+                    augmented = scattered_dropout(augmented, **scattered_config)
                     with autocast(model, device):
                         output = model(augmented, batch['attention_mask'])
                     losses, denominators = task_losses(output, batch, loss_weights)
@@ -413,6 +417,12 @@ def train(config, resume=None, stop_after=None):
                 (run_dir / 'final-context-without-pagination.json').write_text(
                     json.dumps(missing_report, allow_nan=False) + '\n')
                 tracking.report_contexts(missing_report, selected['step'], prefix='final_context_without_pagination')
+            if config.get('robustness_evaluation', False):
+                from .robustness import evaluate_robustness
+                evaluate_robustness(model, dataset,
+                    context_blocks(index, streams, context_config.get('final_sample_pages', 8192)),
+                    config['window_size'], run_dir, selected['step'], device,
+                    config['inference']['batch_size'], tracking)
     finally:
         if getattr(loader, '_iterator', None) is not None:
             loader._iterator._shutdown_workers()

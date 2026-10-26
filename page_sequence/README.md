@@ -479,6 +479,34 @@ independent. Both training stages use augmentation; validation/inference do not.
 Omitting the setting preserves existing behavior and consumes no random numbers.
 The checkpointed Torch RNG also records these choices for reproducible resume.
 
+`scattered_dropout: {"modality_probability": 0.10, "page_probability": 0.05}`
+runs after the whole-window selection. Each page independently loses each of
+image/text/statistics with probability 10%, with no last-modality rescue. A
+separate 5% complete-page event zeros every input, including pagination and
+availability. Positions, attention masks and training targets stay intact; even
+an entirely blank singleton scan remains supervised. Existing DB gaps that were
+skipped are not themselves empty model positions. Both probabilities default to
+zero, consume no RNG when disabled, and use checkpointed Torch RNG when enabled.
+
+`robustness_evaluation: true` adds final-checkpoint-only diagnostics on the bounded
+final dev panel, at the training window length. Six passes remove each original
+modality separately or retain only one (pagination remains available in these
+ablations). Two more passes compare normal and corrupted inputs on identical
+pages, using a fixed local NumPy seed, 10% independent modality failures and 5%
+complete-page failures. Catalogue identities receive consistent masks. Results
+include separate complete-masked-page and retained-page metrics; boundary scores
+are assigned to the current page, excluding each scan's first position as usual.
+All reports contain panel/mask identities, coverage and the selected checkpoint
+step, and are saved as `final-robustness-*.json` and logged to ClearML under
+`final_robustness`. These are enriched diagnostic samples, not corpus estimates;
+they do not change recurring validation, checkpoint selection or training RNG.
+The same diagnostic suite can be run on trusted existing checkpoints:
+
+```bash
+python -m page_sequence.robustness --checkpoint /run/finetune_best.pt \
+  --output-dir /work/robustness --device cuda --sample-pages 8192
+```
+
 For robustness training, set `pagination_dropout: {"window_probability": 0.2,
 "page_probability": 0.2}`. In both pretraining and fine-tuning, 20% of sampled windows
 lose all pagination, and each page in the remaining windows independently loses it

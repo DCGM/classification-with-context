@@ -44,7 +44,7 @@ def context_blocks(index, streams, sample_pages=2048, block_size=256, seed=917):
 
 @torch.inference_mode()
 def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=64, seconds_budget=None,
-                      omit_pagination=False):
+                      omit_pagination=False, omit_modalities=(), corruption=None):
     """Batch independent scans at each length; stop between batches at the budget.
 
     A single in-flight batch may overrun the deadline. Partial levels explicitly
@@ -62,6 +62,22 @@ def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=
     # would spend the diagnostic budget on storage and repeated record setup.
     examples = ([dataset[Window(block)] for block in blocks]
                 if time.perf_counter() < deadline else [])
+    if any(name not in ('image', 'text', 'stats') for name in omit_modalities):
+        raise ValueError('unknown modality ablation')
+    for example in examples:
+        example['features'] = dict(example['features'])
+        for name in omit_modalities:
+            example['features'][name] = np.zeros_like(example['features'][name])
+        if omit_modalities:
+            flags = example['features']['presence'].copy()
+            for name in omit_modalities:
+                flags[..., ('image', 'text', 'stats').index(name)] = 0
+            example['features']['presence'] = flags
+    if omit_modalities:
+        report['omitted_modalities'] = list(omit_modalities)
+    if corruption is not None:
+        from .robustness import corrupt_examples
+        report['corruption'] = corrupt_examples(examples, **corruption)
     if omit_pagination:
         for example in examples:
             if 'pagination' not in example['features']:
@@ -81,11 +97,18 @@ def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=
                     sliced.update(features={k: v[lo:hi] for k, v in example['features'].items()},
                                   rows=example['rows'][lo:hi], source='context_diagnostic',
                                   pair_mask=np.r_[False, example['pair_mask'][lo + 1:hi]])
+                    if corruption is not None:
+                        sliced['diagnostic_mask'] = example['diagnostic_mask'][lo:hi]
                     windows.append(sliced)
             cms = {name: np.zeros((n, n), np.int64) for name, n in (
                 ('curated_type', len(PAGE_TYPES)), ('weak_type_agreement', len(PAGE_TYPES)),
                 ('placement_db_agreement', len(PLACEMENTS)))}
             y_boundary, p_boundary = [], []
+            groups = {}
+            if corruption is not None:
+                for group in ('masked_pages', 'retained_pages'):
+                    groups[group] = {'cms': {k: np.zeros_like(v) for k, v in cms.items()},
+                                     'y': [], 'p': [], 'pages': 0}
             pages_seen, scans_seen = 0, 0
             for first in range(0, len(windows), batch_size):
                 if time.perf_counter() >= deadline:
@@ -97,6 +120,14 @@ def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=
                 with autocast(model, device):
                     output = model(batch['features'], batch['attention_mask'])
                 valid = batch['attention_mask']
+                if groups:
+                    selected = np.zeros(tuple(valid.shape), bool)
+                    for i, window in enumerate(current):
+                        selected[i, :len(window['rows'])] = window['diagnostic_mask']
+                    selected = torch.as_tensor(selected, device=valid.device)
+                    group_masks = {'masked_pages': valid & selected, 'retained_pages': valid & ~selected}
+                    for group, mask in group_masks.items():
+                        groups[group]['pages'] += int(mask.sum())
                 for name, target, predicted, mask in (
                     ('curated_type', batch['type'], output['type_logits'].argmax(-1),
                      valid & (batch['type'] != IGNORE) & batch['gold']),
@@ -106,9 +137,17 @@ def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=
                      valid & (batch['placement'] != IGNORE))):
                     y, p = target[mask].cpu().numpy(), predicted[mask].cpu().numpy()
                     np.add.at(cms[name], (y, p), 1)
+                    for group in groups:
+                        subset = mask & group_masks[group]
+                        y, p = target[subset].cpu().numpy(), predicted[subset].cpu().numpy()
+                        np.add.at(groups[group]['cms'][name], (y, p), 1)
                 pair_mask = valid & batch['pair_mask'] & output['pair_mask']
                 y_boundary.extend(batch['starts'][pair_mask].cpu().tolist())
                 p_boundary.extend(output['starts_document_logits'][pair_mask].float().sigmoid().cpu().tolist())
+                for group in groups:
+                    subset = pair_mask & group_masks[group]
+                    groups[group]['y'].extend(batch['starts'][subset].cpu().tolist())
+                    groups[group]['p'].extend(output['starts_document_logits'][subset].float().sigmoid().cpu().tolist())
                 pages_seen += sum(len(w['rows']) for w in current)
                 scans_seen += len(current)
             report['lengths'][str(length)] = {
@@ -116,6 +155,13 @@ def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=
                 **{name: classification_metrics(cm, PLACEMENTS if name.startswith('placement') else PAGE_TYPES)
                    for name, cm in cms.items()},
                 'starts': binary_metrics(y_boundary, p_boundary, .5) if y_boundary else None}
+            if groups:
+                report['lengths'][str(length)]['groups'] = {
+                    group: {'pages': data['pages'],
+                            **{name: classification_metrics(cm, PLACEMENTS if name.startswith('placement') else PAGE_TYPES)
+                               for name, cm in data['cms'].items()},
+                            'starts': binary_metrics(data['y'], data['p'], .5) if data['y'] else None}
+                    for group, data in groups.items()}
             if time.perf_counter() >= deadline:
                 break
     finally:
