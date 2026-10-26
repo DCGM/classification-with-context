@@ -408,6 +408,22 @@ checkpoint receives a larger, uncapped comparison written to
 
 ## Loader and logging memory
 
+Document-pair coverage is diagnostic only. It uses a fixed 16-KiB HyperLogLog
+tracker and is reported as `unique_join_pairs_estimate` (about 0.81% relative
+standard error), rather than retaining every encountered Python pair tuple.
+It consumes no training RNG and does not influence sampling. Checkpoint sampler
+snapshots copy flat bounded containers; loaded checkpoint histories and temporary
+models are released after restoration. Volume identities remain exact and are
+bounded by the catalogue. The sampler can read legacy exact-pair histories by
+streaming them into the fixed-size tracker.
+
+Native resume still checks exact config/data/code/environment identity. The
+explicit offline `python -m page_sequence.checkpoint_migration` tool supports only
+the audited pre-fix source digest. It backs up original checkpoints, verifies the
+precise allowed source changes, compacts diagnostic pair histories, updates source
+provenance with a recorded migration, and checks content hashes of all protected
+training state before publication. No automatic source-mismatch bypass is used.
+
 For concurrent runs, `worker_start_method: "forkserver"` starts workers from a
 separate CPU-only process with preloaded Torch, NumPy and dataset modules. This
 shares runtime memory without forking the CUDA-initialized trainer or copying

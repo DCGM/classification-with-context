@@ -234,10 +234,12 @@ def train(config, resume=None, stop_after=None):
         scaler.load_state_dict(state['grad_scaler'])
     optimizer = make_optimizer(model, config['optimizer'])
     base_lrs = [g['lr'] for g in optimizer.param_groups]
+    saved_training = state.get('training') if resume else None
     if resume:
         optimizer.load_state_dict(state['optimizer'])
         sampler.load_state_dict(state['sampler'])
         restore_rng(state['rng'])
+        del state  # do not retain legacy diagnostic histories or CPU optimizer tensors
     (run_dir / 'config.json').write_text(json.dumps(config, indent=2) + '\n')
     (run_dir / 'provenance.json').write_text(json.dumps(prov | {'model': model.specification(),
         'features': features.state_dict(), 'parameters': sum(p.numel() for p in model.parameters()),
@@ -248,10 +250,10 @@ def train(config, resume=None, stop_after=None):
     warmup = max(1, config['optimizer'].get('warmup_steps',
                      math.ceil(total * config['optimizer']['warmup_fraction'])))
     loss_weights = LossWeights(**config.get('loss_weights', {}))
-    progress = (state.get('training') if resume else None) or {
+    progress = saved_training or {
         'stage': 'pretrain' if config['pretrain_steps'] else 'finetune',
         'stage_step': 0, 'stage_best': -1., 'bad_validations': 0, 'finished': False}
-    if resume and state.get('training') is None:
+    if resume and saved_training is None:
         progress['stage'] = 'pretrain' if step < config['pretrain_steps'] else 'finetune'
         progress['stage_step'] = step if progress['stage'] == 'pretrain' else step - config['pretrain_steps']
     loader, batches = training_loader(dataset, sampler, config)
@@ -385,11 +387,14 @@ def train(config, resume=None, stop_after=None):
                 if stage == 'pretrain' and config['finetune_steps']:
                     if not (run_dir / 'pretrain_best.pt').exists():
                         raise RuntimeError('pretraining budget ended before any eligible validation; increase its budget')
-                    _, selected = load_checkpoint(run_dir / 'pretrain_best.pt', device)
+                    # Construct on CPU as before (preserving RNG consumption), and
+                    # release immediately after restoring; no second CUDA model.
+                    restored_model, selected = load_checkpoint(run_dir / 'pretrain_best.pt', 'cpu')
                     model.load_state_dict(selected['model'])
                     optimizer.load_state_dict(selected['optimizer'])
                     if selected.get('grad_scaler'):
                         scaler.load_state_dict(selected['grad_scaler'])
+                    del restored_model, selected
                     progress = {'stage': 'finetune', 'stage_step': 0, 'stage_best': -1.,
                                 'bad_validations': 0, 'finished': False}
                     sampler.set_stage('finetune')
@@ -401,27 +406,29 @@ def train(config, resume=None, stop_after=None):
             selected_path = run_dir / ('finetune_best.pt' if config['finetune_steps'] else 'pretrain_best.pt')
             selected = torch.load(selected_path, map_location='cpu', weights_only=False)
             model.load_state_dict(selected['model'])
+            selected_step = selected['step']
+            del selected
             final_report = evaluate_contexts(
                 model, dataset, context_blocks(index, streams, context_config.get('final_sample_pages', 8192)),
                 [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256) if n <= config['window_size']],
                 device, batch_size=config['inference']['batch_size'])
-            final_report['checkpoint_step'] = selected['step']
+            final_report['checkpoint_step'] = selected_step
             (run_dir / 'final-context-evaluation.json').write_text(json.dumps(final_report, allow_nan=False) + '\n')
-            tracking.report_contexts(final_report, selected['step'], prefix='final_context')
+            tracking.report_contexts(final_report, selected_step, prefix='final_context')
             if config.get('pagination') and config.get('pagination_robustness_evaluation', False):
                 missing_report = evaluate_contexts(
                     model, dataset, context_blocks(index, streams, context_config.get('final_sample_pages', 8192)),
                     [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256) if n <= config['window_size']],
                     device, batch_size=config['inference']['batch_size'], omit_pagination=True)
-                missing_report['checkpoint_step'] = selected['step']
+                missing_report['checkpoint_step'] = selected_step
                 (run_dir / 'final-context-without-pagination.json').write_text(
                     json.dumps(missing_report, allow_nan=False) + '\n')
-                tracking.report_contexts(missing_report, selected['step'], prefix='final_context_without_pagination')
+                tracking.report_contexts(missing_report, selected_step, prefix='final_context_without_pagination')
             if config.get('robustness_evaluation', False):
                 from .robustness import evaluate_robustness
                 evaluate_robustness(model, dataset,
                     context_blocks(index, streams, context_config.get('final_sample_pages', 8192)),
-                    config['window_size'], run_dir, selected['step'], device,
+                    config['window_size'], run_dir, selected_step, device,
                     config['inference']['batch_size'], tracking)
     finally:
         if getattr(loader, '_iterator', None) is not None:

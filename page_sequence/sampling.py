@@ -5,6 +5,7 @@ import copy
 import numpy as np
 
 from .schema import Window, join_stratum
+from .cardinality import PairCardinality
 
 MIXTURES = {'pretrain': (0.60, 0.25, 0.15), 'finetune': (0.20, 0.15, 0.65)}
 SOURCES = ('coverage', 'interesting', 'annotated')
@@ -41,7 +42,8 @@ class WindowSampler:
         self.coverage_order = []
         self.coverage_cursor = self.coverage_offset = 0
         self.counters = Counter()
-        self.seen_volumes, self.seen_pairs = set(), set()
+        self.seen_volumes = set()  # bounded by the catalogue's volume count
+        self.pair_cardinality = PairCardinality()
         self.pending_sources = []
         self._new_coverage_epoch()
 
@@ -249,11 +251,11 @@ class WindowSampler:
             if da != db:
                 starts += 1
                 self.counters['visible_join:' + join_stratum(self.by_id[da], self.by_id[db])] += 1
-                self.seen_pairs.add((da, db))
+                self.pair_cardinality.add((da, db))
                 for d in (self.by_id[da], self.by_id[db]):
                     if d.volume:
                         self.seen_volumes.add((d.library, d.volume))
-        self.counters['unique_join_pairs'] = len(self.seen_pairs)
+        self.counters['unique_join_pairs_estimate'] = self.pair_cardinality.estimate()
         self.counters['unique_join_volumes'] = len(self.seen_volumes)
         self.counters['windows_boundaries:' + ('multiple' if starts > 1 else str(starts))] += 1
         return Window(tuple(rows), source)
@@ -265,18 +267,31 @@ class WindowSampler:
         self.pending_sources = []
 
     def state_dict(self):
-        return copy.deepcopy({k: getattr(self, k) for k in (
+        # Copy flat containers only; deep-copying millions of pair tuples caused
+        # multi-GiB checkpoint spikes. Cardinality snapshots are fixed-size bytes.
+        return {**{k: copy.copy(getattr(self, k)) for k in (
             'window_size', 'variable_lengths', 'stage', 'epoch', 'coverage_order', 'coverage_cursor',
-            'coverage_offset', 'counters', 'pending_sources', 'seen_volumes', 'seen_pairs')}
-            | {'rng': self.rng.bit_generator.state})
+            'coverage_offset', 'counters', 'pending_sources', 'seen_volumes')},
+            'pair_cardinality': self.pair_cardinality.state_dict(),
+            'rng': copy.deepcopy(self.rng.bit_generator.state)}
 
     def load_state_dict(self, state):
         if state.get('variable_lengths', False) != self.variable_lengths:
             raise ValueError('sampler length policy mismatch')
         if state['window_size'] != self.window_size:
             raise ValueError('sampler window size mismatch')
-        for k, v in copy.deepcopy(state).items():
+        for k, v in state.items():
             if k == 'rng':
-                self.rng.bit_generator.state = v
+                self.rng.bit_generator.state = copy.deepcopy(v)
+            elif k in ('seen_pairs', 'pair_cardinality'):
+                continue
             else:
-                setattr(self, k, Counter(v) if k == 'counters' else v)
+                setattr(self, k, Counter(v) if k == 'counters' else copy.copy(v))
+        if 'pair_cardinality' in state:
+            self.pair_cardinality = PairCardinality(state['pair_cardinality'])
+        else:
+            self.pair_cardinality = PairCardinality()
+            for pair in state.get('seen_pairs', ()):
+                self.pair_cardinality.add(pair)
+        self.counters.pop('unique_join_pairs', None)
+        self.counters['unique_join_pairs_estimate'] = self.pair_cardinality.estimate()
