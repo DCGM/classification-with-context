@@ -5,7 +5,7 @@ for the features, the keyword groups and the design decisions.
 The full vector (FEATURES) is what gets stored (e.g. in an LMDB, as float16): keyword hits per stem as
 raw counts, so the stems can be regrouped, dropped or log-scaled later. PageStats.view() turns stored
 full vectors into the vectors a model uses: per stem or grouped (GROUPED_FEATURES, the vector of the
-experiments), with selected features or blocks only.
+experiments), with selected features or blocks and optional bounded normalization.
 
 Only numpy and the standard library; nothing here prints or logs page text, so it can run on private
 pages inside a script that writes only vectors or predictions.
@@ -20,6 +20,7 @@ pages inside a script that writes only vectors or predictions.
 """
 import argparse
 import fnmatch
+import json
 import re
 import unicodedata
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
@@ -712,6 +713,96 @@ def _select(names: Sequence[str], blocks: Dict[str, Tuple[str, ...]], patterns: 
     return chosen
 
 
+_LOGGED_STATS = frozenset(('log_chars', 'log_lines', 'n_blocks', 'n_lines', 'n_words'))
+_LOG_NORMALIZE_STATS = frozenset(('mean_line_len', 'std_line_len', 'words_per_line', 'page_aspect',
+                                'line_height_max_ratio', 'top_line_ratio', 'columns', 'line_gap_med',
+                                'line_gap_max', 'word_gap_med', 'char_width_ratio'))
+_UNIT_STATS = frozenset(TEXT_LINE_FEATURES + ALTO_FEATURES) - _LOGGED_STATS - _LOG_NORMALIZE_STATS - {'line_height_med'}
+_COORDINATE_STATS = frozenset(('text_top', 'text_bottom', 'text_left', 'text_right',
+                              'text_center_x', 'text_center_y'))
+
+
+def _normalization_spec(name: str, grouped: bool) -> Tuple[str, float, float]:
+    """Transform, default positive scale and fitted-scale floor for a canonical (logged-count) view."""
+    if name in _UNIT_STATS or (grouped and name.startswith(('head_', 'foot_'))):
+        return 'unit', 1.0, 1.0
+    if name in _LOGGED_STATS or name in COUNT_FEATURES or (grouped and name.startswith(('kw_', 'pat_'))):
+        return 'soft', float(np.log(2)), float(np.log(2))
+    if name in _LOG_NORMALIZE_STATS:
+        return 'log_soft', float(np.log(2)), 1e-6
+    if name == 'line_height_med':
+        return 'soft', 0.01, 1e-6
+    raise ValueError(f'no normalization defined for feature {name!r}')
+
+
+def _normalization_values(x: np.ndarray, names: Sequence[str]) -> np.ndarray:
+    """Reject invalid measurements; OCR coordinate fractions may extend outside the page."""
+    x = np.asarray(x, dtype=np.float64)
+    if x.ndim != 2 or x.shape[1] != len(names):
+        raise ValueError('normalization input must be a matrix matching the feature names')
+    invalid = ~np.isfinite(x) | (x < 0)
+    coordinate_columns = [i for i, name in enumerate(names) if name in _COORDINATE_STATS]
+    if coordinate_columns:
+        invalid[:, coordinate_columns] = ~np.isfinite(x[:, coordinate_columns])
+    if invalid.any():
+        bad = [name for name, present in zip(names, invalid.any(axis=0)) if present]
+        raise ValueError(f'normalization requires finite nonnegative values: {bad}')
+    if coordinate_columns:
+        x = x.copy()
+        x[:, coordinate_columns] = np.clip(x[:, coordinate_columns], 0, 1)
+    return x
+
+
+class PageStatsNormalization:
+    """Reusable feature-name keyed [0,1] transforms from PageStats.fit_normalization().
+
+    Serialize with to_dict()/from_dict(). PageStats.view(normalize=True) uses fixed defaults instead.
+    """
+
+    def __init__(self, features: Dict[str, dict], groups: Optional[Dict[str, Sequence[str]]] = None):
+        self.features = {}
+        for name, spec in features.items():
+            transform, scale = spec['transform'], float(spec['scale'])
+            if transform not in ('unit', 'soft', 'log_soft') or not np.isfinite(scale) or scale <= 0:
+                raise ValueError(f'invalid normalization parameters for {name!r}')
+            self.features[name] = {'transform': transform, 'scale': scale}
+        self.groups = None if groups is None else {g: list(stems) for g, stems in groups.items()}
+
+    def to_dict(self) -> dict:
+        """JSON-compatible state; contains no page text or per-page vectors."""
+        return {'normalization_version': 1, 'page_stats_version': VERSION,
+                'features': {n: dict(s) for n, s in self.features.items()},
+                'keyword_groups': None if self.groups is None else {g: list(s) for g, s in self.groups.items()}}
+
+    @classmethod
+    def from_dict(cls, state: dict) -> 'PageStatsNormalization':
+        if state.get('normalization_version') != 1 or state.get('page_stats_version') != VERSION:
+            raise ValueError('incompatible page statistics normalization version')
+        return cls(state['features'], state['keyword_groups'])
+
+    def transform(self, x: np.ndarray, names: Sequence[str],
+                  groups: Optional[Dict[str, Sequence[str]]] = None) -> np.ndarray:
+        """Normalize a canonical view, allowing feature subsets but not a different grouping.
+
+        Usually called by PageStats.view(), which supplies the correct logged values and grouping.
+        """
+        groups = None if groups is None else {g: list(stems) for g, stems in groups.items()}
+        if groups != self.groups:
+            raise ValueError('normalization was created for a different grouping')
+        missing = set(names) - self.features.keys()
+        if missing:
+            raise ValueError(f'features missing from normalization: {sorted(missing)}')
+        out = _normalization_values(x, names).copy()
+        for i, name in enumerate(names):
+            spec = self.features[name]
+            if spec['transform'] == 'unit':
+                out[:, i] = np.clip(out[:, i], 0, 1)
+            else:
+                values = np.log1p(out[:, i]) if spec['transform'] == 'log_soft' else out[:, i]
+                out[:, i] = values / (values + spec['scale'])
+        return out.astype(np.float32)
+
+
 class PageStats:
     """The page statistics model: OCR -> full vector (FEATURES); stored full vectors -> model input (view)."""
     version = VERSION
@@ -769,7 +860,8 @@ class PageStats:
 
     def view(self, full: np.ndarray, grouped: bool = False, log_counts: bool = True,
              include: Optional[Iterable[str]] = None,
-             exclude: Optional[Iterable[str]] = None) -> Tuple[np.ndarray, Tuple[str, ...]]:
+             exclude: Optional[Iterable[str]] = None,
+             normalize: Union[bool, PageStatsNormalization] = False) -> Tuple[np.ndarray, Tuple[str, ...]]:
         """(matrix, feature names) for a model from full vectors (rows, e.g. read from an LMDB).
 
         grouped     keyword hits summed per group (log(1 + hits) on the page, header/footer flags) and
@@ -777,9 +869,15 @@ class PageStats:
         log_counts  without grouping, log(1 + count) for the count blocks (raw counts if False)
         include     only these blocks, feature names or fnmatch patterns ('alto_lines', 'kw_*', 'kw:obsah')
         exclude     drop these (after include)
+        normalize   True: fixed [0,1] transforms; or a normalizer fitted on training vectors with
+                    fit_normalization(). Requires log_counts=True for an ungrouped view.
         """
+        if not isinstance(normalize, (bool, PageStatsNormalization)):
+            raise TypeError('normalize must be a bool or PageStatsNormalization')
+        if normalize is not False and not grouped and not log_counts:
+            raise ValueError('normalization requires log_counts=True for an ungrouped view')
         full = np.atleast_2d(np.asarray(full, dtype=np.float32))
-        if full.shape[1] != len(FEATURES):
+        if full.ndim != 2 or full.shape[1] != len(FEATURES):
             raise ValueError(f'{full.shape[1]} columns, page stats version {VERSION} has {len(FEATURES)}')
         if grouped:
             x, names = self.grouped(full), self.grouped_names()
@@ -794,7 +892,41 @@ class PageStats:
         keep = set(names) if include is None else _select(names, blocks, include)
         keep -= _select(names, blocks, exclude or ())
         columns_kept = [i for i, n in enumerate(names) if n in keep]
-        return x[:, columns_kept], tuple(names[i] for i in columns_kept)
+        x, names = x[:, columns_kept], tuple(names[i] for i in columns_kept)
+        if normalize is not False:
+            groups = self.groups if grouped else None
+            if normalize is True:
+                features = {}
+                for name in names:
+                    transform, scale, _ = _normalization_spec(name, grouped)
+                    features[name] = {'transform': transform, 'scale': scale}
+                normalize = PageStatsNormalization(features, groups)
+            x = normalize.transform(x, names, groups)
+        return x, names
+
+    def fit_normalization(self, full: np.ndarray, grouped: bool = False,
+                          include: Optional[Iterable[str]] = None,
+                          exclude: Optional[Iterable[str]] = None) -> PageStatsNormalization:
+        """Fit bounded normalization on a representative TRAINING sample, not each inference batch.
+
+        Scales are medians of positive transformed values with feature-specific floors/fallbacks.
+        Zeros, flags and proportions stay meaningful. Grouping and selected feature names are saved;
+        the fitted state can be reused with any subset of those features and the same grouping.
+        """
+        x, names = self.view(full, grouped=grouped, include=include, exclude=exclude)
+        x = _normalization_values(x, names)
+        if not len(x):
+            raise ValueError('cannot fit normalization on an empty training sample')
+        features = {}
+        for i, name in enumerate(names):
+            transform, scale, floor = _normalization_spec(name, grouped)
+            if transform != 'unit':
+                values = np.log1p(x[:, i]) if transform == 'log_soft' else x[:, i]
+                positive = values[values > 0]
+                if positive.size:
+                    scale = max(float(np.median(positive)), floor)
+            features[name] = {'transform': transform, 'scale': scale}
+        return PageStatsNormalization(features, self.groups if grouped else None)
 
     def metadata(self) -> dict:
         """What to store next to the vectors (e.g. an LMDB '__metadata__' entry)."""
@@ -819,16 +951,25 @@ def main(argv=None):
     parser.add_argument('path', nargs='?')
     parser.add_argument('--text', action='store_true', help='The file is plain text, not ALTO.')
     parser.add_argument('--grouped', action='store_true')
+    normalization = parser.add_mutually_exclusive_group()
+    normalization.add_argument('--normalize', action='store_true', help='Use fixed [0,1] normalization.')
+    normalization.add_argument('--normalization', help='JSON state from fit_normalization().to_dict().')
     parser.add_argument('--keyword-table', action='store_true', help='Print the keyword table of README.md.')
     args = parser.parse_args(argv)
     if args.keyword_table:
         print(keyword_table())
         return
     stats = PageStats()
+    normalize = args.normalize
+    if args.normalization:
+        with open(args.normalization, encoding='utf-8') as f:
+            normalize = PageStatsNormalization.from_dict(json.load(f))
     with open(args.path, 'rb') as f:
         data = f.read()
     full = stats.embed_text(data.decode('utf-8')) if args.text else stats.embed_alto(data)
-    x, names = stats.view(full, grouped=args.grouped, log_counts=False)
+    include = normalize.features if isinstance(normalize, PageStatsNormalization) else None
+    x, names = stats.view(full, grouped=args.grouped, log_counts=normalize is not False,
+                         include=include, normalize=normalize)
     for name, value in zip(names, x[0]):
         if value:
             print(f'{name}\t{value:.4g}')

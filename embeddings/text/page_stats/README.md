@@ -11,8 +11,8 @@ Everything lives in `page_stats.py`, which needs only numpy and the standard lib
 
 - **Extraction:** OCR → *full vector*. This is what gets stored, sparse (`to_sparse()`), e.g. in an
   LMDB keyed like the text embeddings.
-- **Views:** stored full vectors → what a model gets. Keywords per stem or grouped, and a selection of
-  blocks or features.
+- **Views:** stored full vectors → what a model gets. Keywords per stem or grouped, a selection of
+  blocks or features, and optional normalization to [0,1].
 
 ```python
 from embeddings.text.page_stats import PageStats
@@ -26,6 +26,7 @@ x, names = stats.view(full)                          # all features, keyword cou
 x, names = stats.view(full, grouped=True)            # keyword groups (GROUPED_FEATURES)
 x, names = stats.view(full, grouped=True, exclude=['alto_word_conf', 'alto_word_boxes'])
 x, names = stats.view(full, include=['keywords', 'alto_lines'], exclude=['kw:viz '])
+x, names = stats.view(full, grouped=True, normalize=True)  # fixed, bounded feature transforms
 x, names = PageStats(groups=LANGUAGE_GROUPS).view(full, grouped=True, include=['kw_*'])  # per language
 stats.metadata()                                     # version, feature names, keyword groups: store with the vectors
 
@@ -38,6 +39,73 @@ full = stats.decode([value1, value2])                # stored values -> full vec
 
 From the command line, `python -m embeddings.text.page_stats.page_stats page.xml [--grouped]` prints a
 page's nonzero features. `--keyword-table` prints the keyword tables below.
+
+## Normalized model inputs
+
+`view(..., normalize=True)` returns float32 values in **[0,1]**, using fixed defaults independent
+of the current inference batch. It composes with grouping, custom groups, `include` and `exclude`.
+Existing calls without normalization and the stored full vectors retain their original format.
+Normalization applies to the final selected view; it does not re-extract OCR or modify stored vectors.
+
+| Feature family | Normalization |
+|---|---|
+| Binary flags and proportions/shares | Preserve 0/1 and values in [0,1]; clip upper overshoots to 1 |
+| Keyword/pattern counts and already logged counts (`log_chars`, `log_lines`, `n_blocks`, `n_lines`, `n_words`) | With `v` the already logged value, `v / (v + s)` |
+| Mean/std line length, words per line, aspect, columns, relative height ratios, line gaps, word gaps and character-width ratio | `v = log1p(x)`, then `v / (v + s)` |
+| Relative median line height (`line_height_med`) | `x / (x + s)`, with fixed default `s=0.01` |
+
+The default positive scale `s` is `log(2)` except for relative median line height. Thus a single
+keyword hit maps to 0.5, while arbitrarily large finite values approach 1 smoothly. Counts are
+not logged twice. Ungrouped normalization requires `log_counts=True` (the default); grouped views
+always perform their established count transforms and turn header/footer hits into flags.
+No per-page L2 normalization is applied: each feature's output is independent of the other features.
+Nonfinite or negative values entering normalization raise `ValueError`; fix invalid extraction
+values rather than using them as missing data. Source-missing zero features remain zero, and
+`has_ocr_xml` remains available to distinguish missing geometry from genuine zeros.
+
+For calibrated scales, fit once on a representative **training-only sample of stored vectors**.
+Fit after choosing the keyword grouping you will use for the model:
+
+```python
+import json
+from embeddings.text.page_stats import PageStats, PageStatsNormalization
+
+stats = PageStats()
+normalizer = stats.fit_normalization(train_full, grouped=True,
+                                     exclude=['alto_word_conf', 'alto_word_boxes'])
+state = normalizer.to_dict()                        # JSON-compatible, versioned feature/scale metadata
+with open('page_stats_normalization.json', 'w') as f:
+    json.dump(state, f)
+
+# In another inference process, reuse the same grouping and fitted scales:
+with open('page_stats_normalization.json') as f:
+    normalizer = PageStatsNormalization.from_dict(json.load(f))
+x, names = stats.view(full, grouped=True, include=['kw_*', 'text_lines'], normalize=normalizer)
+```
+
+For each soft-bounded feature, fitting uses the median of its **positive transformed values**,
+not the median of mostly-zero columns. Typical positive values map to 0.5, subject to scale floors:
+`log(2)` for count features, `1e-6` for other measurements. Features with no positive observations
+use their fixed defaults. Flags and proportions are never standardized by rarity. Fitting on an
+empty sample is rejected. All parameters are fixed at inference, so splitting a stream into
+different windows cannot change the normalization of a page.
+
+The fitted normalizer supports subsets of its fitted feature names; asking for an unfitted feature
+raises an error. Changing the grouping (including changing stems under the same group name),
+switching between grouped and ungrouped views, or loading an incompatible version is rejected.
+Fit separate states for different views/groupings; raw full vectors are still shared between them.
+
+The CLI also accepts `--normalize` for fixed defaults, or `--normalization path.json` for saved
+parameters, printing only the feature selection saved in that state. Add `--grouped` when using
+a state fitted with the default grouped view. For example:
+
+```sh
+python -m embeddings.text.page_stats.page_stats page.xml --grouped --normalize
+python -m embeddings.text.page_stats.page_stats page.xml --grouped --normalization page_stats_normalization.json
+```
+
+As with the existing inspection CLI, only inspect public source text/XML; private source material
+is processed by scripts writing vectors, aggregates or predictions under the rules in CLAUDE.md.
 
 ## The full vector
 
