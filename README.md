@@ -1,5 +1,10 @@
 # classification-with-context
 
+The modular BERT Mini page-stream experiment is in [page_sequence](page_sequence/README.md):
+dataset/index preparation, mixed sampling, model adapters, masked training, overlapping inference
+and full-stream evaluation. See the [experiment plan](docs/sequence-experiments.md) for the
+planned comparisons.
+
 ## Where things are
 
 ```
@@ -26,7 +31,8 @@ not the access of a page; the access is in the CSV (see below).
 
 ## Data
 
-Location: `/mnt/matylda0/ihradis/digiknihovna.data/page_types_metadata_for_training/`
+Local CSV location: `/home/ikohut/tmp/consolidation/out/`. Training and SSD benchmarks use this
+copy; they do not require the original Matylda mount.
 
 Pages from the Kramerius DB dumps, kept only when the page has both an image embedding
 (DINOv2) and a text embedding (mmBERT and the other text models). The annotated pages are

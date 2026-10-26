@@ -1,5 +1,11 @@
 # Rules for working in this repo
 
+## Git commits
+
+Commit completed, validated changes regularly in coherent, reasonably sized commits.
+Keep unrelated changes separate rather than accumulating a large uncommitted backlog.
+Do not push unless requested.
+
 ## Private page text
 
 Never read, print, sample, grep or otherwise explore the source text of the **private** text dump
