@@ -465,6 +465,20 @@ policy and fixed cap alongside the model. The updated consumer reads existing
 three-modality exports remain `metakat_context_v1`. Neither artifact needs the sidecar
 or DB dump at inference; `predict`/`tag_pages` also support caller-provided numbers.
 
+Whole-modality robustness training is optional:
+`modality_dropout: {"all_probability": 0.70, "two_probability": 0.21,
+"single_probability": 0.09}`. Each training window retains all three original
+modalities (image, text, statistics), exactly two, or exactly one with these
+probabilities. Subsets of each size are uniform: each single-modality case has
+3% probability. The selection applies throughout the window, with no new
+scattered dropout. If natural missingness would leave an individual page with
+no signal, its first originally available modality is retained. Originally
+all-missing pages remain missing. Dropped vectors and presence flags are zero;
+fusion masks the projected branches after their biased layers. Pagination is
+independent. Both training stages use augmentation; validation/inference do not.
+Omitting the setting preserves existing behavior and consumes no random numbers.
+The checkpointed Torch RNG also records these choices for reproducible resume.
+
 For robustness training, set `pagination_dropout: {"window_probability": 0.2,
 "page_probability": 0.2}`. In both pretraining and fine-tuning, 20% of sampled windows
 lose all pagination, and each page in the remaining windows independently loses it

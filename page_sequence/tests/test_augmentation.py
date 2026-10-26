@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from page_sequence.augmentation import pagination_dropout
+from page_sequence.augmentation import modality_dropout, pagination_dropout
 from page_sequence.runner import load_checkpoint, rng_state, restore_rng, train
 from page_sequence.smoke import prepare_fixture
 from page_sequence.tests.test_pagination import sidecar
@@ -44,6 +44,8 @@ def test_dropout_resume_matches_uninterrupted_and_final_ablation(tmp_path):
     path = tmp_path / 'pagination.npy'
     sidecar(config, path)
     config.update(pagination={'path': str(path)},
+                  modality_dropout={'all_probability': .7, 'two_probability': .21,
+                                    'single_probability': .09},
                   pagination_dropout={'window_probability': .2, 'page_probability': .2},
                   pagination_robustness_evaluation=True,
                   context_evaluation={'enabled': True, 'sample_pages': 20, 'final_sample_pages': 20})
@@ -62,3 +64,39 @@ def test_dropout_resume_matches_uninterrupted_and_final_ablation(tmp_path):
     assert missing['complete'] and missing['pagination'] == 'omitted'
     assert missing['panel_sha256'] == available['panel_sha256']
     assert missing['checkpoint_step'] == available['checkpoint_step']
+
+
+def test_modality_subsets_rates_window_consistency_and_rng():
+    features = {name: torch.ones(30000, 4, 5) for name in ('image', 'text', 'stats', 'pagination')}
+    features['presence'] = torch.ones(30000, 4, 3)
+    before = rng_state()
+    assert modality_dropout(features) is features
+    torch.testing.assert_close(before['torch'], rng_state()['torch'])
+    a = modality_dropout(features, .7, .21, .09)
+    restore_rng(before)
+    b = modality_dropout(features, .7, .21, .09)
+    torch.testing.assert_close(a['presence'], b['presence'], rtol=0, atol=0)
+    flags = a['presence'][:, 0]
+    assert (a['presence'] == flags[:, None]).all()
+    for count, expected in [(3, .7), (2, .21), (1, .09)]:
+        assert abs(float((flags.sum(-1) == count).float().mean()) - expected) < .01
+    for i, name in enumerate(('image', 'text', 'stats')):
+        assert abs(float(((flags.sum(-1) == 1) & (flags[:, i] == 1)).float().mean()) - .03) < .005
+        assert (a[name] == a['presence'][..., i:i + 1]).all()
+        assert features[name].all()
+    assert features['presence'].all()
+    assert a['pagination'] is features['pagination']
+
+
+def test_modality_natural_missingness_never_loses_last_signal():
+    flags = torch.tensor([[[1., 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0]]]).repeat(100, 1, 1)
+    features = {name: torch.ones(100, 4, 2) for name in ('image', 'text', 'stats')}
+    features['presence'] = flags
+    a = modality_dropout(features, 0, 0, 1)
+    torch.testing.assert_close(a['presence'], flags)
+
+
+@pytest.mark.parametrize('probabilities', [(1, .1, 0), (-.1, .5, .6), (float('nan'), 0, 0)])
+def test_modality_reject_invalid_distribution(probabilities):
+    with pytest.raises(ValueError, match='probabilities'):
+        modality_dropout({}, *probabilities)

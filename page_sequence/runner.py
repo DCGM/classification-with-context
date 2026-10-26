@@ -28,7 +28,7 @@ from .models import BertBackbone, PageBackbone, PageTagger, from_specification
 from .sampling import WindowSampler
 from .schema import PAGE_TYPES, PLACEMENTS, Page
 from .precision import autocast
-from .augmentation import pagination_dropout
+from .augmentation import modality_dropout, pagination_dropout
 
 
 def make_dataset(index, features, config):
@@ -170,6 +170,8 @@ def train(config, resume=None, stop_after=None):
     dropout = config.get('pagination_dropout', {})
     # Validate before opening large stores or creating a tracking task.
     pagination_dropout({'pagination': torch.zeros(0, 0, 5)}, **dropout)
+    modality_config = config.get('modality_dropout', {})
+    modality_dropout({'presence': torch.zeros(0, 0, 3)}, **modality_config)
     if any(dropout.values()) and not config.get('pagination'):
         raise ValueError('pagination dropout requires pagination configuration')
     precision = config.get('precision', 'float32')
@@ -279,6 +281,7 @@ def train(config, resume=None, stop_after=None):
                         group['lr'] = lr * min((step + 1) / warmup, 1.)
                     optimizer.zero_grad(set_to_none=True)
                     augmented = pagination_dropout(batch['features'], **dropout)
+                    augmented = modality_dropout(augmented, **modality_config)
                     with autocast(model, device):
                         output = model(augmented, batch['attention_mask'])
                     losses, denominators = task_losses(output, batch, loss_weights)
