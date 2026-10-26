@@ -22,7 +22,9 @@ class WindowDataset(Dataset):
         if isinstance(window, int):
             window = self.windows[window]
         pages = self.index.pages(window.rows)
-        return make_example(pages, self.features, window)
+        example = make_example(pages, self.features, window)
+        example.update(page_edge_targets(self.index, window.rows))
+        return example
 
 
 class PageListDataset(Dataset):
@@ -49,6 +51,24 @@ def make_example(pages, features, window):
             'starts': starts, 'pair_mask': pair_mask, 'rows': window.rows, 'source': window.source}
 
 
+def page_edge_targets(index, rows):
+    """Catalogue document edges, never window edges. Bounded metadata queries."""
+    records = {}
+    unique = tuple(dict.fromkeys(int(row) for row in rows))
+    for offset in range(0, len(unique), 512):
+        chunk = unique[offset:offset + 512]
+        query = ('SELECT p.id,d.first,d.length FROM pages p JOIN documents d ON d.id=p.document '
+                 f'WHERE p.id IN ({",".join("?" for _ in chunk)})')
+        records.update((row, (first, length)) for row, first, length in index.db.execute(query, chunk))
+    targets = {name: np.full(len(rows), IGNORE, np.float32) for name in ('page_start', 'page_end')}
+    for i, row in enumerate(rows):
+        first, length = records[row]
+        if first is not None and length:
+            targets['page_start'][i] = float(row == first)
+            targets['page_end'][i] = float(row == first + length - 1)
+    return targets
+
+
 def collate_windows(examples):
     """Right pad; repeated target occurrences in one optimizer batch get reciprocal weight."""
     if not examples:
@@ -61,6 +81,8 @@ def collate_windows(examples):
               'gold': torch.zeros(b, l, dtype=torch.bool),
               'placement': torch.full((b, l), IGNORE, dtype=torch.long),
               'starts': torch.zeros(b, l), 'pair_mask': torch.zeros(b, l, dtype=torch.bool),
+              'page_start': torch.full((b, l), float(IGNORE)),
+              'page_end': torch.full((b, l), float(IGNORE)),
               'weight': torch.zeros(b, l), 'pair_weight': torch.zeros(b, l),
               'rows': [e['rows'] for e in examples],
               'storage_pages': {name: sum(e.get('storage_pages', {}).get(name, 0) for e in examples)
@@ -75,6 +97,9 @@ def collate_windows(examples):
         result['attention_mask'][i, :n] = True
         for name in ('type', 'gold', 'placement', 'starts', 'pair_mask'):
             result[name][i, :n] = torch.from_numpy(e[name])
+        for name in ('page_start', 'page_end'):
+            if name in e:
+                result[name][i, :n] = torch.from_numpy(e[name])
         result['weight'][i, :n] = torch.tensor([1 / occurrences[r] for r in e['rows']])
         result['pair_weight'][i, 1:n] = torch.tensor([1 / pairs[p] for p in zip(e['rows'], e['rows'][1:])])
     return result

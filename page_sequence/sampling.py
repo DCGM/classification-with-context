@@ -1,6 +1,7 @@
 """Resumable training-only coverage and anchored sampling, independent of vector/model code."""
 from collections import Counter, defaultdict, OrderedDict
 import copy
+import math
 
 import numpy as np
 
@@ -12,11 +13,16 @@ SOURCES = ('coverage', 'interesting', 'annotated')
 
 
 class WindowSampler:
-    def __init__(self, index, window_size=128, seed=17, stage='pretrain', variable_lengths=False):
+    def __init__(self, index, window_size=128, seed=17, stage='pretrain', variable_lengths=False, edge_crops=None):
         if window_size < 2 or stage not in MIXTURES:
             raise ValueError('window_size must be >=2 and stage pretrain/finetune')
         self.index, self.window_size, self.stage = index, window_size, stage
         self.variable_lengths = bool(variable_lengths)
+        self.edge_crops = dict(edge_crops or {})
+        if (set(self.edge_crops) - {'start_probability', 'end_probability'}
+                or any(not math.isfinite(p) or not 0 <= p <= 1 for p in self.edge_crops.values())
+                or sum(self.edge_crops.values()) > 1):
+            raise ValueError('edge crop probabilities must be finite, nonnegative and sum to at most 1')
         self.draw_size = window_size
         self.docs = index.documents('fit')
         if not self.docs:
@@ -236,6 +242,28 @@ class WindowSampler:
                 if source == 'annotated' else self._anchor('interesting')
                 if self.rng.random() < 2 / 3 else self._boundary())
         pages, document_ids = self.index.pages_with_documents(rows)
+        if source != 'coverage' and any(self.edge_crops.values()):
+            draw = self.rng.random()
+            start_p = self.edge_crops.get('start_probability', 0)
+            kind = ('start' if draw < start_p else 'end'
+                    if draw < start_p + self.edge_crops.get('end_probability', 0) else None)
+            if kind:
+                self.counters['edge_crop_requested:' + kind] += 1
+                gold = [i for i, p in enumerate(pages) if p.annotated_type]
+                candidates = [i for i, (row, docid) in enumerate(zip(rows, document_ids))
+                              if row == (self.by_id[docid].first if kind == 'start' else
+                                         self.by_id[docid].first + self.by_id[docid].length - 1)
+                              and (not gold or (i <= min(gold) if kind == 'start' else i >= max(gold)))]
+                if candidates:
+                    i = int(self.rng.choice(candidates))
+                    section = slice(i, None) if kind == 'start' else slice(None, i + 1)
+                    rows, pages, document_ids = rows[section], pages[section], document_ids[section]
+                    self.counters['edge_crop_applied:' + kind] += 1
+                else:
+                    self.counters['edge_crop_unavailable:' + kind] += 1
+        self.counters['windows_starting_at_document_start'] += int(rows[0] == self.by_id[document_ids[0]].first)
+        last_doc = self.by_id[document_ids[-1]]
+        self.counters['windows_ending_at_document_end'] += int(rows[-1] == last_doc.first + last_doc.length - 1)
         self.counters['source:' + source] += 1
         self.counters['processed_pages'] += len(rows)
         self.counters[f'actual_length:{len(rows)}'] += 1
@@ -273,13 +301,15 @@ class WindowSampler:
             'window_size', 'variable_lengths', 'stage', 'epoch', 'coverage_order', 'coverage_cursor',
             'coverage_offset', 'counters', 'pending_sources', 'seen_volumes')},
             'pair_cardinality': self.pair_cardinality.state_dict(),
-            'rng': copy.deepcopy(self.rng.bit_generator.state)}
+            'rng': copy.deepcopy(self.rng.bit_generator.state), 'edge_crops': self.edge_crops.copy()}
 
     def load_state_dict(self, state):
         if state.get('variable_lengths', False) != self.variable_lengths:
             raise ValueError('sampler length policy mismatch')
         if state['window_size'] != self.window_size:
             raise ValueError('sampler window size mismatch')
+        if state.get('edge_crops', {}) != self.edge_crops:
+            raise ValueError('sampler edge crop policy mismatch')
         for k, v in state.items():
             if k == 'rng':
                 self.rng.bit_generator.state = copy.deepcopy(v)

@@ -32,15 +32,18 @@ def export_checkpoint(checkpoint, output):
         encode(np.zeros(0, RECORD), cap)  # Validate the exact inference normalization.
         pagination_contract = {'policy': POLICY, 'cap': cap}
     # JSON round-trip drops Python-specific containers from metadata.
+    specification = dict(state['specification'])
+    specification.pop('auxiliary_edges', None)  # training-only heads; boundary output is unchanged
     metadata = json.loads(json.dumps({
         'format': 'metakat_context_v2' if has_pagination else 'metakat_context_v1',
-        'specification': state['specification'], 'features': state['features'],
+        'specification': specification, 'features': state['features'],
         'page_types': state['page_types'], 'placements': state['placements'],
         'inference': state['config'].get('inference', {}),
     }))
     if pagination_contract is not None:
         metadata['pagination'] = pagination_contract
-    artifact = dict(metadata, model={k: v.detach().cpu().clone() for k, v in state['model'].items()})
+    artifact = dict(metadata, model={k: v.detach().cpu().clone() for k, v in state['model'].items()
+                                    if not k.startswith(('page_start_head.', 'page_end_head.'))})
     output = Path(output)
     temporary = output.with_suffix(output.suffix + '.writing')
     torch.save(artifact, temporary)

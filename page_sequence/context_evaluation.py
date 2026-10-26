@@ -12,6 +12,47 @@ from .precision import autocast
 from .schema import IGNORE, PAGE_TYPES, PLACEMENTS, Window
 
 
+def document_edge_blocks(index, window_size, sample_pages=8192, seed=7193):
+    """Bounded dev-only reservoir: document prefixes/tails and interior negatives.
+
+    No neighbouring document is included. Catalogue metadata only, no feature scan.
+    """
+    if window_size < 2 or sample_pages < 1:
+        raise ValueError('positive panel size and window size >=2 required')
+    rng = np.random.default_rng(seed)
+    reservoir = []
+    for i, record in enumerate(index.db.execute(
+            "SELECT first,length FROM documents WHERE split='dev' AND length>0 ORDER BY id")):
+        if len(reservoir) < 256:
+            reservoir.append(record)
+        else:
+            slot = int(rng.integers(i + 1))
+            if slot < len(reservoir):
+                reservoir[slot] = record
+    rng.shuffle(reservoir)
+    blocks, seen, remaining = [], set(), sample_pages
+    for first, length in reservoir:
+        width = min(window_size, length, remaining)
+        if width < 1:
+            break
+        candidates = [tuple(range(first, first + width)),
+                      tuple(range(first + length - width, first + length))]
+        if length > 2:
+            middle_width = min(window_size, length - 2, remaining)
+            lo = first + 1 + int(rng.integers(length - middle_width - 1))
+            candidates.append(tuple(range(lo, lo + middle_width)))
+        rng.shuffle(candidates)
+        for rows in candidates:
+            if not remaining:
+                return blocks
+            rows = rows if len(rows) <= remaining else rows[-remaining:]
+            if rows not in seen:
+                blocks.append(rows)
+                seen.add(rows)
+                remaining -= len(rows)
+    return blocks
+
+
 def context_blocks(index, streams, sample_pages=2048, block_size=256, seed=917):
     """Fixed dev-only blocks; rotate curated, boundary and uniform anchors.
 
@@ -94,6 +135,9 @@ def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=
                 for lo in range(0, len(example['rows']), length):
                     hi = min(lo + length, len(example['rows']))
                     sliced = {key: example[key][lo:hi] for key in ('type', 'gold', 'placement', 'starts')}
+                    for key in ('page_start', 'page_end'):
+                        if key in example:
+                            sliced[key] = example[key][lo:hi]
                     sliced.update(features={k: v[lo:hi] for k, v in example['features'].items()},
                                   rows=example['rows'][lo:hi], source='context_diagnostic',
                                   pair_mask=np.r_[False, example['pair_mask'][lo + 1:hi]])
@@ -104,6 +148,8 @@ def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=
                 ('curated_type', len(PAGE_TYPES)), ('weak_type_agreement', len(PAGE_TYPES)),
                 ('placement_db_agreement', len(PLACEMENTS)))}
             y_boundary, p_boundary = [], []
+            edges = {(task, subset): [[], []] for task in ('page_start', 'page_end')
+                     for subset in ('all', 'scan_edge')} if getattr(model, 'auxiliary_edges', False) else {}
             groups = {}
             if corruption is not None:
                 for group in ('masked_pages', 'retained_pages'):
@@ -120,6 +166,14 @@ def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=
                 with autocast(model, device):
                     output = model(batch['features'], batch['attention_mask'])
                 valid = batch['attention_mask']
+                for (task, subset), values in edges.items():
+                    mask = valid & (batch[task] != IGNORE)
+                    if subset == 'scan_edge':
+                        positions = torch.arange(valid.shape[1], device=valid.device)[None, :]
+                        mask &= (positions == (0 if task == 'page_start' else
+                                              valid.sum(-1, keepdim=True) - 1))
+                    values[0].extend(batch[task][mask].cpu().tolist())
+                    values[1].extend(output[task + '_logits'][mask].float().sigmoid().cpu().tolist())
                 if groups:
                     selected = np.zeros(tuple(valid.shape), bool)
                     for i, window in enumerate(current):
@@ -155,6 +209,11 @@ def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=
                 **{name: classification_metrics(cm, PLACEMENTS if name.startswith('placement') else PAGE_TYPES)
                    for name, cm in cms.items()},
                 'starts': binary_metrics(y_boundary, p_boundary, .5) if y_boundary else None}
+            if edges:
+                report['lengths'][str(length)]['auxiliary_edges'] = {
+                    task: {subset: binary_metrics(*edges[(task, subset)], .5)
+                           if edges[(task, subset)][0] else None for subset in ('all', 'scan_edge')}
+                    for task in ('page_start', 'page_end')}
             if groups:
                 report['lengths'][str(length)]['groups'] = {
                     group: {'pages': data['pages'],

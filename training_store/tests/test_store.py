@@ -115,7 +115,7 @@ def test_training_windows_switch_without_changing_inputs(tmp_path, example):
     after = dataset[window]
     assert after['storage_pages'] == {'nvme': 5, 'fallback': 0}
     original = WindowDataset(index, features)[window]
-    for k in ('type', 'gold', 'placement', 'starts', 'pair_mask'):
+    for k in ('type', 'gold', 'placement', 'starts', 'pair_mask', 'page_start', 'page_end'):
         np.testing.assert_array_equal(after[k], original[k])
         np.testing.assert_array_equal(after[k], before[k])
     for k in after['features']:

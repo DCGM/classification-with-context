@@ -113,6 +113,12 @@ class Tracking:
             if scores['starts'] is not None:
                 for metric in ('f1', 'precision', 'recall', 'n', 'positive'):
                     self.logger.report_scalar(title + '/starts', metric, scores['starts'][metric], step)
+            for task, subsets in scores.get('auxiliary_edges', {}).items():
+                for subset, metrics in subsets.items():
+                    if metrics is not None:
+                        for metric, value in metrics.items():
+                            if value is not None:
+                                self.logger.report_scalar(f'{title}/{task}/{subset}', metric, value, step)
 
     def close(self, failed=False):
         if self.task is not None:

@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from torch.utils.data import Dataset
 
-from page_sequence.data import make_example
+from page_sequence.data import make_example, page_edge_targets
 from page_sequence.schema import IGNORE, PAGE_TYPES, PLACEMENTS
 from .format import DOCUMENT, RECORD, VERSION, digest
 from .reader import TrainingStore
@@ -99,6 +99,7 @@ class StoreDataset(Dataset):
         if not ready.all():
             pages = self.index.pages(window.rows)
             example = make_example(pages, self.features, window)
+            example.update(page_edge_targets(self.index, window.rows))
             example['features'] = {k: v.astype(np.float16) for k, v in example['features'].items()}
             example['storage_pages'] = {'nvme': 0, 'fallback': len(rows)}
             return example
@@ -111,5 +112,7 @@ class StoreDataset(Dataset):
                 'type': np.where(gold, records['gold'], records['weak']).astype(np.int64),
                 'gold': gold, 'placement': records['placement'].astype(np.int64),
                 'starts': starts, 'pair_mask': pair_mask,
+                'page_start': (rows == docs['first']).astype(np.float32),
+                'page_end': (rows == docs['first'] + docs['length'] - 1).astype(np.float32),
                 'rows': window.rows, 'source': window.source,
                 'storage_pages': {'nvme': len(rows), 'fallback': 0}}

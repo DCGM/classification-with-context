@@ -94,7 +94,7 @@ class Fusion(nn.Module):
 
 
 class PageTagger(nn.Module):
-    def __init__(self, backbone, dims, fusion='linear', num_types=len(PAGE_TYPES)):
+    def __init__(self, backbone, dims, fusion='linear', num_types=len(PAGE_TYPES), auxiliary_edges=False):
         super().__init__()
         self.backbone, self.dims, self.fusion_kind, self.num_types = backbone, dims, fusion, num_types
         h = backbone.hidden_size
@@ -102,6 +102,10 @@ class PageTagger(nn.Module):
         self.type_head = nn.Linear(h, num_types)
         self.placement_head = nn.Linear(h, len(PLACEMENTS))
         self.start_head = nn.Sequential(nn.Linear(4 * h, h), nn.GELU(), nn.Linear(h, 1))
+        self.auxiliary_edges = auxiliary_edges
+        if auxiliary_edges:
+            self.page_start_head = nn.Linear(h, 1)
+            self.page_end_head = nn.Linear(h, 1)
 
     def forward(self, features, attention_mask):
         if not attention_mask.any(dim=-1).all():
@@ -114,12 +118,19 @@ class PageTagger(nn.Module):
         pair_mask = attention_mask.clone()
         pair_mask[:, 0] = False
         pair_mask[:, 1:] &= attention_mask[:, :-1]
-        return {'type_logits': self.type_head(h), 'placement_logits': self.placement_head(h),
-                'starts_document_logits': starts, 'pair_mask': pair_mask}
+        output = {'type_logits': self.type_head(h), 'placement_logits': self.placement_head(h),
+                  'starts_document_logits': starts, 'pair_mask': pair_mask}
+        if self.auxiliary_edges:
+            output.update(page_start_logits=self.page_start_head(h).squeeze(-1),
+                          page_end_logits=self.page_end_head(h).squeeze(-1))
+        return output
 
     def specification(self):
-        return {'backbone': self.backbone.specification(), 'dims': self.dims,
+        spec = {'backbone': self.backbone.specification(), 'dims': self.dims,
                 'fusion': self.fusion_kind, 'num_types': self.num_types}
+        if self.auxiliary_edges:
+            spec['auxiliary_edges'] = True
+        return spec
 
 
 def from_specification(spec):
@@ -130,4 +141,4 @@ def from_specification(spec):
         raise ValueError('unknown backbone')
     if 'initial_scale' in b:
         backbone.initial_scale = b['initial_scale']
-    return PageTagger(backbone, spec['dims'], spec['fusion'], spec['num_types'])
+    return PageTagger(backbone, spec['dims'], spec['fusion'], spec['num_types'], spec.get('auxiliary_edges', False))

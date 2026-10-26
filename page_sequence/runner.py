@@ -197,7 +197,8 @@ def train(config, resume=None, stop_after=None):
     streams = load_streams(config['dev_manifest'], index, 'dev')
     inference = InferenceConfig(**config['inference'])
     sampler = WindowSampler(index, config['window_size'], config['seed'],
-                            variable_lengths=config.get('variable_lengths', False))
+                            variable_lengths=config.get('variable_lengths', False),
+                            edge_crops=config.get('edge_crops'))
     context_config = config.get('context_evaluation', {})
     diagnostic_blocks = (context_blocks(index, streams, context_config.get('sample_pages', 2048))
                          if context_config.get('enabled', False) else [])
@@ -225,7 +226,8 @@ def train(config, resume=None, stop_after=None):
                     PageBackbone(**backbone_config) if kind == 'page' else None)
         if backbone is None:
             raise ValueError('unknown backbone kind')
-        model = PageTagger(backbone, getattr(dataset, 'model_dims', features.dims), config.get('fusion', 'linear')).to(device)
+        model = PageTagger(backbone, getattr(dataset, 'model_dims', features.dims), config.get('fusion', 'linear'),
+                           auxiliary_edges=config.get('auxiliary_edges', False)).to(device)
         step, best = 0, -1.
     model.compute_precision = precision
     scaler = torch.amp.GradScaler('cuda', enabled=precision == 'float16', init_scale=1024.)
@@ -420,6 +422,15 @@ def train(config, resume=None, stop_after=None):
             final_report['checkpoint_step'] = selected_step
             (run_dir / 'final-context-evaluation.json').write_text(json.dumps(final_report, allow_nan=False) + '\n')
             tracking.report_contexts(final_report, selected_step, prefix='final_context')
+            if config.get('auxiliary_edges', False):
+                from .context_evaluation import document_edge_blocks
+                edge_report = evaluate_contexts(model, dataset,
+                    document_edge_blocks(index, config['window_size'], context_config.get('final_sample_pages', 8192)),
+                    [config['window_size']], device, batch_size=config['inference']['batch_size'])
+                edge_report.update(checkpoint_step=selected_step,
+                                   description='dev document prefixes/tails and interior negatives; no neighbouring document visible')
+                (run_dir / 'final-document-edges.json').write_text(json.dumps(edge_report, allow_nan=False) + '\n')
+                tracking.report_contexts(edge_report, selected_step, prefix='final_document_edges')
             if config.get('pagination') and config.get('pagination_robustness_evaluation', False):
                 missing_report = evaluate_contexts(
                     model, dataset, context_blocks(index, streams, context_config.get('final_sample_pages', 8192)),

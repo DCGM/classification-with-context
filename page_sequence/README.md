@@ -426,6 +426,43 @@ training state before publication. No automatic source-mismatch bypass is used.
 Checkpoint RNG is restored after ClearML initialization, which otherwise reseeds
 Python/NumPy/Torch and changes the resumed augmentation/dropout sequence.
 
+### Optional per-page document-edge supervision
+
+`auxiliary_edges: true` adds independent linear `page_start_head` and
+`page_end_head` classifiers on each contextual BERT vector. The existing
+previous/current-vector boundary head, its first-position mask, overlap merging,
+full-stream metrics and checkpoint-selection criterion are unchanged. Auxiliary
+probabilities are not inputs to that boundary head: both auxiliary losses instead
+backpropagate into the shared encoder. Default auxiliary loss coefficients are
+`page_start: 0.25` and `page_end: 0.25`; existing coefficients stay unchanged.
+
+Targets describe the first/last retained catalogue page of the bottom-level
+document. They are not crop boundaries and are not inferred from page types or
+page numbers. The native reader derives them from its existing document table,
+with no store rebuild or metadata queries per window. SQL/fallback readers use
+bounded document-bound queries. Unknown targets and padding are ignored. Known
+targets at both window endpoints, including singleton scans, remain supervised.
+This does not verify whether a source scan omitted physical pages outside the
+catalogue. Targets and document identities never become model input features.
+
+`edge_crops: {"start_probability": 0.1, "end_probability": 0.1}` optionally
+crops anchored/interesting windows at a visible catalogue beginning or ending,
+removing the neighbouring document on that side. All annotated pages in the
+original window must remain. If no eligible edge is visible, the window stays
+unchanged. Coverage-source windows are never cropped, so the coverage guarantee
+is preserved. These probabilities apply to non-coverage windows (40% of pretrain
+and 80% of fine-tune draws). Requested/applied/unavailable crops and actual
+window-first/last document-edge exposures are counted. The policy and sampling
+RNG are checkpointed; a changed policy fails resume validation.
+
+Existing context diagnostics gain optional auxiliary metrics over all labelled
+pages and over scan endpoints. The selected final checkpoint additionally gets
+`final-document-edges.json`: a bounded, deterministic dev-only panel of document
+prefixes, tails and interior negatives, without neighbouring documents. These
+diagnostics are logged under `final_document_edges` and do not select checkpoints.
+Portable MetaKat export drops the two training-only heads and their specification
+flag, preserving the existing inference artifact and boundary output contract.
+
 For concurrent runs, `worker_start_method: "forkserver"` starts workers from a
 separate CPU-only process with preloaded Torch, NumPy and dataset modules. This
 shares runtime memory without forking the CUDA-initialized trainer or copying
