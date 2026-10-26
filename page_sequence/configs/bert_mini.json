@@ -1,0 +1,33 @@
+{
+  "seed": 17,
+  "device": "cuda",
+  "deterministic": false,
+  "index": "/home/ikohut/tmp/page-sequence-data/index.sqlite",
+  "dev_manifest": "/home/ikohut/tmp/page-sequence-data/dev.jsonl",
+  "run_dir": "/home/ikohut/tmp/page-sequence-runs/bert-mini-pilot",
+  "features": {
+    "sources": {
+      "image": {"kind": "image", "dim": 768, "stores": {"public": "REPLACE/public/image/lmdb", "private": "REPLACE/private/image/lmdb"}},
+      "text": {"kind": "text", "dim": 768, "stores": {"public": "REPLACE/public/text/lmdb", "private": "REPLACE/private/text/lmdb"}},
+      "stats": {"kind": "stats", "dim": 3324, "stores": {"public": "REPLACE/public/stats/lmdb", "private": "REPLACE/private/stats/lmdb"}}
+    }
+  },
+  "backbone": {
+    "kind": "bert",
+    "pretrained": true,
+    "checkpoint": "google/bert_uncased_L-4_H-256_A-4",
+    "revision": "387825ce42dbb39b87911cdf8e383ee3b25184f8"
+  },
+  "fusion": "separate_mlp",
+  "window_size": 128,
+  "batch_size": 64,
+  "workers": 8,
+  "cpu_threads": 2,
+  "precision": "float32",
+  "clearml": {"enabled": true, "project": "classification-with-context", "name": "bert-mini-fp32-b64-w128"},
+  "pretrain_steps": 1000,
+  "finetune_steps": 250,
+  "validate_every": 100,
+  "optimizer": {"encoder_lr": 0.00003, "new_lr": 0.0003, "weight_decay": 0.01, "warmup_fraction": 0.05, "clip_grad": 1.0},
+  "inference": {"window_size": 128, "stride": 64, "merge": "center_logits", "edge_ramp": 32, "start_threshold": 0.5, "batch_size": 64}
+}

@@ -1,0 +1,459 @@
+"""Small PyTorch runner; data, models, losses and full-stream evaluation remain reusable."""
+import argparse
+from dataclasses import asdict
+import importlib.metadata
+import json
+import math
+import os
+from pathlib import Path
+import random
+import subprocess
+import sys
+import time
+
+import numpy as np
+import torch
+
+from .data import WindowDataset, collate_windows, to_device
+from .evaluation import Evaluator
+from .context_evaluation import context_blocks, evaluate_contexts
+from .features import FeaturePipeline
+from .index import PageIndex
+from .inference import InferenceConfig, predict_stream, tag_pages
+from .losses import LossWeights, task_losses
+from .loading import training_loader
+from .tracking import Tracking
+from .manifests import file_sha256, load_streams
+from .models import BertBackbone, PageBackbone, PageTagger, from_specification
+from .sampling import WindowSampler
+from .schema import PAGE_TYPES, PLACEMENTS, Page
+from .precision import autocast
+
+
+def make_dataset(index, features, config):
+    if config.get('training_store'):
+        from training_store.dataset import StoreDataset
+        dataset = StoreDataset(index, features, **config['training_store'])
+    else:
+        dataset = WindowDataset(index, features)
+    if config.get('pagination'):
+        from .pagination import PaginationDataset
+        dataset = PaginationDataset(dataset, **config['pagination'])
+    return dataset
+
+
+def evaluation_dataset(state, training_store=None):
+    """Relocate a published native store by identity, without consulting old LMDBs."""
+    config = dict(state['config'])
+    native = state['provenance'].get('training_store')
+    if training_store is not None:
+        if native is None:
+            raise ValueError('checkpoint was not trained with a native training store')
+        config['index'] = str(Path(training_store) / 'catalogue.sqlite')
+        config['training_store'] = {'path': str(training_store), 'allow_building': False}
+    elif native and (Path(config['training_store']['path']) / 'manifest.json').exists():
+        config['training_store'] = dict(config['training_store'], allow_building=False)
+    index = PageIndex(config['index'])
+    if index.fingerprint() != state['provenance']['index_sha256']:
+        raise ValueError('checkpoint/index mismatch')
+    features = FeaturePipeline.from_config(config['features'])
+    if features.state_dict() != state['features']:
+        raise ValueError('checkpoint/feature schema mismatch')
+    dataset = make_dataset(index, features, config)
+    if native and not config['training_store'].get('allow_building', False):
+        actual = dataset.source_provenance()
+        if any(actual[k] != native[k] for k in ('build_id', 'plan_sha256')):
+            raise ValueError('checkpoint/training-store identity mismatch')
+    elif features.source_provenance() != state['provenance']['vector_sources']:
+        raise ValueError('vector stores changed since training')
+    if config.get('pagination') and dataset.pagination_provenance() != state['provenance'].get('pagination'):
+        raise ValueError('pagination sidecar changed since training')
+    return config, dataset
+
+
+def seed_all(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def rng_state():
+    return {'python': random.getstate(), 'numpy': np.random.get_state(), 'torch': torch.get_rng_state(),
+            'cuda': torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []}
+
+
+def restore_rng(state):
+    random.setstate(state['python'])
+    np.random.set_state(state['numpy'])
+    torch.set_rng_state(state['torch'].cpu())
+    if state['cuda']:
+        torch.cuda.set_rng_state_all([s.cpu() for s in state['cuda']])
+
+
+def save_checkpoint(path, model, optimizer, sampler, step, best, config, provenance, feature_state, training_state=None):
+    path = Path(path)
+    temporary = path.with_suffix('.writing')
+    torch.save({'format': 1, 'specification': model.specification(), 'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(), 'sampler': sampler.state_dict(), 'step': step,
+                'best': best, 'rng': rng_state(), 'config': config, 'provenance': provenance,
+                'features': feature_state, 'training': training_state,
+                'grad_scaler': model.grad_scaler.state_dict() if hasattr(model, 'grad_scaler') else None,
+                'page_types': PAGE_TYPES, 'placements': PLACEMENTS}, temporary)
+    os.replace(temporary, path)
+
+
+def load_checkpoint(path, device='cpu'):
+    # Only load trusted, locally produced checkpoints: training RNG/optimizer state uses pickle.
+    state = torch.load(path, map_location='cpu', weights_only=False)
+    if state['format'] != 1 or tuple(state['page_types']) != PAGE_TYPES or tuple(state['placements']) != PLACEMENTS:
+        raise ValueError('checkpoint schema/label mismatch')
+    model = from_specification(state['specification'])
+    model.load_state_dict(state['model'], strict=True)
+    model.compute_precision = (state['config'].get('precision', 'float32')
+                               if torch.device(device).type == 'cuda' else 'float32')
+    return model.to(device), state
+
+
+def make_optimizer(model, config):
+    groups = {}
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad:
+            continue
+        encoder = name.startswith('backbone.')
+        decay = parameter.ndim >= 2 and not name.endswith('bias')
+        groups.setdefault((encoder, decay), []).append(parameter)
+    return torch.optim.AdamW([
+        {'params': params, 'lr': config['encoder_lr'] if encoder else config['new_lr'],
+         'weight_decay': config['weight_decay'] if decay else 0.}
+        for (encoder, decay), params in groups.items()])
+
+
+def evaluate_streams(model, dataset, streams, inference, device, predictions_dir=None):
+    evaluator = Evaluator(inference.start_threshold)
+    split = streams[0]['split']
+    documents = { (d.library, d.doc): d for d in dataset.index.documents(split)}
+    if predictions_dir is not None:
+        Path(predictions_dir).mkdir(parents=True, exist_ok=True)
+    start = time.perf_counter()
+    for i, stream in enumerate(streams):
+        result = predict_stream(model, dataset, stream['rows'], inference, device)
+        evaluator.add(stream['id'], dataset.index.pages(stream['rows']), result, documents,
+                      stream['censored_left'], stream['censored_right'])
+        if predictions_dir is not None:
+            # Filenames use ordinal positions, not untrusted manifest IDs or source paths.
+            np.savez_compressed(Path(predictions_dir) / f'{i:06d}.npz',
+                                stream_id=stream['id'], rows=np.asarray(stream['rows'], np.int64), **result)
+    report = evaluator.report()
+    report['seconds'] = time.perf_counter() - start
+    report['unique_pages_per_second'] = sum(s['pages'] for s in report['streams']) / report['seconds']
+    return report
+
+
+def provenance(index, manifest):
+    import hashlib
+    source = hashlib.sha256()
+    for p in sorted(Path(__file__).parent.glob('*.py')) + sorted(
+            (Path(__file__).parents[1] / 'training_store').glob('*.py')) + [
+            Path(__file__).parents[1] / 'embeddings/text/page_stats/page_stats.py']:
+        source.update(p.name.encode())
+        source.update(p.read_bytes())
+    rev = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, check=False)
+    return {'index_sha256': index.fingerprint(), 'manifest_sha256': file_sha256(manifest),
+            'code_sha256': source.hexdigest(), 'git_revision': rev.stdout.strip(),
+            'versions': {name: importlib.metadata.version(name) for name in ('torch', 'transformers', 'numpy')}}
+
+
+def train(config, resume=None, stop_after=None):
+    precision = config.get('precision', 'float32')
+    if precision not in ('float32', 'float16'):
+        raise ValueError('supported precision: float32 or float16')
+    if precision == 'float16' and not config['device'].startswith('cuda'):
+        raise ValueError('float16 training requires CUDA')
+    if (config['pretrain_steps'] < 0 or config['finetune_steps'] < 0
+            or config['pretrain_steps'] + config['finetune_steps'] < 1
+            or config['batch_size'] < 1 or config['validate_every'] < 1
+            or (stop_after is not None and stop_after < 1)):
+        raise ValueError('positive training budget/batch/validation interval required')
+    torch.set_num_threads(config.get('cpu_threads', 2))
+    seed_all(config['seed'])
+    device = config['device']
+    torch.use_deterministic_algorithms(config.get('deterministic', False))
+    index = PageIndex(config['index'])
+    features = FeaturePipeline.from_config(config['features'])
+    dataset = make_dataset(index, features, config)
+    streams = load_streams(config['dev_manifest'], index, 'dev')
+    inference = InferenceConfig(**config['inference'])
+    sampler = WindowSampler(index, config['window_size'], config['seed'],
+                            variable_lengths=config.get('variable_lengths', False))
+    context_config = config.get('context_evaluation', {})
+    diagnostic_blocks = (context_blocks(index, streams, context_config.get('sample_pages', 2048))
+                         if context_config.get('enabled', False) else [])
+    prov = provenance(index, config['dev_manifest'])
+    prov['vector_sources'] = features.source_provenance()
+    if config.get('training_store'):
+        if index.fingerprint() != dataset.plan['index_sha256']:
+            raise ValueError('training catalogue checksum mismatch')
+        prov['training_store'] = dataset.source_provenance()
+    if config.get('pagination'):
+        prov['pagination'] = dataset.pagination_provenance()
+    run_dir = Path(config['run_dir'])
+    run_dir.mkdir(parents=True, exist_ok=True)
+    if resume:
+        model, state = load_checkpoint(resume, device)
+        if state['config'] != config or state['provenance'] != prov or state['features'] != features.state_dict():
+            raise ValueError('resume config/data/code/environment/feature schema differs from checkpoint')
+        step, best = state['step'], state['best']
+    else:
+        if (run_dir / 'latest.pt').exists() or (run_dir / 'metrics.jsonl').exists():
+            raise FileExistsError('run already exists; resume explicitly or choose a new run_dir')
+        backbone_config = dict(config['backbone'])
+        kind = backbone_config.pop('kind', 'bert')
+        backbone = (BertBackbone.create(**backbone_config) if kind == 'bert' else
+                    PageBackbone(**backbone_config) if kind == 'page' else None)
+        if backbone is None:
+            raise ValueError('unknown backbone kind')
+        model = PageTagger(backbone, getattr(dataset, 'model_dims', features.dims), config.get('fusion', 'linear')).to(device)
+        step, best = 0, -1.
+    model.compute_precision = precision
+    scaler = torch.amp.GradScaler('cuda', enabled=precision == 'float16', init_scale=1024.)
+    model.grad_scaler = scaler
+    if resume and state.get('grad_scaler'):
+        scaler.load_state_dict(state['grad_scaler'])
+    optimizer = make_optimizer(model, config['optimizer'])
+    base_lrs = [g['lr'] for g in optimizer.param_groups]
+    if resume:
+        optimizer.load_state_dict(state['optimizer'])
+        sampler.load_state_dict(state['sampler'])
+        restore_rng(state['rng'])
+    (run_dir / 'config.json').write_text(json.dumps(config, indent=2) + '\n')
+    (run_dir / 'provenance.json').write_text(json.dumps(prov | {'model': model.specification(),
+        'features': features.state_dict(), 'parameters': sum(p.numel() for p in model.parameters()),
+        'trainable_parameters': sum(p.numel() for p in model.parameters() if p.requires_grad)}, indent=2) + '\n')
+    tracking = Tracking(config, prov, bool(resume))
+    total = config['pretrain_steps'] + config['finetune_steps']
+    limit = min(total, stop_after) if stop_after is not None else total
+    warmup = max(1, config['optimizer'].get('warmup_steps',
+                     math.ceil(total * config['optimizer']['warmup_fraction'])))
+    loss_weights = LossWeights(**config.get('loss_weights', {}))
+    progress = (state.get('training') if resume else None) or {
+        'stage': 'pretrain' if config['pretrain_steps'] else 'finetune',
+        'stage_step': 0, 'stage_best': -1., 'bad_validations': 0, 'finished': False}
+    if resume and state.get('training') is None:
+        progress['stage'] = 'pretrain' if step < config['pretrain_steps'] else 'finetune'
+        progress['stage_step'] = step if progress['stage'] == 'pretrain' else step - config['pretrain_steps']
+    loader, batches = training_loader(dataset, sampler, config)
+    model.train()
+    try:
+        while (step < limit or progress.get('pending_validation')) and not progress['finished']:
+            stage = progress['stage']
+            if sampler.stage != stage:
+                sampler.set_stage(stage)
+            stage_budget = config[stage + '_steps']
+            interval = config.get(stage + '_validate_every', config['validate_every'])
+            pending = progress.get('pending_validation')
+            count = 0 if pending else min(interval - progress['stage_step'] % interval,
+                        stage_budget - progress['stage_step'], limit - step)
+            batches.batches = count
+            # All prefetched draws in this finite segment are consumed before checkpoints,
+            # evaluation, early stopping or stage changes. No sampler snapshot per batch.
+            if pending:
+                record = pending
+            else:
+                record = None
+                iterator = iter(loader)
+                for _ in range(count):
+                    tick = time.perf_counter()
+                    raw_batch = next(iterator)
+                    batch = to_device(raw_batch, device,
+                                      feature_dtype=torch.float32 if precision == 'float32' else None)
+                    io_seconds = time.perf_counter() - tick
+                    for group, lr in zip(optimizer.param_groups, base_lrs):
+                        group['lr'] = lr * min((step + 1) / warmup, 1.)
+                    optimizer.zero_grad(set_to_none=True)
+                    with autocast(model, device):
+                        output = model(batch['features'], batch['attention_mask'])
+                    losses, denominators = task_losses(output, batch, loss_weights)
+                    if not torch.isfinite(losses['total']):
+                        raise FloatingPointError('nonfinite training loss')
+                    scaler.scale(losses['total']).backward()
+                    scaler.unscale_(optimizer)
+                    norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config['optimizer']['clip_grad'],
+                                                          error_if_nonfinite=precision == 'float32')
+                    scaler.step(optimizer)
+                    scaler.update()
+                    if not torch.isfinite(norm):
+                        progress['overflow_skips'] = progress.get('overflow_skips', 0) + 1
+                        print(json.dumps({'overflow_skipped': progress['overflow_skips'],
+                                          'step': step, 'scale': scaler.get_scale()}), flush=True)
+                        if scaler.get_scale() < 1 or progress['overflow_skips'] > 20:
+                            raise FloatingPointError('repeated FP16 gradient overflow')
+                        continue
+                    step += 1
+                    progress['stage_step'] += 1
+                    loss_values = {k: float(v.detach()) for k, v in losses.items()}
+                    elapsed = time.perf_counter() - tick
+                    record = {'step': step, 'stage': stage,
+                              'stage_step': progress['stage_step'],
+                              'loss': loss_values,
+                              'valid_weight': {k: float(v) for k, v in denominators.items()},
+                              'gradient_norm': float(norm), 'io_seconds': io_seconds,
+                              'storage_pages': raw_batch.get('storage_pages', {}),
+                              'loss_scale': scaler.get_scale(),
+                              'pages_per_second': int(raw_batch['attention_mask'].sum()) / elapsed,
+                              'sampler': dict(sampler.counters), 'coverage_epochs': sampler.epoch}
+                    with (run_dir / 'metrics.jsonl').open('a') as f:
+                        f.write(json.dumps(record, allow_nan=False) + '\n')
+                    if step % config.get('log_every', 25) == 0 or step == 1:
+                        print(json.dumps({k: record[k] for k in
+                            ('step', 'stage', 'loss', 'pages_per_second', 'coverage_epochs')}), flush=True)
+                        tracking.report(record)
+                # Force iterator exhaustion even with persistent workers, then checkpoint safely.
+                try:
+                    next(iterator)
+                    raise RuntimeError('loader exceeded segment budget')
+                except StopIteration:
+                    pass
+                if record is None or (progress['stage_step'] % interval and step < limit
+                                      and progress['stage_step'] < stage_budget):
+                    # Overflowed draws count as exposure, never as optimizer updates.
+                    # Finish the requested update segment before validation/checkpointing.
+                    continue
+                # Preserve model/optimizer/sampler before potentially failing evaluation.
+                # Resume evaluates this pending boundary before drawing any more windows.
+                progress['pending_validation'] = record
+                save_checkpoint(run_dir / 'latest.pt', model, optimizer, sampler, step, best,
+                                config, prov, features.state_dict(), progress)
+            report = evaluate_streams(model, dataset, streams, inference, device)
+            if diagnostic_blocks:
+                lengths = [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256)
+                           if n <= config['window_size']]
+                # Rotate the order if a slow machine exhausts the wall-time budget.
+                offset = (step // interval) % len(lengths)
+                lengths = lengths[offset:] + lengths[:offset]
+                report['contexts'] = evaluate_contexts(
+                    model, dataset, diagnostic_blocks, lengths, device,
+                    batch_size=config['inference']['batch_size'],
+                    seconds_budget=report['seconds'] * context_config.get('budget_fraction', .1))
+            score = report['curated_type']['weighted_f1']
+            if score is None:
+                raise ValueError('development streams contain no curated type targets')
+            progress.pop('pending_validation', None)
+            policy = config.get('stopping', {}).get(stage, {})
+            eligible = sampler.epoch >= policy.get('min_coverage_epochs', 0)
+            improved = score > best
+            stage_improved = eligible and score > progress['stage_best']
+            best = max(best, score)
+            if eligible:
+                progress['stage_best'] = max(progress['stage_best'], score)
+            progress['bad_validations'] = (0 if stage_improved or not eligible else
+                                           progress['bad_validations'] + 1)
+            record['dev'] = report
+            with (run_dir / 'validation.jsonl').open('a') as f:
+                f.write(json.dumps(record, allow_nan=False) + '\n')
+            print(json.dumps({'step': step, 'stage': stage,
+                              'dev_curated_weighted_f1': score,
+                              'dev_starts_f1': report.get('starts', {}).get('all', {}).get('f1'),
+                              'best': best}), flush=True)
+            tracking.report(record)
+            args = (model, optimizer, sampler, step, best, config, prov, features.state_dict(), progress)
+            if stage_improved:
+                save_checkpoint(run_dir / (stage + '_best.pt'), *args)
+            if improved:
+                save_checkpoint(run_dir / 'best.pt', *args)
+            plateau = ('patience' in policy and eligible and
+                       progress['bad_validations'] >= policy['patience'])
+            ended = progress['stage_step'] >= stage_budget or plateau
+            if ended:
+                reason = 'validation_plateau' if plateau else 'stage_budget'
+                print(json.dumps({'stage_finished': stage, 'step': step, 'reason': reason}), flush=True)
+                if stage == 'pretrain' and config['finetune_steps']:
+                    if not (run_dir / 'pretrain_best.pt').exists():
+                        raise RuntimeError('pretraining budget ended before any eligible validation; increase its budget')
+                    _, selected = load_checkpoint(run_dir / 'pretrain_best.pt', device)
+                    model.load_state_dict(selected['model'])
+                    optimizer.load_state_dict(selected['optimizer'])
+                    if selected.get('grad_scaler'):
+                        scaler.load_state_dict(selected['grad_scaler'])
+                    progress = {'stage': 'finetune', 'stage_step': 0, 'stage_best': -1.,
+                                'bad_validations': 0, 'finished': False}
+                    sampler.set_stage('finetune')
+                else:
+                    progress['finished'] = True
+            save_checkpoint(run_dir / 'latest.pt', model, optimizer, sampler, step, best,
+                            config, prov, features.state_dict(), progress)
+        if progress['finished'] and diagnostic_blocks:
+            selected_path = run_dir / ('finetune_best.pt' if config['finetune_steps'] else 'pretrain_best.pt')
+            selected = torch.load(selected_path, map_location='cpu', weights_only=False)
+            model.load_state_dict(selected['model'])
+            final_report = evaluate_contexts(
+                model, dataset, context_blocks(index, streams, context_config.get('final_sample_pages', 8192)),
+                [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256) if n <= config['window_size']],
+                device, batch_size=config['inference']['batch_size'])
+            final_report['checkpoint_step'] = selected['step']
+            (run_dir / 'final-context-evaluation.json').write_text(json.dumps(final_report, allow_nan=False) + '\n')
+            tracking.report_contexts(final_report, selected['step'], prefix='final_context')
+    finally:
+        if getattr(loader, '_iterator', None) is not None:
+            loader._iterator._shutdown_workers()
+        tracking.close(failed=sys.exc_info()[0] is not None)
+    return run_dir / 'latest.pt'
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest='command', required=True)
+    tr = sub.add_parser('train')
+    tr.add_argument('--config', required=True)
+    tr.add_argument('--resume')
+    tr.add_argument('--stop-after', type=int, help='Stop at this absolute update, saving resumable state')
+    ev = sub.add_parser('evaluate')
+    ev.add_argument('--checkpoint', required=True)
+    ev.add_argument('--manifest', required=True)
+    ev.add_argument('--split', choices=['dev', 'test'], required=True)
+    ev.add_argument('--output', required=True)
+    ev.add_argument('--predictions-dir')
+    ev.add_argument('--training-store', help='Relocated, completed native store; identity and catalogue are verified')
+    ev.add_argument('--inference-config', help='Optional JSON InferenceConfig for development merge comparisons')
+    ev.add_argument('--device', default='cpu')
+    pred = sub.add_parser('predict')
+    pred.add_argument('--checkpoint', required=True)
+    pred.add_argument('--pages', required=True, help='Scan-ordered JSONL: library, page, path')
+    pred.add_argument('--output', required=True, help='Output .npz with probabilities/labels/segments')
+    pred.add_argument('--sources', help='Optional JSON mapping image/text/stats to new vector-store specs')
+    pred.add_argument('--device', default='cpu')
+    args = parser.parse_args()
+    if args.command == 'train':
+        train(json.loads(Path(args.config).read_text()), args.resume, args.stop_after)
+    elif args.command == 'evaluate':
+        model, state = load_checkpoint(args.checkpoint, args.device)
+        config, dataset = evaluation_dataset(state, args.training_store)
+        settings = json.loads(Path(args.inference_config).read_text()) if args.inference_config else config['inference']
+        inference = InferenceConfig(**settings)
+        streams = load_streams(args.manifest, dataset.index, args.split)
+        report = evaluate_streams(model, dataset, streams, inference,
+                                 args.device, args.predictions_dir)
+        report['inference'] = asdict(inference)
+        report['manifest_sha256'] = file_sha256(args.manifest)
+        Path(args.output).write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
+    else:
+        model, state = load_checkpoint(args.checkpoint, args.device)
+        settings = dict(state['config']['features'])
+        if args.sources:
+            settings['sources'] = json.loads(Path(args.sources).read_text())
+        features = FeaturePipeline.from_config(settings)
+        if features.state_dict() != state['features']:
+            raise ValueError('checkpoint/feature schema mismatch')
+        pages = []
+        with open(args.pages) as f:
+            for i, line in enumerate(f):
+                p = json.loads(line)
+                pages.append(Page(p['library'], '', p['page'], i, path=p.get('path', ''), pagenum=p.get('pagenum', '')))
+        result = tag_pages(model, features, pages, InferenceConfig(**state['config']['inference']), args.device,
+                           pagination_cap=state['config'].get('pagination', {}).get('cap', 10000))
+        np.savez_compressed(args.output, page_types=np.array(PAGE_TYPES), placements=np.array(PLACEMENTS), **result)
+
+
+if __name__ == '__main__':
+    main()
