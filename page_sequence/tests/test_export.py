@@ -31,3 +31,23 @@ def test_export_rejects_wrong_label_order_without_overwriting_destination(tmp_pa
     with pytest.raises(ValueError, match='schema/label'):
         export_checkpoint(source, output)
     assert output.read_bytes() == b'previous export'
+
+
+def test_export_pagination_contract_without_training_paths(tmp_path):
+    from page_sequence.pagination import POLICY
+    source, output = tmp_path / 'training.pt', tmp_path / 'context.pt'
+    state = {'format': 1, 'page_types': PAGE_TYPES, 'placements': PLACEMENTS,
+             'specification': {'dims': {'image': 768, 'pagination': 5}}, 'features': {},
+             'model': {'weight': torch.ones(2)},
+             'config': {'pagination': {'path': '/private/training/pagination.npy', 'cap': 20000}},
+             'provenance': {'pagination': {'policy': POLICY, 'path': '/private/training/pagination.npy'}}}
+    torch.save(state, source)
+    export_checkpoint(source, output)
+    exported = torch.load(output, weights_only=True)
+    assert exported['format'] == 'metakat_context_v2'
+    assert exported['pagination'] == {'policy': POLICY, 'cap': 20000}
+    assert 'private' not in repr(exported)
+    state['provenance']['pagination']['policy'] = 'other'
+    torch.save(state, source)
+    with pytest.raises(ValueError, match='pagination'):
+        export_checkpoint(source, output)

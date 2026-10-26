@@ -459,8 +459,11 @@ and checkpoints retain their original three-modality behavior.
 
 For arbitrary-scan inference, `Page.pagenum` / the predict CLI's JSONL `pagenum` is optional.
 The same parser and normalizer apply; missing numbers require no imputation. The portable
-MetaKat `context_v1` export rejects this new architecture until its consumer supports pagination;
-use this repository's `predict`/`tag_pages` API for these checkpoints.
+Pagination-aware MetaKat exports use `metakat_context_v2`, carrying only the candidate
+policy and fixed cap alongside the model. The updated consumer reads existing
+`MetakatPage.pageNumber.text` and applies the same parser and FP16 encoding. Older
+three-modality exports remain `metakat_context_v1`. Neither artifact needs the sidecar
+or DB dump at inference; `predict`/`tag_pages` also support caller-provided numbers.
 
 For robustness training, set `pagination_dropout: {"window_probability": 0.2,
 "page_probability": 0.2}`. In both pretraining and fine-tuning, 20% of sampled windows
