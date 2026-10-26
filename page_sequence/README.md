@@ -423,6 +423,8 @@ the audited pre-fix source digest. It backs up original checkpoints, verifies th
 precise allowed source changes, compacts diagnostic pair histories, updates source
 provenance with a recorded migration, and checks content hashes of all protected
 training state before publication. No automatic source-mismatch bypass is used.
+Checkpoint RNG is restored after ClearML initialization, which otherwise reseeds
+Python/NumPy/Torch and changes the resumed augmentation/dropout sequence.
 
 For concurrent runs, `worker_start_method: "forkserver"` starts workers from a
 separate CPU-only process with preloaded Torch, NumPy and dataset modules. This

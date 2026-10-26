@@ -235,16 +235,21 @@ def train(config, resume=None, stop_after=None):
     optimizer = make_optimizer(model, config['optimizer'])
     base_lrs = [g['lr'] for g in optimizer.param_groups]
     saved_training = state.get('training') if resume else None
+    checkpoint_rng = state['rng'] if resume else None
     if resume:
         optimizer.load_state_dict(state['optimizer'])
         sampler.load_state_dict(state['sampler'])
-        restore_rng(state['rng'])
         del state  # do not retain legacy diagnostic histories or CPU optimizer tensors
     (run_dir / 'config.json').write_text(json.dumps(config, indent=2) + '\n')
     (run_dir / 'provenance.json').write_text(json.dumps(prov | {'model': model.specification(),
         'features': features.state_dict(), 'parameters': sum(p.numel() for p in model.parameters()),
         'trainable_parameters': sum(p.numel() for p in model.parameters() if p.requires_grad)}, indent=2) + '\n')
     tracking = Tracking(config, prov, bool(resume))
+    # ClearML Task.init calls make_deterministic, even when framework auto-connect
+    # is disabled. Restore after SDK initialization so resumed dropout matches.
+    if resume:
+        restore_rng(checkpoint_rng)
+        del checkpoint_rng
     total = config['pretrain_steps'] + config['finetune_steps']
     limit = min(total, stop_after) if stop_after is not None else total
     warmup = max(1, config['optimizer'].get('warmup_steps',
