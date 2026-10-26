@@ -28,6 +28,7 @@ from .models import BertBackbone, PageBackbone, PageTagger, from_specification
 from .sampling import WindowSampler
 from .schema import PAGE_TYPES, PLACEMENTS, Page
 from .precision import autocast
+from .augmentation import pagination_dropout
 
 
 def make_dataset(index, features, config):
@@ -166,6 +167,11 @@ def provenance(index, manifest):
 
 
 def train(config, resume=None, stop_after=None):
+    dropout = config.get('pagination_dropout', {})
+    # Validate before opening large stores or creating a tracking task.
+    pagination_dropout({'pagination': torch.zeros(0, 0, 5)}, **dropout)
+    if any(dropout.values()) and not config.get('pagination'):
+        raise ValueError('pagination dropout requires pagination configuration')
     precision = config.get('precision', 'float32')
     if precision not in ('float32', 'float16'):
         raise ValueError('supported precision: float32 or float16')
@@ -272,8 +278,9 @@ def train(config, resume=None, stop_after=None):
                     for group, lr in zip(optimizer.param_groups, base_lrs):
                         group['lr'] = lr * min((step + 1) / warmup, 1.)
                     optimizer.zero_grad(set_to_none=True)
+                    augmented = pagination_dropout(batch['features'], **dropout)
                     with autocast(model, device):
-                        output = model(batch['features'], batch['attention_mask'])
+                        output = model(augmented, batch['attention_mask'])
                     losses, denominators = task_losses(output, batch, loss_weights)
                     if not torch.isfinite(losses['total']):
                         raise FloatingPointError('nonfinite training loss')
@@ -394,6 +401,15 @@ def train(config, resume=None, stop_after=None):
             final_report['checkpoint_step'] = selected['step']
             (run_dir / 'final-context-evaluation.json').write_text(json.dumps(final_report, allow_nan=False) + '\n')
             tracking.report_contexts(final_report, selected['step'], prefix='final_context')
+            if config.get('pagination') and config.get('pagination_robustness_evaluation', False):
+                missing_report = evaluate_contexts(
+                    model, dataset, context_blocks(index, streams, context_config.get('final_sample_pages', 8192)),
+                    [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256) if n <= config['window_size']],
+                    device, batch_size=config['inference']['batch_size'], omit_pagination=True)
+                missing_report['checkpoint_step'] = selected['step']
+                (run_dir / 'final-context-without-pagination.json').write_text(
+                    json.dumps(missing_report, allow_nan=False) + '\n')
+                tracking.report_contexts(missing_report, selected['step'], prefix='final_context_without_pagination')
     finally:
         if getattr(loader, '_iterator', None) is not None:
             loader._iterator._shutdown_workers()

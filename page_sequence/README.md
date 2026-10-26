@@ -461,3 +461,19 @@ For arbitrary-scan inference, `Page.pagenum` / the predict CLI's JSONL `pagenum`
 The same parser and normalizer apply; missing numbers require no imputation. The portable
 MetaKat `context_v1` export rejects this new architecture until its consumer supports pagination;
 use this repository's `predict`/`tag_pages` API for these checkpoints.
+
+For robustness training, set `pagination_dropout: {"window_probability": 0.2,
+"page_probability": 0.2}`. In both pretraining and fine-tuning, 20% of sampled windows
+lose all pagination, and each page in the remaining windows independently loses it
+with probability 20%. Thus 64% of originally available page signals remain on average.
+All five components, including availability, become zero; retained values are never
+rescaled. Other modalities and all task targets remain intact. This augmentation runs
+only in the training loop, using the checkpointed Torch RNG. Default probabilities are
+zero; evaluation and inference use every supplied candidate.
+
+Set `pagination_robustness_evaluation: true` alongside enabled context evaluation to
+evaluate the selected final checkpoint a second time on the same bounded development
+panel with all pagination removed. Results go to `final-context-without-pagination.json`
+and ClearML `final_context_without_pagination`, alongside the normal final diagnostics.
+This adds a final diagnostic pass, without adding work to recurring validation or
+changing checkpoint selection.

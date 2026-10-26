@@ -43,7 +43,8 @@ def context_blocks(index, streams, sample_pages=2048, block_size=256, seed=917):
 
 
 @torch.inference_mode()
-def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=64, seconds_budget=None):
+def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=64, seconds_budget=None,
+                      omit_pagination=False):
     """Batch independent scans at each length; stop between batches at the budget.
 
     A single in-flight batch may overrun the deadline. Partial levels explicitly
@@ -61,6 +62,13 @@ def evaluate_contexts(model, dataset, blocks, lengths, device='cpu', batch_size=
     # would spend the diagnostic budget on storage and repeated record setup.
     examples = ([dataset[Window(block)] for block in blocks]
                 if time.perf_counter() < deadline else [])
+    if omit_pagination:
+        for example in examples:
+            if 'pagination' not in example['features']:
+                raise ValueError('pagination ablation requires pagination features')
+            example['features'] = dict(example['features'],
+                                       pagination=np.zeros_like(example['features']['pagination']))
+        report['pagination'] = 'omitted'
     was_training = model.training
     model.eval()
     try:
