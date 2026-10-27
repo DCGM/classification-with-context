@@ -1,5 +1,57 @@
 # Page-type checkpoint and inference-context comparison
 
+## Five-bit scan inputs: interim r15 comparison
+
+Measured on 2026-10-27 while both r15 training jobs continued. A frozen copy of
+the 256 run's best checkpoint at comparison start was used: step 15,000,
+training-validation curated weighted F1 91.76896%. This is an interim checkpoint,
+not the eventual final selection. Its SHA256 is
+`1d9c5910580d3f4872228bed0aad04b142d04d4430ce728d42579b49875f92a8`.
+
+The paired panel is unchanged: 431,396 pages, 1,979 complete development documents,
+3,758 human-labelled pages. Both modes use window 256, stride 128, edge ramp 64,
+centre-weighted logits, CUDA FP16 and batch 16, without augmentation. Each isolated
+document receives scan-start/end input flags; continuous mode receives these only
+at the two ends of the concatenated stream. The three document-metadata bits remain
+zero in both modes, matching training. Long documents use overlapping windows.
+
+| Mode | Curated weighted F1 | Accuracy | Macro F1 | Semantic front/back errors |
+|---|---:|---:|---:|---:|
+| Per document | 92.7300% | 92.8153% | 71.6068% | 1 / 1,353 |
+| Continuous | 91.7191% | 91.8042% | 71.4550% | 8 / 1,353 |
+
+Per-document inference gains 1.0109 percentage points in weighted F1 and makes
+38 fewer curated errors: 74 continuous-mode errors are corrected, while 36
+previously correct predictions become wrong. Another 18 pages change between
+incorrect classes. Across all pages, 9,053 decisions change.
+
+| Disjoint region | Curated pages | Per-document errors | Continuous errors |
+|---|---:|---:|---:|
+| Beginning | 1,293 | 93 | 111 |
+| Ending | 1,990 | 117 | 143 |
+| Interior | 475 | 60 | 54 |
+
+Regions use the first/last `min(16, floor(document_length/2))` pages. The gain
+occurs at both document edges, with a small interior regression. For documents
+of at most 256 pages, F1 improves from 91.6755% to 93.0893%; for longer documents
+it changes from 91.8700% to 91.8027%, with unchanged accuracy. Per-document
+front-as-back errors are zero; back-as-front errors are one, versus one and seven
+continuously. These limited counts do not currently justify a new consistency loss.
+
+This reverses the older r10 result below and supports isolated-document inference
+when document boundaries are supplied. It does not isolate the effect of the new
+input flags from the other training changes, nor prove that every class improves.
+The same fixed development panel and stream order are used; no test data were opened.
+
+Artifacts, including checkpoint snapshot, aligned probabilities, region counts and
+the report, are under
+`/home/ikohut/tmp/page-type-context-comparison-w256-r15-check/`.
+Reproduce using the command below with that directory's `best-snapshot.pt`, a new
+output directory, and `--batch-size 16`; omit `--training-store` to retain the
+checkpoint's SSD store. Existing five-bit inference and comparison tests: 7 passed.
+
+## Historical r10 comparison
+
 Measured on 2026-10-27. Select by human-labelled development page-type weighted F1;
 boundary/side performance is not part of this decision. The held-out test set was not opened.
 
