@@ -64,6 +64,7 @@ class Window:
     source: str = 'fixed'
     scan_start: bool = False
     scan_end: bool = False
+    document_metadata: bool = False
 
 
 def join_stratum(a: Document, b: Document):

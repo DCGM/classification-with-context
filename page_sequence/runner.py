@@ -139,13 +139,19 @@ def make_optimizer(model, config):
         for (encoder, decay), params in groups.items()])
 
 
-def evaluate_streams(model, dataset, streams, inference, device, predictions_dir=None):
+def evaluate_streams(model, dataset, streams, inference, device, predictions_dir=None,
+                     provide_document_metadata=False):
     evaluator = Evaluator(inference.start_threshold)
     if predictions_dir is not None:
         Path(predictions_dir).mkdir(parents=True, exist_ok=True)
     start = time.perf_counter()
     for i, stream in enumerate(streams):
-        result = predict_stream(model, dataset, stream['rows'], inference, device)
+        metadata = {}
+        if provide_document_metadata:
+            from .data import page_edge_targets
+            targets = page_edge_targets(dataset.index, stream['rows'])
+            metadata = dict(document_starts=targets['page_start'], document_ends=targets['page_end'])
+        result = predict_stream(model, dataset, stream['rows'], inference, device, **metadata)
         documents = {(d.library, d.doc): d for d in dataset.index.documents_for_rows(stream['rows'])}
         evaluator.add(stream['id'], dataset.index.pages(stream['rows']), result, documents,
                       stream['censored_left'], stream['censored_right'])
@@ -216,6 +222,8 @@ def train(config, resume=None, stop_after=None):
                 and scan_settings['border_tokens'] != bool(config.get('scan_borders'))):
             raise ValueError('scan tiling representation differs from model configuration')
         scan_settings['border_tokens'] = bool(config.get('scan_borders'))
+    if scan_settings.get('metadata_probability', 0) and not config.get('boundary_features'):
+        raise ValueError('document metadata requires five-bit boundary features')
     sampler = sampler_class(index, config['window_size'], config['seed'],
                             variable_lengths=config.get('variable_lengths', False),
                             edge_crops=config.get('edge_crops'),
@@ -379,6 +387,9 @@ def train(config, resume=None, stop_after=None):
             if host_cache:
                 print(json.dumps({'step': step, 'validation_host_cache': host_cache}), flush=True)
             report = evaluate_streams(model, dataset, streams, inference, device)
+            if config.get('document_metadata_evaluation'):
+                report['metadata_provided'] = evaluate_streams(
+                    model, dataset, streams, inference, device, provide_document_metadata=True)
             if diagnostic_blocks:
                 lengths = [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
                            if n <= config['window_size']]
@@ -445,6 +456,16 @@ def train(config, resume=None, stop_after=None):
             model.load_state_dict(selected['model'])
             selected_step = selected['step']
             del selected
+            if config.get('document_metadata_evaluation'):
+                from .compare_page_context import compare
+                metadata_dir = run_dir / f'final-provided-context-step{selected_step}'
+                if not (metadata_dir / 'report.json').exists():
+                    if metadata_dir.exists():
+                        metadata_dir.rename(run_dir / (metadata_dir.name + f'-incomplete-{time.time_ns()}'))
+                    metadata_report = compare(model, dataset, streams, inference, metadata_dir,
+                                              device, provide_document_metadata=True)
+                    metadata_report['checkpoint_step'] = selected_step
+                    (metadata_dir / 'report.json').write_text(json.dumps(metadata_report, indent=2) + '\n')
             if config.get('final_scan_context_comparison'):
                 from .compare_page_context import compare
                 comparison_dir = run_dir / f'final-scan-context-step{selected_step}'

@@ -67,7 +67,7 @@ def paired_scores(labels, gold, isolated, continuous):
     return result
 
 
-def compare(model, dataset, streams, inference, output, device='cpu'):
+def compare(model, dataset, streams, inference, output, device='cpu', provide_document_metadata=False):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     rows, spans, labels, gold = page_panel(dataset.index, streams)
@@ -77,6 +77,11 @@ def compare(model, dataset, streams, inference, output, device='cpu'):
     report = {'pages': len(rows), 'documents': len(spans), 'inference': asdict(inference),
               'continuous_order': 'source manifest streams concatenated in their recorded order',
               'modes': {}}
+    report['document_metadata_provided'] = provide_document_metadata
+    starts = np.zeros(len(rows), np.float32)
+    ends = np.zeros(len(rows), np.float32)
+    for lo, hi in spans:
+        starts[lo], ends[hi - 1] = 1, 1
     predictions = {}
     for mode, runs in (('per_document', spans), ('continuous', [(0, len(rows))])):
         start = time.perf_counter()
@@ -84,7 +89,9 @@ def compare(model, dataset, streams, inference, output, device='cpu'):
                                                   dtype=np.float32, shape=(len(rows), len(PAGE_TYPES)))
         processed = windows = full = 0
         for j, (lo, hi) in enumerate(runs):
-            result = predict_stream(model, dataset, rows[lo:hi], inference, device)
+            metadata = (dict(document_starts=starts[lo:hi], document_ends=ends[lo:hi])
+                        if provide_document_metadata else {})
+            result = predict_stream(model, dataset, rows[lo:hi], inference, device, **metadata)
             probabilities[lo:hi] = result['type_probs']
             processed += result['processed_pages']
             border_tokens = getattr(model, 'scan_borders', False)

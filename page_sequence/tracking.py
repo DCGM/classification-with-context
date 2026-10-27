@@ -57,6 +57,16 @@ class Tracking:
             self.logger.report_scalar('training', 'loss_scale', record['loss_scale'], step)
         if 'dev' in record:
             report = record['dev']
+            provided = report.get('metadata_provided')
+            if provided:
+                for group in ('curated_type', 'weak_type_agreement', 'placement_db_agreement'):
+                    for metric in ('accuracy', 'weighted_f1', 'macro_f1'):
+                        value = provided[group].get(metric)
+                        if value is not None:
+                            self.logger.report_scalar('dev_metadata_provided/' + group, metric, value, step)
+                for metric, value in provided['starts']['all'].items():
+                    if value is not None:
+                        self.logger.report_scalar('dev_metadata_provided/starts', metric, value, step)
             for group in ('curated_type', 'weak_type_agreement', 'placement_db_agreement'):
                 for name in ('accuracy', 'weighted_precision', 'weighted_recall', 'weighted_f1', 'macro_f1'):
                     if report[group].get(name) is not None:

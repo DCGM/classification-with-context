@@ -81,3 +81,67 @@ def test_sampler_features_no_target_leak_dropout_gradients_and_inference(tmp_pat
     # Public inference without any catalogue also creates the five bits correctly.
     public = tag_pages(restored, features, index.pages(rows), InferenceConfig(window_size=12, stride=6))
     np.testing.assert_allclose(result['type_probs'], public['type_probs'], atol=1e-7)
+
+
+def test_metadata_selected_per_complete_scan_and_restored_on_resume(tmp_path):
+    from dataclasses import replace
+    config = prepare_fixture(tmp_path, steps=4)
+    index = PageIndex(config['index'])
+    features = FeaturePipeline.from_config(config['features'])
+    dataset = BoundaryFeatureDataset(WindowDataset(index, features))
+    settings = {'border_tokens': False, 'metadata_probability': .5}
+    sampler = ScanBatchSampler(index, 6, scan_batches=settings)
+    docs = index.documents('fit')[:3]
+    decisions = []
+    for _ in range(80):
+        tiles = sampler._tiles(docs, 'test')
+        decisions.append(tiles[0].document_metadata)
+        assert len({w.document_metadata for w in tiles}) == 1
+        for w in tiles:
+            e = dataset[w]
+            bits = e['features']['boundaries']
+            assert (bits[:, 2] == w.document_metadata).all()
+            if w.document_metadata:
+                np.testing.assert_array_equal(bits[:, 3], e['page_start'])
+                np.testing.assert_array_equal(bits[:, 4], e['page_end'])
+            else:
+                assert not bits[:, 2:].any()
+            # Supplying metadata does not alter any target or the scan flags.
+            other = dataset[replace(w, document_metadata=not w.document_metadata)]
+            for name in ('type', 'gold', 'starts', 'page_start', 'page_end', 'pair_mask'):
+                np.testing.assert_array_equal(e[name], other[name])
+            np.testing.assert_array_equal(bits[:, :2], other['features']['boundaries'][:, :2])
+    assert 20 < sum(decisions) < 60
+    for _ in range(8): sampler.draw()
+    restored = ScanBatchSampler(index, 6, scan_batches=settings)
+    restored.load_state_dict(sampler.state_dict())
+    assert [sampler.draw() for _ in range(30)] == [restored.draw() for _ in range(30)]
+
+
+def test_inference_supplied_metadata_is_complete_and_preserved_across_tiles(tmp_path):
+    config = prepare_fixture(tmp_path, steps=4)
+    index = PageIndex(config['index'])
+    features = FeaturePipeline.from_config(config['features'])
+    dataset = BoundaryFeatureDataset(WindowDataset(index, features))
+    docs = index.documents('fit')[:2]
+    rows = tuple(r for d in docs for r in range(d.first, d.first+d.length))
+    starts = np.array([any(r == d.first for d in docs) for r in rows], np.float32)
+    ends = np.array([any(r == d.first+d.length-1 for d in docs) for r in rows], np.float32)
+    class Model(torch.nn.Module):
+        num_types = 39
+        boundary_features = True
+        def forward(self, f, mask):
+            b,n = mask.shape
+            assert (f['boundaries'][..., 2][mask] == 1).all()
+            # Emit supplied starts as pair logits to check overlap alignment.
+            pair = mask.clone(); pair[:, 0] = False
+            return {'type_logits': torch.zeros(b,n,39), 'placement_logits': torch.zeros(b,n,3),
+                    'starts_document_logits': (f['boundaries'][..., 3] * 2-1)*10,
+                    'pair_mask': pair}
+    result = predict_stream(Model(), dataset, rows, InferenceConfig(window_size=6,stride=3),
+                            document_starts=starts, document_ends=ends)
+    np.testing.assert_array_equal(result['starts'][1:], starts[1:].astype(bool))
+    with pytest.raises(ValueError):
+        predict_stream(Model(), dataset, rows, document_starts=starts)
+    with pytest.raises(ValueError):
+        predict_stream(Model(), dataset, rows, document_starts=starts[:-1],document_ends=ends)

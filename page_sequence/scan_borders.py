@@ -62,13 +62,16 @@ class ScanBorderDataset:
 
 
 class BoundaryFeatureDataset(ScanBorderDataset):
-    """First-stage experiment: scan endpoints known, archive metadata absent."""
+    """Scan endpoints plus optional complete archive metadata, selected per scan."""
     def __init__(self, dataset):
         super().__init__(dataset)
         self.model_dims = dict(getattr(dataset, 'model_dims', dataset.features.dims), boundaries=5)
 
     def __getitem__(self, window):
         result = self.dataset[window]
-        values = encode_boundary_features(len(window.rows), window.scan_start, window.scan_end)
+        metadata = {}
+        if window.document_metadata:
+            metadata = dict(document_starts=result['page_start'], document_ends=result['page_end'])
+        values = encode_boundary_features(len(window.rows), window.scan_start, window.scan_end, **metadata)
         result['features'] = dict(result['features'], boundaries=values)
         return result

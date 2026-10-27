@@ -118,7 +118,8 @@ class StreamMerger:
 
 
 @torch.inference_mode()
-def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu'):
+def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu',
+                   document_starts=None, document_ends=None):
     borders = getattr(model, 'scan_borders', False)
     boundary_features = getattr(model, 'boundary_features', False)
     if borders or boundary_features:
@@ -126,6 +127,13 @@ def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu')
         tiles = scan_windows(len(rows), config.window_size, config.stride, border_tokens=borders)
     else:
         tiles = [(s, e, False, False) for s, e in window_spans(len(rows), config.window_size, config.stride)]
+    supplied = None
+    if document_starts is not None or document_ends is not None:
+        if not boundary_features:
+            raise ValueError('document metadata requires five-bit boundary features')
+        from .scan_borders import encode_boundary_features
+        supplied = encode_boundary_features(len(rows), document_starts=document_starts,
+                                            document_ends=document_ends)
     spans = [(s, e) for s, e, _, _ in tiles]
     merger = StreamMerger(len(rows), model.num_types, config)
     was_training = model.training
@@ -144,6 +152,10 @@ def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu')
                     from .scan_borders import encode_boundary_features
                     values = encode_boundary_features(e - s, begin, end)
                     example['features'] = dict(example['features'], boundaries=values)
+                if supplied is not None:
+                    values = supplied[s:e].copy()
+                    values[0, 0], values[-1, 1] = begin, end
+                    example['features'] = dict(example['features'], boundaries=values)
                 examples.append(example)
             batch = to_device(collate_windows(examples), device,
                               feature_dtype=torch.float32 if getattr(model, 'compute_precision', 'float32')
@@ -159,7 +171,8 @@ def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu')
     return result
 
 
-def tag_pages(model, features, pages, config=InferenceConfig(), device='cpu', pagination_cap=10000):
+def tag_pages(model, features, pages, config=InferenceConfig(), device='cpu', pagination_cap=10000,
+              document_starts=None, document_ends=None):
     """Public inference API: caller's scan order, no document index/known boundaries required.
 
     Pages need library/page vector keys and image paths; doc can be an empty string.
@@ -169,6 +182,7 @@ def tag_pages(model, features, pages, config=InferenceConfig(), device='cpu', pa
         from .pagination import PaginationFeatures
         features = PaginationFeatures(features, pagination_cap)
     dataset = PageListDataset(pages, features)
-    result = predict_stream(model, dataset, tuple(range(len(pages))), config, device)
+    result = predict_stream(model, dataset, tuple(range(len(pages))), config, device,
+                            document_starts=document_starts, document_ends=document_ends)
     result['page_keys'] = np.array([p.key for p in pages])
     return result

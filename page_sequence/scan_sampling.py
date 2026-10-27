@@ -15,7 +15,7 @@ class ScanBatchSampler(WindowSampler):
         if self.window_size < 3 or any(self.edge_crops.values()):
             raise ValueError('scan borders require >=3 positions and replace legacy edge crops')
         settings = dict(scan_batches or {})
-        if set(settings) - {'full_scan_multiplier', 'stride', 'border_tokens'}:
+        if set(settings) - {'full_scan_multiplier', 'stride', 'border_tokens', 'metadata_probability'}:
             raise ValueError('unknown scan batch setting')
         self.scan_batches = dict(full_scan_multiplier=settings.get('full_scan_multiplier', 4),
                                  stride=settings.get('stride', self.window_size // 2),
@@ -25,6 +25,13 @@ class ScanBatchSampler(WindowSampler):
                 or not isinstance(self.scan_batches['border_tokens'], bool)
                 or not 1 <= self.scan_batches['stride'] < self.window_size):
             raise ValueError('invalid scan batch multiplier/stride')
+        probability = settings.get('metadata_probability', 0.)
+        if not np.isfinite(probability) or not 0 <= probability <= 1:
+            raise ValueError('metadata_probability must be finite and in [0, 1]')
+        if probability:
+            if self.scan_batches['border_tokens']:
+                raise ValueError('document metadata requires five-bit features')
+            self.scan_batches['metadata_probability'] = probability
         self.pending_coverage_windows = deque()
 
     def _tiles(self, docs, source):
@@ -34,7 +41,10 @@ class ScanBatchSampler(WindowSampler):
         self.counters['constructed_scans:' + source] += 1
         self.counters['constructed_scan_pages:' + source] += len(rows)
         self.counters['constructed_scan_documents:' + source] += len(docs)
-        return [Window(rows[lo:hi], source, begin, end) for lo, hi, begin, end in tiles]
+        probability = self.scan_batches.get('metadata_probability', 0.)
+        provided = bool(probability and self.rng.random() < probability)
+        self.counters['metadata_scans:' + ('provided' if provided else 'absent')] += 1
+        return [Window(rows[lo:hi], source, begin, end, provided) for lo, hi, begin, end in tiles]
 
     def _coverage(self):
         if not self.pending_coverage_windows:
@@ -96,7 +106,7 @@ class ScanBatchSampler(WindowSampler):
         window = (self._coverage() if source == 'coverage' else self._anchor('annotated')
                   if source == 'annotated' else self._anchor('interesting')
                   if self.rng.random() < 2 / 3 else self._boundary())
-        window = Window(window.rows, source, window.scan_start, window.scan_end)
+        window = Window(window.rows, source, window.scan_start, window.scan_end, window.document_metadata)
         pages, ids = self.index.pages_with_documents(window.rows)
         first_doc, last_doc = self.by_id[ids[0]], self.by_id[ids[-1]]
         if window.scan_start and window.rows[0] != first_doc.first:
@@ -106,6 +116,7 @@ class ScanBatchSampler(WindowSampler):
         tokens = len(window.rows) + (window.scan_start + window.scan_end) * self.scan_batches['border_tokens']
         if tokens > self.window_size or (tokens < self.window_size and not (window.scan_start and window.scan_end)):
             raise RuntimeError('only complete scans may produce short padded windows')
+        self.counters['metadata_windows:' + ('provided' if window.document_metadata else 'absent')] += 1
         self.counters['source:' + source] += 1
         self.counters['processed_pages'] += len(pages)
         self.counters['actual_length:' + str(len(pages))] += 1

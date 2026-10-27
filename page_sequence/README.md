@@ -303,10 +303,24 @@ short padded windows. Example configuration:
 }
 ```
 
-The input encoder also supports complete external document-start/end arrays:
-their metadata-provided bit is one on every page. This first experiment does not
-train that mode; it is reserved for a later scan-level supplied/absent-metadata
-experiment. `scan_borders` (legacy tokens) and `boundary_features` are mutually
+To train optional archive metadata, set `scan_batches.metadata_probability: 0.5`.
+The sampler chooses once per constructed scan and preserves that choice across
+all its tiles, including pending tiles saved for resume. Supplied scans use true
+catalogue starts/ends as simulated archive metadata; absent scans keep the last
+three bits zero. Targets are supervised in both cases. No page-level or one-sided
+metadata dropout is applied.
+
+`predict_stream` and `tag_pages` accept explicit `document_starts` and
+`document_ends` arrays together, covering every supplied page. Their
+metadata-provided bit is one on every page, including internal window cuts;
+document identities alone never enable this inference input. Set
+`document_metadata_evaluation: true` for a second development pass with metadata
+supplied. The ordinary absent-metadata score still selects checkpoints and drives
+early stopping; supplied-mode metrics are logged under `dev_metadata_provided`.
+Final context comparisons are saved in both metadata modes. See
+[the r16 setup](../docs/boundary-metadata-experiment.md).
+
+`scan_borders` (legacy tokens) and `boundary_features` are mutually
 exclusive, and their checkpoints have different architectures. Existing task
 outputs and evaluation metrics remain unchanged.
 
