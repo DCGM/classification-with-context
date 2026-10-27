@@ -92,6 +92,10 @@ class Tracking:
                 for name, value in report.get('front_back_position', {}).get(direction, {}).items():
                     if value is not None:
                         self.logger.report_scalar(f'dev/front_back_position/{name}', direction, value, step)
+            for region, scores in report.get('curated_type_by_document_region', {}).items():
+                for metric in ('n', 'accuracy', 'weighted_f1', 'macro_f1'):
+                    if scores[metric] is not None:
+                        self.logger.report_scalar('dev/type_region/' + region, metric, scores[metric], step)
             if 'contexts' in report:
                 self.report_contexts(report['contexts'], step)
             self.task.flush(wait_for_uploads=True)

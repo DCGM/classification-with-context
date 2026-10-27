@@ -18,6 +18,8 @@ def export_checkpoint(checkpoint, output):
             or tuple(state['placements']) != PLACEMENTS):
         raise ValueError('Checkpoint schema/label mismatch')
     spec = state['specification']
+    if spec.get('scan_borders'):
+        raise ValueError('Scan-border architecture requires a newer MetaKat inference artifact contract')
     if (spec.get('auxiliary_edges') is not True or spec.get('backbone', {}).get('kind') != 'bert'
             or spec.get('fusion') != 'separate_mlp' or spec.get('dims', {}).get('pagination') != 5
             or set(spec.get('dims', {})) != {'image', 'text', 'stats', 'pagination'}

@@ -119,14 +119,28 @@ class StreamMerger:
 
 @torch.inference_mode()
 def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu'):
-    spans = window_spans(len(rows), config.window_size, config.stride)
+    borders = getattr(model, 'scan_borders', False)
+    if borders:
+        from .scan_borders import scan_windows
+        tiles = scan_windows(len(rows), config.window_size, config.stride)
+    else:
+        tiles = [(s, e, False, False) for s, e in window_spans(len(rows), config.window_size, config.stride)]
+    spans = [(s, e) for s, e, _, _ in tiles]
     merger = StreamMerger(len(rows), model.num_types, config)
     was_training = model.training
     model.eval()
     try:
         for first in range(0, len(spans), config.batch_size):
             current = spans[first:first + config.batch_size]
-            batch = to_device(collate_windows([dataset[Window(tuple(rows[s:e]))] for s, e in current]), device,
+            examples = []
+            for s, e, begin, end in tiles[first:first + config.batch_size]:
+                example = dataset[Window(tuple(rows[s:e]), scan_start=begin, scan_end=end)]
+                if borders and 'scan_borders' not in example['features']:
+                    flags = np.zeros((e - s, 2), np.float32)
+                    flags[0, 0], flags[-1, 1] = begin, end
+                    example['features'] = dict(example['features'], scan_borders=flags)
+                examples.append(example)
+            batch = to_device(collate_windows(examples), device,
                               feature_dtype=torch.float32 if getattr(model, 'compute_precision', 'float32')
                               == 'float32' else None)
             with autocast(model, device):

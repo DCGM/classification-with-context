@@ -94,7 +94,8 @@ class Fusion(nn.Module):
 
 
 class PageTagger(nn.Module):
-    def __init__(self, backbone, dims, fusion='linear', num_types=len(PAGE_TYPES), auxiliary_edges=False):
+    def __init__(self, backbone, dims, fusion='linear', num_types=len(PAGE_TYPES), auxiliary_edges=False,
+                 scan_borders=False):
         super().__init__()
         self.backbone, self.dims, self.fusion_kind, self.num_types = backbone, dims, fusion, num_types
         h = backbone.hidden_size
@@ -103,6 +104,10 @@ class PageTagger(nn.Module):
         self.placement_head = nn.Linear(h, len(PLACEMENTS))
         self.start_head = nn.Sequential(nn.Linear(4 * h, h), nn.GELU(), nn.Linear(h, 1))
         self.auxiliary_edges = auxiliary_edges
+        self.scan_borders = scan_borders
+        if scan_borders:
+            self.scan_border_embeddings = nn.Parameter(torch.empty(2, h))
+            nn.init.normal_(self.scan_border_embeddings, std=backbone.initial_scale)
         if auxiliary_edges:
             self.page_start_head = nn.Linear(h, 1)
             self.page_end_head = nn.Linear(h, 1)
@@ -110,7 +115,31 @@ class PageTagger(nn.Module):
     def forward(self, features, attention_mask):
         if not attention_mask.any(dim=-1).all():
             raise ValueError('empty sequence in batch')
-        h = self.backbone(self.fusion(features), attention_mask)
+        x = self.fusion(features)
+        if self.scan_borders:
+            # Metadata is page-aligned only for batching. The learned tokens are
+            # inserted after fusion, with no dependence on page modality availability.
+            borders = features['scan_borders']
+            lengths = attention_mask.sum(1)
+            begin = borders[:, 0, 0].long()
+            end = borders[:, :, 1].sum(1).long()
+            counts = lengths + begin + end
+            width = int(counts.max())
+            positions = torch.arange(x.shape[1], device=x.device)[None, :].expand(x.shape[0], -1)
+            positions = positions + begin[:, None]
+            padded = x.new_zeros(x.shape[0], max(width, x.shape[1] + 1), x.shape[2])
+            padded.scatter_(1, positions[..., None].expand_as(x), x * attention_mask[..., None])
+            batch = torch.arange(x.shape[0], device=x.device)
+            padded[batch[begin.bool()], 0] = self.scan_border_embeddings[0].to(x.dtype)
+            endings = batch[end.bool()]
+            padded[endings, (lengths + begin)[end.bool()]] = self.scan_border_embeddings[1].to(x.dtype)
+            token_mask = torch.arange(width, device=x.device)[None, :] < counts[:, None]
+            encoded = self.backbone(padded[:, :width], token_mask)
+            # Padded page queries are irrelevant; clamp their gather positions to
+            # keep a mixed batch valid even when its longest item has no markers.
+            h = encoded.gather(1, positions.clamp_max(width - 1)[..., None].expand_as(x))
+        else:
+            h = self.backbone(x, attention_mask)
         a, b = h[:, :-1], h[:, 1:]
         starts = self.start_head(torch.cat((a, b, (a - b).abs(), a * b), dim=-1)).squeeze(-1)
         # Position zero has no predecessor. Its zero is a placeholder, never a negative target.
@@ -130,6 +159,8 @@ class PageTagger(nn.Module):
                 'fusion': self.fusion_kind, 'num_types': self.num_types}
         if self.auxiliary_edges:
             spec['auxiliary_edges'] = True
+        if self.scan_borders:
+            spec['scan_borders'] = True
         return spec
 
 
@@ -141,4 +172,5 @@ def from_specification(spec):
         raise ValueError('unknown backbone')
     if 'initial_scale' in b:
         backbone.initial_scale = b['initial_scale']
-    return PageTagger(backbone, spec['dims'], spec['fusion'], spec['num_types'], spec.get('auxiliary_edges', False))
+    return PageTagger(backbone, spec['dims'], spec['fusion'], spec['num_types'], spec.get('auxiliary_edges', False),
+                      spec.get('scan_borders', False))

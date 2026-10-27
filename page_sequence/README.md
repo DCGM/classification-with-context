@@ -266,6 +266,60 @@ operating point on development before test evaluation.
 
 ## Tag a scan without document identities
 
+### Known scan borders and complete-document training
+
+`scan_borders: true` selects a new architecture with two learned embeddings:
+`SCAN_START` before the first page and `SCAN_END` after the last page. They enter
+BERT after modality fusion and remain visible to attention. The heads return only
+real page positions, so markers receive no type, side, boundary or auxiliary loss.
+Modality, pagination and complete-page dropout never remove the markers.
+
+`window_size` still counts **all network positions**: at size 512, a complete scan
+fits 510 pages, first/last windows fit 511, and internal windows fit 512. Scanning
+tiles the conceptual `START + pages + END` sequence with the configured stride;
+only windows actually containing a true scan endpoint receive that marker.
+
+The production input contract is batches of whole documents. `ScanBatchSampler`
+constructs these batches first, then uses precisely the same tiling function as
+inference. Short padded windows must contain an entire scan with both markers;
+an arbitrary cut through a document is always a full window with no false ending.
+Document starts within a scan remain prediction targets, not input markers.
+
+Example configuration:
+
+```json
+{
+  "scan_borders": true,
+  "scan_batches": {"full_scan_multiplier": 4, "stride": 128},
+  "window_size": 256,
+  "variable_lengths": true,
+  "auxiliary_edges": true,
+  "final_scan_context_comparison": true
+}
+```
+
+For the long-scan mixture component (60%), scans target four window lengths;
+the other components retain targets of 32–window_size−1 (20%), 8–31 (10%), 2–7
+(5%) and 1 (5%). These are **target scan sizes**, not forced page counts:
+whole documents can overshoot the target. Short scans can therefore occur only
+when actual document lengths permit them. With variable lengths disabled, all
+scans target four window lengths. The multiplier is configurable.
+Coverage consumes every overlapping tile of a constructed scan; annotated and
+interesting sources choose a tile containing their selected anchor. Existing
+source quotas, class weights, copy exclusions and difficult-join sampling remain
+in force. Pending coverage tiles and RNG state are checkpointed for exact resume.
+Legacy arbitrary edge crops must be disabled for this sampler.
+
+Validation uses marker-aware full scan streams and unchanged page-type/side/pair
+metrics. Curated type scores for beginning, ending and interior regions are also
+logged (disjoint first/last up to 16 pages of each complete document). The final
+selected checkpoint can additionally save the paired isolated-document versus
+continuous comparison with aligned probabilities. Existing bounded cropped-context
+diagnostics are still stress tests without scan markers; they are not complete-scan
+evaluations and do not select checkpoints. Legacy model specs remain unchanged.
+Export to MetaKat's existing v3 artifact is rejected for this new architecture
+until its inference contract is updated.
+
 ### Compare page-type context arrangements
 
 Use the same development pages to compare restarting inference for every complete

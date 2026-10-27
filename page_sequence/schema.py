@@ -62,6 +62,8 @@ class Window:
     """Index row IDs in stream order. IDs are metadata, never model inputs."""
     rows: tuple[int, ...]
     source: str = 'fixed'
+    scan_start: bool = False
+    scan_end: bool = False
 
 
 def join_stratum(a: Document, b: Document):

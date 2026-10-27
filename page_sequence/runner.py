@@ -40,6 +40,9 @@ def make_dataset(index, features, config):
     if config.get('pagination'):
         from .pagination import PaginationDataset
         dataset = PaginationDataset(dataset, **config['pagination'])
+    if config.get('scan_borders'):
+        from .scan_borders import ScanBorderDataset
+        dataset = ScanBorderDataset(dataset)
     return dataset
 
 
@@ -199,9 +202,12 @@ def train(config, resume=None, stop_after=None):
     dataset = make_dataset(index, features, config)
     streams = load_streams(config['dev_manifest'], index, 'dev')
     inference = InferenceConfig(**config['inference'])
-    sampler = WindowSampler(index, config['window_size'], config['seed'],
+    from .scan_sampling import ScanBatchSampler
+    sampler_class = ScanBatchSampler if config.get('scan_borders') else WindowSampler
+    sampler = sampler_class(index, config['window_size'], config['seed'],
                             variable_lengths=config.get('variable_lengths', False),
-                            edge_crops=config.get('edge_crops'))
+                            edge_crops=config.get('edge_crops'),
+                            **({'scan_batches': config.get('scan_batches', {})} if config.get('scan_borders') else {}))
     context_config = config.get('context_evaluation', {})
     diagnostic_blocks = (context_blocks(index, streams, context_config.get('sample_pages', 2048))
                          if context_config.get('enabled', False) else [])
@@ -230,7 +236,8 @@ def train(config, resume=None, stop_after=None):
         if backbone is None:
             raise ValueError('unknown backbone kind')
         model = PageTagger(backbone, getattr(dataset, 'model_dims', features.dims), config.get('fusion', 'linear'),
-                           auxiliary_edges=config.get('auxiliary_edges', False)).to(device)
+                           auxiliary_edges=config.get('auxiliary_edges', False),
+                           scan_borders=config.get('scan_borders', False)).to(device)
         step, best = 0, -1.
     model.compute_precision = precision
     scaler = torch.amp.GradScaler('cuda', enabled=precision == 'float16', init_scale=1024.)
@@ -426,6 +433,28 @@ def train(config, resume=None, stop_after=None):
             model.load_state_dict(selected['model'])
             selected_step = selected['step']
             del selected
+            if config.get('final_scan_context_comparison'):
+                from .compare_page_context import compare
+                comparison_dir = run_dir / f'final-scan-context-step{selected_step}'
+                # Final reports may be revisited after a completed-run resume.
+                comparison_report = comparison_dir / 'report.json'
+                if not comparison_report.exists():
+                    if comparison_dir.exists():
+                        # Preserve an interrupted diagnostic; never let its partial
+                        # arrays prevent resuming the completed training checkpoint.
+                        comparison_dir.rename(run_dir / (comparison_dir.name + f'-incomplete-{time.time_ns()}'))
+                    comparison = compare(model, dataset, streams, inference, comparison_dir, device)
+                    comparison['checkpoint_step'] = selected_step
+                    comparison['manifest_sha256'] = prov['manifest_sha256']
+                    comparison['index_sha256'] = prov['index_sha256']
+                    comparison_report.write_text(json.dumps(comparison, indent=2, allow_nan=False) + '\n')
+                else:
+                    comparison = json.loads(comparison_report.read_text())
+                if tracking.task is not None:
+                    for mode, scores in comparison['modes'].items():
+                        for metric in ('weighted_f1', 'accuracy', 'macro_f1'):
+                            tracking.logger.report_scalar('final_scan_context/' + mode, metric,
+                                                          scores['curated_type'][metric], selected_step)
             final_report = evaluate_contexts(
                 model, dataset, context_blocks(index, streams, context_config.get('final_sample_pages', 8192)),
                 [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512) if n <= config['window_size']],

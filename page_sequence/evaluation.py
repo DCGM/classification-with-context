@@ -141,6 +141,8 @@ class Evaluator:
         self.span_tp = self.span_pred = self.span_true = 0
         self.position_counts = defaultdict(int)
         self.side_counts = defaultdict(int)
+        self.type_regions = {name: np.zeros((len(PAGE_TYPES), len(PAGE_TYPES)), np.int64)
+                             for name in ('beginning', 'ending', 'interior')}
 
     def add(self, stream_id, pages, result, documents, censored_left=False, censored_right=False):
         if len(pages) != len(result['type']):
@@ -178,6 +180,13 @@ class Evaluator:
         # True document positions, never the model's possibly incorrect segmentation.
         # Rank quartiles avoid assuming page indices are gap-free.
         for start, end in gt_spans:
+            width = min(16, (end - start) // 2)
+            for name, lo, hi in (('beginning', start, start + width),
+                                 ('ending', end - width, end),
+                                 ('interior', start + width, end - width)):
+                valid_type = gold[lo:hi] & (labels[lo:hi] != IGNORE)
+                np.add.at(self.type_regions[name],
+                          (labels[lo:hi][valid_type], np.asarray(result['type'])[lo:hi][valid_type]), 1)
             if end - start < 4:
                 continue
             self.position_counts['documents'] += 1
@@ -212,6 +221,8 @@ class Evaluator:
                 for group, data in self.boundaries.items() if group not in ('all', 'within_document')},
             'front_back_confusion': {name: front_back_metrics(self.confusions[name])
                                     for name in ('curated_type', 'weak_type_agreement')},
+            'curated_type_by_document_region': {name: classification_metrics(cm, PAGE_TYPES)
+                                                for name, cm in self.type_regions.items()},
             'side_sequence_db_agreement': side_sequence_report(self.side_counts),
             'front_back_position': {
                 'documents': self.position_counts['documents'],
