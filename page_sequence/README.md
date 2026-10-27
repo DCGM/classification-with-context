@@ -428,6 +428,17 @@ Python/NumPy/Torch and changes the resumed augmentation/dropout sequence.
 
 ### Optional per-page document-edge supervision
 
+Loss weights can be overridden by stage, for example
+`stage_loss_weights: {"finetune": {"weak_type": 0.05}}`. Unspecified tasks inherit
+`loss_weights` and then the standard defaults. This example keeps unannotated
+page-type weight 0.2 in pretraining and uses 0.05 in fine-tuning; annotated type,
+side, pair-boundary and auxiliary edge losses keep their original coefficients.
+Weights must be finite and nonnegative, and unknown stages/tasks are rejected.
+Effective weights are recorded in each metrics row and logged to ClearML, including
+on resume. Each task retains its own valid-target denominator. Window 512 is
+supported by BERT Mini's existing position table; scanning uses stride 256, and
+context diagnostics include a 512-page level when configured.
+
 `auxiliary_edges: true` adds independent linear `page_start_head` and
 `page_end_head` classifiers on each contextual BERT vector. The existing
 previous/current-vector boundary head, its first-position mask, overlap merging,

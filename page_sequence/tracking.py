@@ -46,8 +46,8 @@ class Tracking:
         if self.task is None:
             return
         step = record['step']
-        for group in ('loss', 'valid_weight'):
-            for name, value in record[group].items():
+        for group in ('loss', 'valid_weight', 'loss_weights'):
+            for name, value in record.get(group, {}).items():
                 self.logger.report_scalar(f'{record["stage"]}/{group}', name, value, step)
         for name in ('gradient_norm', 'io_seconds', 'pages_per_second', 'coverage_epochs'):
             self.logger.report_scalar('training', name, record[name], step)

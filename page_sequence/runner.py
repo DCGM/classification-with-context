@@ -20,7 +20,7 @@ from .context_evaluation import context_blocks, evaluate_contexts
 from .features import FeaturePipeline
 from .index import PageIndex
 from .inference import InferenceConfig, predict_stream, tag_pages
-from .losses import LossWeights, task_losses
+from .losses import stage_loss_weights, task_losses
 from .loading import training_loader
 from .tracking import Tracking
 from .manifests import file_sha256, load_streams
@@ -167,6 +167,7 @@ def provenance(index, manifest):
 
 
 def train(config, resume=None, stop_after=None):
+    weights_by_stage = {stage: stage_loss_weights(config, stage) for stage in ('pretrain', 'finetune')}
     dropout = config.get('pagination_dropout', {})
     # Validate before opening large stores or creating a tracking task.
     pagination_dropout({'pagination': torch.zeros(0, 0, 5)}, **dropout)
@@ -256,7 +257,6 @@ def train(config, resume=None, stop_after=None):
     limit = min(total, stop_after) if stop_after is not None else total
     warmup = max(1, config['optimizer'].get('warmup_steps',
                      math.ceil(total * config['optimizer']['warmup_fraction'])))
-    loss_weights = LossWeights(**config.get('loss_weights', {}))
     progress = saved_training or {
         'stage': 'pretrain' if config['pretrain_steps'] else 'finetune',
         'stage_step': 0, 'stage_best': -1., 'bad_validations': 0, 'finished': False}
@@ -268,6 +268,7 @@ def train(config, resume=None, stop_after=None):
     try:
         while (step < limit or progress.get('pending_validation')) and not progress['finished']:
             stage = progress['stage']
+            loss_weights = weights_by_stage[stage]
             if sampler.stage != stage:
                 sampler.set_stage(stage)
             stage_budget = config[stage + '_steps']
@@ -320,6 +321,7 @@ def train(config, resume=None, stop_after=None):
                     record = {'step': step, 'stage': stage,
                               'stage_step': progress['stage_step'],
                               'loss': loss_values,
+                              'loss_weights': asdict(loss_weights),
                               'valid_weight': {k: float(v) for k, v in denominators.items()},
                               'gradient_norm': float(norm), 'io_seconds': io_seconds,
                               'storage_pages': raw_batch.get('storage_pages', {}),
@@ -350,7 +352,7 @@ def train(config, resume=None, stop_after=None):
                                 config, prov, features.state_dict(), progress)
             report = evaluate_streams(model, dataset, streams, inference, device)
             if diagnostic_blocks:
-                lengths = [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256)
+                lengths = [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
                            if n <= config['window_size']]
                 # Rotate the order if a slow machine exhausts the wall-time budget.
                 offset = (step // interval) % len(lengths)
@@ -417,7 +419,7 @@ def train(config, resume=None, stop_after=None):
             del selected
             final_report = evaluate_contexts(
                 model, dataset, context_blocks(index, streams, context_config.get('final_sample_pages', 8192)),
-                [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256) if n <= config['window_size']],
+                [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512) if n <= config['window_size']],
                 device, batch_size=config['inference']['batch_size'])
             final_report['checkpoint_step'] = selected_step
             (run_dir / 'final-context-evaluation.json').write_text(json.dumps(final_report, allow_nan=False) + '\n')
@@ -434,7 +436,7 @@ def train(config, resume=None, stop_after=None):
             if config.get('pagination') and config.get('pagination_robustness_evaluation', False):
                 missing_report = evaluate_contexts(
                     model, dataset, context_blocks(index, streams, context_config.get('final_sample_pages', 8192)),
-                    [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256) if n <= config['window_size']],
+                    [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512) if n <= config['window_size']],
                     device, batch_size=config['inference']['batch_size'], omit_pagination=True)
                 missing_report['checkpoint_step'] = selected_step
                 (run_dir / 'final-context-without-pagination.json').write_text(

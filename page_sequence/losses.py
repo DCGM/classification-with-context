@@ -1,5 +1,6 @@
 """Independent valid-target denominators. Missing supervision is never an extra class."""
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
+import math
 
 import torch
 import torch.nn.functional as F
@@ -15,6 +16,24 @@ class LossWeights:
     starts: float = .5
     page_start: float = .25
     page_end: float = .25
+
+
+def stage_loss_weights(config, stage):
+    """Merge optional stage overrides; unknown tasks/stages fail before training."""
+    if stage not in ('pretrain', 'finetune'):
+        raise ValueError('unknown loss-weight stage')
+    overrides = config.get('stage_loss_weights', {})
+    if set(overrides) - {'pretrain', 'finetune'}:
+        raise ValueError('unknown loss-weight stage override')
+    values = dict(config.get('loss_weights', {}))
+    values.update(overrides.get(stage, {}))
+    try:
+        weights = LossWeights(**values)
+    except TypeError as error:
+        raise ValueError('unknown loss-weight task') from error
+    if any(not math.isfinite(value) or value < 0 for value in asdict(weights).values()):
+        raise ValueError('loss weights must be finite and nonnegative')
+    return weights
 
 
 def task_losses(output, batch, weights=LossWeights()):
