@@ -15,19 +15,22 @@ class ScanBatchSampler(WindowSampler):
         if self.window_size < 3 or any(self.edge_crops.values()):
             raise ValueError('scan borders require >=3 positions and replace legacy edge crops')
         settings = dict(scan_batches or {})
-        if set(settings) - {'full_scan_multiplier', 'stride'}:
+        if set(settings) - {'full_scan_multiplier', 'stride', 'border_tokens'}:
             raise ValueError('unknown scan batch setting')
         self.scan_batches = dict(full_scan_multiplier=settings.get('full_scan_multiplier', 4),
-                                 stride=settings.get('stride', self.window_size // 2))
+                                 stride=settings.get('stride', self.window_size // 2),
+                                 border_tokens=settings.get('border_tokens', True))
         if (not isinstance(self.scan_batches['full_scan_multiplier'], int)
                 or self.scan_batches['full_scan_multiplier'] < 1
+                or not isinstance(self.scan_batches['border_tokens'], bool)
                 or not 1 <= self.scan_batches['stride'] < self.window_size):
             raise ValueError('invalid scan batch multiplier/stride')
         self.pending_coverage_windows = deque()
 
     def _tiles(self, docs, source):
         rows = tuple(row for d in docs for row in range(d.first, d.first + d.length))
-        tiles = scan_windows(len(rows), self.window_size, self.scan_batches['stride'])
+        tiles = scan_windows(len(rows), self.window_size, self.scan_batches['stride'],
+                             self.scan_batches['border_tokens'])
         self.counters['constructed_scans:' + source] += 1
         self.counters['constructed_scan_pages:' + source] += len(rows)
         self.counters['constructed_scan_documents:' + source] += len(docs)
@@ -100,7 +103,7 @@ class ScanBatchSampler(WindowSampler):
             raise RuntimeError('scan starts inside a document')
         if window.scan_end and window.rows[-1] != last_doc.first + last_doc.length - 1:
             raise RuntimeError('scan ends inside a document')
-        tokens = len(window.rows) + window.scan_start + window.scan_end
+        tokens = len(window.rows) + (window.scan_start + window.scan_end) * self.scan_batches['border_tokens']
         if tokens > self.window_size or (tokens < self.window_size and not (window.scan_start and window.scan_end)):
             raise RuntimeError('only complete scans may produce short padded windows')
         self.counters['source:' + source] += 1

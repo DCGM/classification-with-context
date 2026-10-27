@@ -87,13 +87,15 @@ def compare(model, dataset, streams, inference, output, device='cpu'):
             result = predict_stream(model, dataset, rows[lo:hi], inference, device)
             probabilities[lo:hi] = result['type_probs']
             processed += result['processed_pages']
-            if getattr(model, 'scan_borders', False):
+            border_tokens = getattr(model, 'scan_borders', False)
+            if border_tokens or getattr(model, 'boundary_features', False):
                 from .scan_borders import scan_windows
-                tiles = scan_windows(hi - lo, inference.window_size, inference.stride)
+                tiles = scan_windows(hi - lo, inference.window_size, inference.stride, border_tokens)
             else:
                 tiles = [(s, e, False, False) for s, e in window_spans(hi - lo, inference.window_size, inference.stride)]
             windows += len(tiles)
-            full += sum(e - s + begin + end == inference.window_size for s, e, begin, end in tiles)
+            full += sum(e - s + (begin + end) * border_tokens == inference.window_size
+                        for s, e, begin, end in tiles)
             del result
             if j % 100 == 0 or j + 1 == len(runs):
                 print(json.dumps({'mode': mode, 'runs': j + 1, 'total_runs': len(runs),

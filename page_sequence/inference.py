@@ -120,9 +120,10 @@ class StreamMerger:
 @torch.inference_mode()
 def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu'):
     borders = getattr(model, 'scan_borders', False)
-    if borders:
+    boundary_features = getattr(model, 'boundary_features', False)
+    if borders or boundary_features:
         from .scan_borders import scan_windows
-        tiles = scan_windows(len(rows), config.window_size, config.stride)
+        tiles = scan_windows(len(rows), config.window_size, config.stride, border_tokens=borders)
     else:
         tiles = [(s, e, False, False) for s, e in window_spans(len(rows), config.window_size, config.stride)]
     spans = [(s, e) for s, e, _, _ in tiles]
@@ -139,6 +140,10 @@ def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu')
                     flags = np.zeros((e - s, 2), np.float32)
                     flags[0, 0], flags[-1, 1] = begin, end
                     example['features'] = dict(example['features'], scan_borders=flags)
+                if boundary_features and 'boundaries' not in example['features']:
+                    from .scan_borders import encode_boundary_features
+                    values = encode_boundary_features(e - s, begin, end)
+                    example['features'] = dict(example['features'], boundaries=values)
                 examples.append(example)
             batch = to_device(collate_windows(examples), device,
                               feature_dtype=torch.float32 if getattr(model, 'compute_precision', 'float32')

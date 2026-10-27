@@ -32,6 +32,8 @@ from .augmentation import modality_dropout, pagination_dropout, scattered_dropou
 
 
 def make_dataset(index, features, config):
+    if config.get('scan_borders') and config.get('boundary_features'):
+        raise ValueError('choose boundary features or scan tokens, not both')
     if config.get('training_store'):
         from training_store.dataset import StoreDataset
         dataset = StoreDataset(index, features, **config['training_store'])
@@ -43,6 +45,9 @@ def make_dataset(index, features, config):
     if config.get('scan_borders'):
         from .scan_borders import ScanBorderDataset
         dataset = ScanBorderDataset(dataset)
+    if config.get('boundary_features'):
+        from .scan_borders import BoundaryFeatureDataset
+        dataset = BoundaryFeatureDataset(dataset)
     return dataset
 
 
@@ -203,11 +208,18 @@ def train(config, resume=None, stop_after=None):
     streams = load_streams(config['dev_manifest'], index, 'dev')
     inference = InferenceConfig(**config['inference'])
     from .scan_sampling import ScanBatchSampler
-    sampler_class = ScanBatchSampler if config.get('scan_borders') else WindowSampler
+    complete_scans = config.get('scan_borders') or config.get('boundary_features')
+    sampler_class = ScanBatchSampler if complete_scans else WindowSampler
+    scan_settings = dict(config.get('scan_batches', {}))
+    if complete_scans:
+        if ('border_tokens' in scan_settings
+                and scan_settings['border_tokens'] != bool(config.get('scan_borders'))):
+            raise ValueError('scan tiling representation differs from model configuration')
+        scan_settings['border_tokens'] = bool(config.get('scan_borders'))
     sampler = sampler_class(index, config['window_size'], config['seed'],
                             variable_lengths=config.get('variable_lengths', False),
                             edge_crops=config.get('edge_crops'),
-                            **({'scan_batches': config.get('scan_batches', {})} if config.get('scan_borders') else {}))
+                            **({'scan_batches': scan_settings} if complete_scans else {}))
     context_config = config.get('context_evaluation', {})
     diagnostic_blocks = (context_blocks(index, streams, context_config.get('sample_pages', 2048))
                          if context_config.get('enabled', False) else [])

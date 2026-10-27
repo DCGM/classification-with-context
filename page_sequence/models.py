@@ -69,6 +69,7 @@ class Fusion(nn.Module):
             raise ValueError(kind)
         self.kind = kind
         self.names = ('image', 'text', 'stats') + (('pagination',) if 'pagination' in dims else ())
+        self.names += ('boundaries',) if 'boundaries' in dims else ()
         self.branches = nn.ModuleDict()
         if kind == 'separate_mlp':
             for name in self.names:
@@ -88,7 +89,10 @@ class Fusion(nn.Module):
         for i, name in enumerate(self.names):
             x = self.branches[name](features[name]) if self.kind == 'separate_mlp' else features[name]
             # Mask after biased/nonlinear branch operations, including future custom feature sources.
-            presence = features['pagination'][..., 4:5] if name == 'pagination' else flags[..., i:i + 1]
+            # Unknown boundary metadata is a real categorical input. Its whole
+            # branch must remain active, including the [0,0,0,0,0] interior state.
+            presence = (1 if name == 'boundaries' else features['pagination'][..., 4:5]
+                        if name == 'pagination' else flags[..., i:i + 1])
             parts.append(x * presence)
         return self.scale * self.norm(self.projection(torch.cat(parts + [flags], dim=-1)))
 
@@ -105,6 +109,9 @@ class PageTagger(nn.Module):
         self.start_head = nn.Sequential(nn.Linear(4 * h, h), nn.GELU(), nn.Linear(h, 1))
         self.auxiliary_edges = auxiliary_edges
         self.scan_borders = scan_borders
+        self.boundary_features = 'boundaries' in dims
+        if self.boundary_features and (scan_borders or dims['boundaries'] != 5):
+            raise ValueError('five-bit boundary features replace special scan tokens')
         if scan_borders:
             self.scan_border_embeddings = nn.Parameter(torch.empty(2, h))
             nn.init.normal_(self.scan_border_embeddings, std=backbone.initial_scale)

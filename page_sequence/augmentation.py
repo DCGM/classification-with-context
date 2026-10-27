@@ -78,6 +78,6 @@ def scattered_dropout(features, modality_probability=0., page_probability=0.):
         result[name] = features[name] * keep[..., i:i + 1]
     if page_probability:
         page_keep = (torch.rand(flags.shape[:-1], device=flags.device) >= page_probability).unsqueeze(-1)
-        result = {name: value if name == 'scan_borders' else value * page_keep
+        result = {name: value if name in ('scan_borders', 'boundaries') else value * page_keep
                   for name, value in result.items()}
     return result

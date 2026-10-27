@@ -110,14 +110,17 @@ def test_marker_gradients_padding_invariance_dropout_and_checkpoint(tmp_path):
     assert not result['pair_mask'][0] and result['pair_mask'][1:].all()
 
 
-def test_real_runner_resumes_new_architecture_and_worker_dataset(tmp_path):
+@pytest.mark.parametrize('representation', ['tokens', 'five_bits'])
+def test_real_runner_resumes_new_architecture_and_worker_dataset(tmp_path, representation):
     config, _, _, _ = fixture(tmp_path)
     config.update(workers=2, worker_start_method='forkserver', batch_size=4,
                   final_scan_context_comparison=True,
                   context_evaluation={'enabled': True, 'sample_pages': 16, 'final_sample_pages': 16})
+    if representation == 'five_bits':
+        config.update(scan_borders=False, boundary_features=True)
     train(config, stop_after=2)
     model, checkpoint = load_checkpoint(tmp_path / 'run/latest.pt')
-    assert model.scan_borders and checkpoint['step'] == 2
+    assert model.scan_borders == (representation == 'tokens') and checkpoint['step'] == 2
     train(config, resume=tmp_path / 'run/latest.pt')
     records = [json.loads(s) for s in (tmp_path / 'run/validation.jsonl').read_text().splitlines()]
     assert records[-1]['step'] == 8

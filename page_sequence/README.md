@@ -266,7 +266,47 @@ operating point on development before test evaluation.
 
 ## Tag a scan without document identities
 
-### Known scan borders and complete-document training
+### Five-bit boundary inputs and complete-document training
+
+`boundary_features: true` adds a separate five-value feature branch, projected by
+the same kind of MLP as the other modalities. Its fixed input order is:
+
+```text
+[scan_start, scan_end, document_metadata_provided, document_start, document_end]
+```
+
+In the initial scan-only experiments, the last three values are always zero,
+including on actual document starts and ends. They are never populated from
+training targets or document identities. Only the first/last page of the supplied
+scan gets its corresponding scan flag. Internal inference-window cuts get neither
+flag. The feature branch stays active for the all-zero unknown/interior state;
+it is not gated by the metadata-provided bit. Modality, pagination and scattered
+page dropout preserve all five boundary values.
+
+These features replace special scan tokens. `window_size=512` now fits **512 real
+pages**, including for a complete scan. The complete-document scan sampler and
+inference share the page-only tiling function, and only complete scans can yield
+short padded windows. Example configuration:
+
+```json
+{
+  "boundary_features": true,
+  "scan_batches": {"full_scan_multiplier": 4, "stride": 256, "border_tokens": false},
+  "window_size": 512,
+  "variable_lengths": true,
+  "auxiliary_edges": true,
+  "final_scan_context_comparison": true
+}
+```
+
+The input encoder also supports complete external document-start/end arrays:
+their metadata-provided bit is one on every page. This first experiment does not
+train that mode; it is reserved for a later scan-level supplied/absent-metadata
+experiment. `scan_borders` (legacy tokens) and `boundary_features` are mutually
+exclusive, and their checkpoints have different architectures. Existing task
+outputs and evaluation metrics remain unchanged.
+
+### Legacy scan tokens and complete-document training (r14)
 
 `scan_borders: true` selects a new architecture with two learned embeddings:
 `SCAN_START` before the first page and `SCAN_END` after the last page. They enter
