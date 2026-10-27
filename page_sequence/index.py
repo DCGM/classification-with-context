@@ -228,6 +228,19 @@ class PageIndex:
     def documents(self, split):
         return [Document(*r) for r in self.db.execute('SELECT * FROM documents WHERE split=? ORDER BY id', (split,))]
 
+    def documents_for_rows(self, rows):
+        """Only documents present in a scan; bounded queries, no split-wide allocation."""
+        records = {}
+        unique = tuple(dict.fromkeys(int(row) for row in rows))
+        for offset in range(0, len(unique), 512):
+            chunk = unique[offset:offset + 512]
+            query = ('SELECT DISTINCT d.* FROM pages p JOIN documents d ON d.id=p.document '
+                     f'WHERE p.id IN ({",".join("?" for _ in chunk)})')
+            for record in self.db.execute(query, chunk):
+                if record[0] not in records:
+                    records[record[0]] = Document(*record)
+        return list(records.values())
+
     def pages(self, rows):
         return self.pages_with_documents(rows)[0]
 

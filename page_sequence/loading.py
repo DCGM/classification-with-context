@@ -11,6 +11,27 @@ def worker_init(_):
     torch.set_num_threads(1)
 
 
+def release_host_cache(device):
+    """Release idle pinned batches at an exhausted loader segment, never live tensors.
+
+    CUDA's host allocator otherwise retains the prefetch high-water mark throughout
+    validation. This is CPU RAM; torch.cuda.empty_cache() does not release it.
+    Older Torch versions without this public API retain their original behavior.
+    """
+    if torch.device(device).type != 'cuda':
+        return {}
+    empty = getattr(getattr(torch, 'accelerator', None), 'empty_host_cache', None)
+    stats = getattr(torch.cuda.memory, 'host_memory_stats', None)
+    if empty is None:
+        return {}
+    before = stats() if stats else {}
+    empty()
+    after = stats() if stats else {}
+    return {'reserved_before': before.get('allocated_bytes.current'),
+            'reserved_after': after.get('allocated_bytes.current'),
+            'active_after': after.get('active_bytes.current')}
+
+
 class TrainingBatches:
     def __init__(self, sampler, batch_size):
         self.sampler, self.batch_size, self.batches = sampler, batch_size, 0

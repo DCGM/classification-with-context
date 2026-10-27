@@ -2,13 +2,28 @@ import copy
 
 import torch
 
-from page_sequence.loading import training_loader
+from page_sequence.loading import release_host_cache, training_loader
 from page_sequence.runner import train, load_checkpoint
 from page_sequence.smoke import prepare_fixture
 from page_sequence.data import WindowDataset
 from page_sequence.features import FeaturePipeline
 from page_sequence.index import PageIndex
 from page_sequence.sampling import WindowSampler
+
+
+def test_host_cache_cleanup_preserves_rng_and_skips_cpu(monkeypatch):
+    calls = []
+    snapshots = iter([{'allocated_bytes.current': 200},
+                      {'allocated_bytes.current': 40, 'active_bytes.current': 40}])
+    monkeypatch.setattr(torch.accelerator, 'empty_host_cache', lambda: calls.append('empty'))
+    monkeypatch.setattr(torch.cuda.memory, 'host_memory_stats', lambda: next(snapshots))
+    rng = torch.get_rng_state().clone()
+    assert release_host_cache('cpu') == {}
+    assert calls == []
+    assert release_host_cache('cuda') == {
+        'reserved_before': 200, 'reserved_after': 40, 'active_after': 40}
+    assert calls == ['empty']
+    assert torch.equal(rng, torch.get_rng_state())
 
 
 def test_forkserver_matches_inline_sampling_and_batch_values(tmp_path):

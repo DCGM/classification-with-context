@@ -256,6 +256,32 @@ def test_evaluation_ignores_empty_task_masks(fixture_data, missing):
     assert report['starts']['all']['n'] == 19
 
 
+def test_compact_validation_is_exact_without_loading_entire_split(fixture_data, monkeypatch):
+    from collections import defaultdict
+    from page_sequence.runner import evaluate_streams
+
+    config, index, features, dataset = fixture_data
+    torch.set_num_threads(2)
+    model = tiny_model(features.dims)
+    streams = load_streams(config['dev_manifest'], index, 'dev')
+    inference = InferenceConfig(8, 4)
+    documents = {(d.library, d.doc): d for d in index.documents('dev')}
+    # Reproduce the former per-pair Python lists, including every stratum and AP.
+    legacy = Evaluator()
+    legacy.boundaries = defaultdict(lambda: [[], []])
+    for stream in streams:
+        result = predict_stream(model, dataset, stream['rows'], inference)
+        legacy.add(stream['id'], index.pages(stream['rows']), result, documents,
+                   stream['censored_left'], stream['censored_right'])
+    def no_split_scan(*args):
+        raise AssertionError('validation must not load all development documents')
+    monkeypatch.setattr(index, 'documents', no_split_scan)
+    report = evaluate_streams(model, dataset, streams, inference, 'cpu')
+    report.pop('seconds')
+    report.pop('unique_pages_per_second')
+    assert report == legacy.report()
+
+
 def test_training_resume_matches_uninterrupted(fixture_data, tmp_path):
     config, _, _, _ = fixture_data
     torch.set_num_threads(2)

@@ -21,7 +21,7 @@ from .features import FeaturePipeline
 from .index import PageIndex
 from .inference import InferenceConfig, predict_stream, tag_pages
 from .losses import stage_loss_weights, task_losses
-from .loading import training_loader
+from .loading import release_host_cache, training_loader
 from .tracking import Tracking
 from .manifests import file_sha256, load_streams
 from .models import BertBackbone, PageBackbone, PageTagger, from_specification
@@ -133,19 +133,19 @@ def make_optimizer(model, config):
 
 def evaluate_streams(model, dataset, streams, inference, device, predictions_dir=None):
     evaluator = Evaluator(inference.start_threshold)
-    split = streams[0]['split']
-    documents = { (d.library, d.doc): d for d in dataset.index.documents(split)}
     if predictions_dir is not None:
         Path(predictions_dir).mkdir(parents=True, exist_ok=True)
     start = time.perf_counter()
     for i, stream in enumerate(streams):
         result = predict_stream(model, dataset, stream['rows'], inference, device)
+        documents = {(d.library, d.doc): d for d in dataset.index.documents_for_rows(stream['rows'])}
         evaluator.add(stream['id'], dataset.index.pages(stream['rows']), result, documents,
                       stream['censored_left'], stream['censored_right'])
         if predictions_dir is not None:
             # Filenames use ordinal positions, not untrusted manifest IDs or source paths.
             np.savez_compressed(Path(predictions_dir) / f'{i:06d}.npz',
                                 stream_id=stream['id'], rows=np.asarray(stream['rows'], np.int64), **result)
+        del result, documents
     report = evaluator.report()
     report['seconds'] = time.perf_counter() - start
     report['unique_pages_per_second'] = sum(s['pages'] for s in report['streams']) / report['seconds']
@@ -315,6 +315,7 @@ def train(config, resume=None, stop_after=None):
                                           'step': step, 'scale': scaler.get_scale()}), flush=True)
                         if scaler.get_scale() < 1 or progress['overflow_skips'] > 20:
                             raise FloatingPointError('repeated FP16 gradient overflow')
+                        del raw_batch, batch, augmented, output, losses, denominators, norm
                         continue
                     step += 1
                     progress['stage_step'] += 1
@@ -330,6 +331,9 @@ def train(config, resume=None, stop_after=None):
                               'loss_scale': scaler.get_scale(),
                               'pages_per_second': int(raw_batch['attention_mask'].sum()) / elapsed,
                               'sampler': dict(sampler.counters), 'coverage_epochs': sampler.epoch}
+                    # The device copy and scalar logging are complete. Do not retain
+                    # the consumer's pinned batch (or last training graph) in validation.
+                    del raw_batch, batch, augmented, output, losses, denominators, norm
                     with (run_dir / 'metrics.jsonl').open('a') as f:
                         f.write(json.dumps(record, allow_nan=False) + '\n')
                     if step % config.get('log_every', 25) == 0 or step == 1:
@@ -352,6 +356,9 @@ def train(config, resume=None, stop_after=None):
                 progress['pending_validation'] = record
                 save_checkpoint(run_dir / 'latest.pt', model, optimizer, sampler, step, best,
                                 config, prov, features.state_dict(), progress)
+            host_cache = release_host_cache(device)
+            if host_cache:
+                print(json.dumps({'step': step, 'validation_host_cache': host_cache}), flush=True)
             report = evaluate_streams(model, dataset, streams, inference, device)
             if diagnostic_blocks:
                 lengths = [n for n in (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)

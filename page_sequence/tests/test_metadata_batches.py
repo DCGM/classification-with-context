@@ -21,6 +21,15 @@ def test_metadata_batches_preserve_order_duplicates_and_document_ids(tmp_path):
     assert index.pages(iter(rows)) == fetched
     assert index.pages_with_documents(()) == ([], [])
 
+    statements.clear()
+    index.db.set_trace_callback(statements.append)
+    documents = index.documents_for_rows(iter(rows))
+    index.db.set_trace_callback(None)
+    assert {d.id: d for d in documents} == {d.id: d for d in index.documents('fit')}
+    assert len([s for s in statements if s.startswith('SELECT')]) == 2
+    assert index.documents_for_rows(()) == []
+    assert [d.doc for d in index.documents_for_rows((601, 607, 601))] == ['y']
+
 
 def test_metadata_batches_report_first_missing_row(tmp_path):
     build_index(tmp_path / 'index', [{'library': 'a', 'doc': 'x', 'split': 'fit'}],

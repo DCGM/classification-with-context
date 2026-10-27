@@ -408,6 +408,20 @@ checkpoint receives a larger, uncapped comparison written to
 
 ## Loader and logging memory
 
+Completed training batches are released immediately after scalar logging data is
+collected. At each exhausted training segment, before validation, the runner
+releases unused CUDA pinned-host cache through `torch.accelerator.empty_host_cache`
+when available and logs reserved/active host bytes. This frees CPU RAM retained
+at the loader's prefetch high-water mark; it does not empty the GPU cache or change
+sampling, tensors still in use, RNG state, predictions, or metrics. Workers remain
+persistent. Older Torch versions without the host-cache API skip this cleanup.
+
+Full-stream validation fetches only the documents present in the current stream,
+using bounded metadata queries, instead of materializing the entire development
+split. Boundary targets/scores use compact byte/float64 arrays, preserving exact
+average-precision calculations and all existing report fields. Each stream's
+predictions and document metadata are released before the next stream starts.
+
 Document-pair coverage is diagnostic only. It uses a fixed 16-KiB HyperLogLog
 tracker and is reported as `unique_join_pairs_estimate` (about 0.81% relative
 standard error), rather than retaining every encountered Python pair tuple.

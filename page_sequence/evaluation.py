@@ -1,5 +1,6 @@
 """Score merged full streams once; type annotation and DB agreement stay distinct."""
 from collections import defaultdict
+from array import array
 
 import numpy as np
 from sklearn.metrics import average_precision_score, confusion_matrix
@@ -133,7 +134,9 @@ class Evaluator:
         self.confusions = {name: np.zeros((n, n), np.int64) for name, n in (
             ('curated_type', len(PAGE_TYPES)), ('weak_type_agreement', len(PAGE_TYPES)),
             ('placement_db_agreement', len(PLACEMENTS)))}
-        self.boundaries = defaultdict(lambda: [[], []])
+        # Exact scores are required for AP, but Python bool/float lists are not.
+        # Float64 preserves the original float(p[i]) values and metric results.
+        self.boundaries = defaultdict(lambda: [array('b'), array('d')])
         self.streams = []
         self.span_tp = self.span_pred = self.span_true = 0
         self.position_counts = defaultdict(int)
@@ -167,7 +170,7 @@ class Evaluator:
             stratum = (join_stratum(documents[pages[i - 1].doc_key], documents[pages[i].doc_key])
                        if y[i] else 'within_document')
             for group in ('all', stratum):
-                self.boundaries[group][0].append(y[i])
+                self.boundaries[group][0].append(int(y[i]))
                 self.boundaries[group][1].append(float(p[i]))
         predicted = p >= self.threshold
         predicted[0] = False
