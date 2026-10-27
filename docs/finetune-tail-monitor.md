@@ -67,3 +67,11 @@ capture, external-job concurrency accounting, retry limits, partial log writes a
 exit-status recording. Each parent's frozen source inventory was verified before
 copying it to the corresponding tail runtime. No running trainer source or config
 was modified.
+
+Operational verification: the service was active and enabled, user lingering was
+on, all three current trainers remained running, and the first alternative tail
+was prepared and queued without launching a fourth training. The remaining three
+watchers wait for checkpoint transitions. Each tail config was checked to differ
+from its parent only in run/task identity and the fine-tuning loss override.
+The queue survived an explicit monitor restart. Setup verification and monitor
+helper checksums are retained in the runtime root.
