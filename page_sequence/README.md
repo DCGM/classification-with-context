@@ -351,7 +351,7 @@ Export a trusted local checkpoint as an inference artifact, without training
 state or data-store dependencies:
 
 ```bash
-python -m page_sequence.export --checkpoint /path/to/latest.pt --output /path/to/context.pt
+python -m page_sequence.export --checkpoint /path/to/best.pt --output /path/to/context.pt
 ```
 
 The artifact contains weights, model specification, feature normalization,
@@ -503,8 +503,10 @@ pages and over scan endpoints. The selected final checkpoint additionally gets
 `final-document-edges.json`: a bounded, deterministic dev-only panel of document
 prefixes, tails and interior negatives, without neighbouring documents. These
 diagnostics are logged under `final_document_edges` and do not select checkpoints.
-Portable MetaKat export drops the two training-only heads and their specification
-flag, preserving the existing inference artifact and boundary output contract.
+Portable MetaKat export preserves both auxiliary heads and their specification flag.
+MetaKat accepts only the pagination-aware BERT/separate-MLP architecture with
+these heads (`metakat_context_v3`). The pair boundary head still supplies the
+final boundary prediction; auxiliary probabilities are not combined into it.
 
 For concurrent runs, `worker_start_method: "forkserver"` starts workers from a
 separate CPU-only process with preloaded Torch, NumPy and dataset modules. This
@@ -556,12 +558,12 @@ an mmap. Resume verifies the candidate policy, cap, and data identity. Historica
 and checkpoints retain their original three-modality behavior.
 
 For arbitrary-scan inference, `Page.pagenum` / the predict CLI's JSONL `pagenum` is optional.
-The same parser and normalizer apply; missing numbers require no imputation. The portable
-Pagination-aware MetaKat exports use `metakat_context_v2`, carrying only the candidate
-policy and fixed cap alongside the model. The updated consumer reads existing
-`MetakatPage.pageNumber.text` and applies the same parser and FP16 encoding. Older
-three-modality exports remain `metakat_context_v1`. Neither artifact needs the sidecar
-or DB dump at inference; `predict`/`tag_pages` also support caller-provided numbers.
+The same parser and normalizer apply; missing numbers require no imputation.
+MetaKat exports use `metakat_context_v3`, preserving the start/end heads and carrying
+the candidate policy and fixed cap alongside the model. The consumer reads existing
+`MetakatPage.pageNumber.text` and applies the same parser and FP16 encoding. Legacy
+v1/v2 artifacts and checkpoints without auxiliary heads are rejected. The artifact
+needs neither the sidecar nor the DB dump; `predict`/`tag_pages` also support caller-provided numbers.
 
 Whole-modality robustness training is optional:
 `modality_dropout: {"all_probability": 0.70, "two_probability": 0.21,

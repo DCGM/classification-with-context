@@ -17,33 +17,33 @@ def export_checkpoint(checkpoint, output):
     if (state['format'] != 1 or tuple(state['page_types']) != PAGE_TYPES
             or tuple(state['placements']) != PLACEMENTS):
         raise ValueError('Checkpoint schema/label mismatch')
+    spec = state['specification']
+    if (spec.get('auxiliary_edges') is not True or spec.get('backbone', {}).get('kind') != 'bert'
+            or spec.get('fusion') != 'separate_mlp' or spec.get('dims', {}).get('pagination') != 5
+            or set(spec.get('dims', {})) != {'image', 'text', 'stats', 'pagination'}
+            or spec.get('num_types') != len(PAGE_TYPES)):
+        raise ValueError('MetaKat requires pagination-aware BERT with separate MLPs and auxiliary start/end heads')
+    from .models import from_specification
+    from_specification(spec).load_state_dict(state['model'], strict=True)
+    from .pagination import POLICY, encode, RECORD
+    import numpy as np
     pagination = state['config'].get('pagination')
-    has_pagination = 'pagination' in state['specification']['dims']
-    if bool(pagination) != has_pagination:
-        raise ValueError('Pagination configuration/model dimensions mismatch')
-    pagination_contract = None
-    if has_pagination:
-        from .pagination import POLICY, encode, RECORD
-        import numpy as np
-        if (state['specification']['dims']['pagination'] != 5
-                or state['provenance']['pagination']['policy'] != POLICY):
-            raise ValueError('Unsupported pagination feature contract')
-        cap = pagination.get('cap', 10000)
-        encode(np.zeros(0, RECORD), cap)  # Validate the exact inference normalization.
-        pagination_contract = {'policy': POLICY, 'cap': cap}
+    if (not isinstance(pagination, dict)
+            or state['provenance']['pagination']['policy'] != POLICY):
+        raise ValueError('Unsupported pagination feature contract')
+    cap = pagination.get('cap', 10000)
+    encode(np.zeros(0, RECORD), cap)  # Validate the exact inference normalization.
+    pagination_contract = {'policy': POLICY, 'cap': cap}
     # JSON round-trip drops Python-specific containers from metadata.
     specification = dict(state['specification'])
-    specification.pop('auxiliary_edges', None)  # training-only heads; boundary output is unchanged
     metadata = json.loads(json.dumps({
-        'format': 'metakat_context_v2' if has_pagination else 'metakat_context_v1',
+        'format': 'metakat_context_v3',
         'specification': specification, 'features': state['features'],
         'page_types': state['page_types'], 'placements': state['placements'],
         'inference': state['config'].get('inference', {}),
     }))
-    if pagination_contract is not None:
-        metadata['pagination'] = pagination_contract
-    artifact = dict(metadata, model={k: v.detach().cpu().clone() for k, v in state['model'].items()
-                                    if not k.startswith(('page_start_head.', 'page_end_head.'))})
+    metadata['pagination'] = pagination_contract
+    artifact = dict(metadata, model={k: v.detach().cpu().clone() for k, v in state['model'].items()})
     output = Path(output)
     temporary = output.with_suffix(output.suffix + '.writing')
     torch.save(artifact, temporary)

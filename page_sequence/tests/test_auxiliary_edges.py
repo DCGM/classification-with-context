@@ -41,7 +41,7 @@ def test_targets_are_catalogue_edges_not_crop_edges_and_padding(tmp_path):
     assert not batch['pair_mask'][:, 0].any()
 
 
-def test_auxiliary_gradients_at_first_last_singleton_and_export(tmp_path):
+def test_auxiliary_gradients_at_first_last_singleton_and_legacy_export_rejection(tmp_path):
     _, index, features, dataset = fixture(tmp_path)
     doc = index.documents('fit')[0]
     batch = collate_windows([dataset[Window((doc.first,))],
@@ -65,14 +65,9 @@ def test_auxiliary_gradients_at_first_last_singleton_and_export(tmp_path):
     torch.save({'format': 1, 'page_types': PAGE_TYPES, 'placements': PLACEMENTS,
                 'specification': spec, 'features': features.state_dict(), 'model': model.state_dict(),
                 'config': {}}, source)
-    export_checkpoint(source, exported)
-    artifact = torch.load(exported, weights_only=True)
-    assert 'auxiliary_edges' not in artifact['specification']
-    legacy = from_specification(artifact['specification']).eval()
-    legacy.load_state_dict(artifact['model'], strict=True)
-    predicted = legacy(batch['features'], batch['attention_mask'])
-    for key in ('type_logits', 'placement_logits', 'starts_document_logits', 'pair_mask'):
-        torch.testing.assert_close(output[key], predicted[key], rtol=0, atol=0)
+    with pytest.raises(ValueError, match='pagination-aware BERT'):
+        export_checkpoint(source, exported)
+    assert not exported.exists()
 
 
 def test_edge_crops_keep_annotations_and_coverage_and_resume(tmp_path):
