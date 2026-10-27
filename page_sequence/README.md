@@ -290,6 +290,8 @@ records canonical row order, document spans, targets, and class order; each mode
 The final report records checkpoint, manifest, catalogue and comparison-code
 hashes. Repeated pages, partial documents and within-document reordering are rejected.
 This is a development experiment; it does not open the held-out test set.
+The [2026-10-27 comparison](../docs/page-type-context-comparison.md) records
+checkpoint selection, full development results and per-class changes.
 
 ### Tag caller-ordered pages
 
