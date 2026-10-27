@@ -428,6 +428,20 @@ Python/NumPy/Torch and changes the resumed augmentation/dropout sequence.
 
 ### Optional per-page document-edge supervision
 
+With auxiliary heads enabled, `loss_weights: {"boundary_consistency": 0.1}`
+adds a training-only agreement term in both stages (default zero). For each
+valid adjacent pair, it averages Bernoulli Jensen-Shannon divergences between
+the boundary-before-current-page probability and (a) current-page start and
+(b) previous-page end. Probabilities/log probabilities accumulate in FP32;
+gradients reach all three heads and the shared encoder, with no detached teacher.
+The raw term is bounded by log(2) and uses duplicate-aware pair weights with its
+own denominator. Padding, absent neighbours, unknown auxiliary labels and
+conflicting targets are excluded; conflicts are counted explicitly. Existing
+supervised losses remain active to anchor predictions. This is an agreement
+regularizer, not a guarantee of long-context use. It does not widen the boundary
+head, combine auxiliary probabilities at inference, or change evaluation or
+checkpoint selection. Effective coefficients and the consistency loss are logged.
+
 Loss weights can be overridden by stage, for example
 `stage_loss_weights: {"finetune": {"weak_type": 0.05}}`. Unspecified tasks inherit
 `loss_weights` and then the standard defaults. This example keeps unannotated
@@ -452,6 +466,10 @@ The ordinary trainer then uses its normal strict resume checks. A watcher can
 snapshot this atomic transition checkpoint while the unchanged baseline keeps
 training. GPU numerical nondeterminism may still cause later roundoff differences,
 but both variants begin fine-tuning from exactly the same stored state.
+The watcher supports `--wait-for-status` to capture and prepare the shared state
+immediately but queue training behind an occupied SSD. It then replaces itself
+with a lightweight slot waiter, releasing its Torch runtime memory. The waiter
+requires successful completion and never launches a third simultaneous trainer.
 
 `auxiliary_edges: true` adds independent linear `page_start_head` and
 `page_end_head` classifiers on each contextual BERT vector. The existing

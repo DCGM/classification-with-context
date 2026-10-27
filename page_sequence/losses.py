@@ -16,6 +16,7 @@ class LossWeights:
     starts: float = .5
     page_start: float = .25
     page_end: float = .25
+    boundary_consistency: float = 0.
 
 
 def stage_loss_weights(config, stage):
@@ -34,6 +35,44 @@ def stage_loss_weights(config, stage):
     if any(not math.isfinite(value) or value < 0 for value in asdict(weights).values()):
         raise ValueError('loss weights must be finite and nonnegative')
     return weights
+
+
+def bernoulli_js(a, b):
+    """Symmetric Jensen-Shannon divergence of Bernoulli logits, in FP32."""
+    log_a = torch.stack((F.logsigmoid(-a.float()), F.logsigmoid(a.float())), -1)
+    log_b = torch.stack((F.logsigmoid(-b.float()), F.logsigmoid(b.float())), -1)
+    log_mean = torch.logaddexp(log_a, log_b) - math.log(2)
+    return (.5 * ((log_a.exp() * (log_a - log_mean)).sum(-1)
+                  + (log_b.exp() * (log_b - log_mean)).sum(-1))).clamp_min(0)
+
+
+def boundary_consistency(output, batch):
+    """Agree on boundary(i), start(i), end(i-1); only coherent labelled pairs.
+
+    No detach: gradients reach all three heads and their shared contextual encoder.
+    Outer scan edges without a neighbour retain supervised auxiliary losses only.
+    """
+    if any(key not in output for key in ('page_start_logits', 'page_end_logits')):
+        raise ValueError('boundary consistency requires auxiliary start/end heads')
+    pair = batch['attention_mask'] & batch['pair_mask'] & output['pair_mask']
+    mask = pair[:, 1:] & batch['attention_mask'][:, :-1]
+    start, end = batch['page_start'][:, 1:], batch['page_end'][:, :-1]
+    known = (start != IGNORE) & (end != IGNORE)
+    coherent = (start == batch['starts'][:, 1:]) & (end == batch['starts'][:, 1:])
+    conflicts = (mask & known & ~coherent).sum().detach()
+    mask &= known & coherent
+    weights = batch['pair_weight'][:, 1:][mask]
+    denom = weights.sum()
+    if mask.any():
+        b = output['starts_document_logits'][:, 1:][mask]
+        s = output['page_start_logits'][:, 1:][mask]
+        e = output['page_end_logits'][:, :-1][mask]
+        raw = .5 * (bernoulli_js(b, s) + bernoulli_js(b, e))
+        loss = (raw * weights).sum() / denom.clamp_min(1e-12)
+    else:
+        loss = sum(output[key].float().sum() for key in
+                   ('starts_document_logits', 'page_start_logits', 'page_end_logits')) * 0
+    return loss, denom.detach(), conflicts
 
 
 def task_losses(output, batch, weights=LossWeights()):
@@ -64,5 +103,10 @@ def task_losses(output, batch, weights=LossWeights()):
             result[task] = (raw * weight).sum() / denom.clamp_min(1e-12)
         else:
             result[task] = logits.float().sum() * 0
+    if weights.boundary_consistency:
+        loss, denom, conflicts = boundary_consistency(output, batch)
+        result['boundary_consistency'] = loss
+        denominators['boundary_consistency'] = denom
+        denominators['consistency_conflicting_targets'] = conflicts
     result['total'] = sum(getattr(weights, k) * v for k, v in result.items())
     return result, denominators

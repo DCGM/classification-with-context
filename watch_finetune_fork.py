@@ -63,6 +63,8 @@ def main():
     parser.add_argument('--parent-root', type=Path, required=True)
     parser.add_argument('--target-root', type=Path, required=True)
     parser.add_argument('--prepare-only', action='store_true')
+    parser.add_argument('--wait-for-status', type=Path,
+                        help='Capture and prepare first, then wait for this SSD occupant to finish')
     args = parser.parse_args()
     root = args.target_root.resolve()
     try:
@@ -80,6 +82,9 @@ def main():
             # Replace this Torch-loaded watcher with the small supervisor, freeing
             # its runtime/model-checkpoint memory before the second trainer starts.
             os.chdir(root)
+            if args.wait_for_status:
+                os.execve(sys.executable, [sys.executable, '-u', str(root / 'wait_training_slot.py'),
+                          '--root', str(root), '--status-path', str(args.wait_for_status.resolve())], env)
             os.execve(sys.executable, [sys.executable, '-u', str(root / 'supervise.py')], env)
     except BaseException as error:
         write_status(root, 'failed', error=str(error))

@@ -168,6 +168,8 @@ def provenance(index, manifest):
 
 def train(config, resume=None, stop_after=None):
     weights_by_stage = {stage: stage_loss_weights(config, stage) for stage in ('pretrain', 'finetune')}
+    if any(w.boundary_consistency for w in weights_by_stage.values()) and not config.get('auxiliary_edges', False):
+        raise ValueError('boundary consistency requires auxiliary_edges configuration')
     dropout = config.get('pagination_dropout', {})
     # Validate before opening large stores or creating a tracking task.
     pagination_dropout({'pagination': torch.zeros(0, 0, 5)}, **dropout)
