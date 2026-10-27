@@ -72,3 +72,8 @@ and 86 absent metadata windows. This small sample is not an estimate of the long
 50% per-scan probability. Around 7.4 GiB RAM remained available during the check
 with the two existing jobs active. Source checksums and smoke verification are
 saved with the runtime configuration.
+
+Full 512 training was verified at step 7 with finite losses
+and gradients, loss scale 1024, and zero fallback reads.
+All three experiment supervisors reported running; available RAM was approximately
+5.5 GiB. [512 ClearML task](http://semant.cz:8090/projects/cf7452f7555d4335a213e1f4159b80a9/tasks/4c7c12a09b1b47379b04e62329bb1ded/output/log).
