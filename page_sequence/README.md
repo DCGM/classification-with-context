@@ -266,6 +266,33 @@ operating point on development before test evaluation.
 
 ## Tag a scan without document identities
 
+### Compare page-type context arrangements
+
+Use the same development pages to compare restarting inference for every complete
+document against concatenating all manifest streams in their recorded order:
+
+```bash
+python -m page_sequence.compare_page_context \
+  --checkpoint /path/to/best.pt --manifest /path/to/dev.jsonl \
+  --training-store /path/to/document-store-fp16-v1 \
+  --output /path/to/new-comparison-directory --device cuda --batch-size 32
+```
+
+The continuous mode uses full overlapping windows, including a full final window,
+provided the panel is at least one window long. Per-document mode uses shorter
+windows for short documents and scans long documents with the same overlap and
+merging settings. Neither mode receives document identity as a model feature.
+Only page types are scored: curated labels and weak DB agreement remain separate.
+Reports include per-class scores, confusion matrices, front/back confusions,
+document-length/edge strata, and paired fixes versus regressions. `panel.npz`
+records canonical row order, document spans, targets, and class order; each mode's
+`*-probabilities.npy` contains aligned FP32 probabilities for later analysis.
+The final report records checkpoint, manifest, catalogue and comparison-code
+hashes. Repeated pages, partial documents and within-document reordering are rejected.
+This is a development experiment; it does not open the held-out test set.
+
+### Tag caller-ordered pages
+
 The `tag_pages(model, features, pages, config, device)` API accepts caller-ordered Page metadata
 with empty `doc` values. No document index or true boundaries are required. CLI input is JSONL:
 
