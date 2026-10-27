@@ -63,6 +63,34 @@ Use continuous inference for the initial dump-mining pass. This comparison uses
 one fixed concatenation order; it does not establish invariance to neighbouring
 documents. A different ordering is a separate future robustness check.
 
+### Follow-up: is the gain at starts or endings?
+
+Using disjoint edge regions (first/last `min(16, floor(length/2))` pages), the
+curated-page errors break down as follows. The disjoint definition differs slightly
+from the overlapping first/last-16 report above for very short documents.
+
+| Region | Curated pages | Per-document errors | Continuous errors | Continuous fixes | Regressions |
+|---|---:|---:|---:|---:|---:|
+| Beginning | 1,293 | 111 | 111 | 16 | 16 |
+| Ending | 1,990 | 188 | 141 | 61 | 14 |
+| Interior | 475 | 60 | 60 | 3 | 3 |
+
+The entire net accuracy gain of 47 pages is at document endings. Frequently
+corrected errors include BackEndSheet predicted as BackCover (7 fixes), BackCover
+as BackEndSheet (7), BackCover as NormalPage (6), and BackEndSheet as NormalPage (4).
+This is not primarily a front-versus-back reversal problem.
+
+Crucially, the selected r10 checkpoint predates explicit document-edge crops and
+auxiliary start/end supervision: neither is enabled in its configuration. It has
+variable random scan lengths, but these scans generally continue across document
+boundaries or end at arbitrary positions within documents. An observed context
+endpoint therefore does not reliably mean a true document ending during training.
+Padding positions are masked out of attention; there is no explicit end-of-document
+token. This makes reliance on following-document evidence plausible, but does not
+prove it: inference also changes absolute window positions, available context length
+and overlap merging. Before changing training, a useful next diagnostic is the same
+paired comparison on r11, which already has explicit edge crops and auxiliary heads.
+
 ## Curated results per page type
 
 F1 is a percentage; changes are percentage points. Tiny supports make several
