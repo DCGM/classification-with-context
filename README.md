@@ -313,6 +313,67 @@ as they are, so a training data loader should decide what to do with them: ignor
 | `ListOfSupplements` | no | 2 |
 | **total** | | 2,599,292 |
 
+### Bottom-level document lengths
+
+Measured on 2026-10-27 from the published FP16 training catalogue: **1,087,561
+documents, 45,099,935 retained page records**. A document is the lowest-level
+unit (e.g. a periodical issue), not a periodical volume or title. Length counts
+retained ordered page records; it is neither printed pagination nor the span
+between the original DB page indices. Quarantined documents and unordered
+pages are excluded; retained minor gaps do not become placeholder pages.
+
+These counts describe the usable sequence dataset, whereas the page-type table
+above describes the original dumps before sequence filtering.
+
+| Split | Documents | Pages | Mean | Median | P90 | P95 | P99 | Maximum |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| all | 1,087,561 | 45,099,935 | 41.5 | 8 | 116 | 232 | 492 | 2,649 |
+| fit | 922,696 | 37,911,505 | 41.1 | 8 | 112 | 230 | 488 | 2,649 |
+| dev | 162,771 | 6,700,698 | 41.2 | 8 | 112 | 229 | 488 | 2,224 |
+| test | 2,094 | 487,732 | 232.9 | 190 | 468 | 594 | 944 | 1,992 |
+
+Whole-document fit by window capacity:
+
+| Window (pages) | All documents fitting | All pages in fitting documents | Fit documents fitting | Fit pages in fitting documents |
+|---|---:|---:|---:|---:|
+| 32 | 80.20% | 16.34% | 80.36% | 16.53% |
+| 64 | 85.54% | 22.38% | 85.68% | 22.61% |
+| 128 | 90.80% | 33.98% | 90.92% | 34.25% |
+| 256 | 95.72% | 56.05% | 95.78% | 56.24% |
+| 512 | 99.12% | 84.74% | 99.13% | 84.84% |
+| 1024 | 99.93% | 97.71% | 99.93% | 97.68% |
+
+The collection has many short documents: half have at most 8 pages, and 75%
+have at most 20. Page-weighting changes the picture: half of all page records
+belong to documents of at most 222 pages; the page-weighted P90 is 628 pages.
+A 128-page window can hold 90.80% of documents but those account for only
+33.98% of pages. At 512 pages this rises to 99.12% of documents and 84.74%
+of pages. The held-out test documents are substantially longer than fit/dev
+documents (median 190 versus 8), so aggregate collection coverage alone is
+not a sufficient guide to evaluation context.
+
+"Fitting" means the complete retained document could fit if the window were
+aligned to it. Actual sampled/overlapping windows can straddle document
+boundaries or cut a fitting document; these percentages do not measure the
+context seen in a training batch or guarantee prediction quality. Longer
+documents still require scanning and overlap merging. Counts include repeated
+page identities when they belong to different document records.
+
+Exact histograms, nearest-rank document/page-weighted quantiles and coverage
+for every split are stored in
+[document-length-statistics.json](docs/document-length-statistics.json).
+Recompute without loading the dumps, page table, or vectors into RAM:
+
+```bash
+python -m page_sequence.document_length_statistics \
+  --index /path/to/document-store-fp16-v1/catalogue.sqlite \
+  --output docs/document-length-statistics.json
+```
+
+The report streams SQL counts grouped by split and length, with a 4 MiB SQLite
+page cache and disk-backed temporary storage; Python retains only length
+histograms. It opens the catalogue read-only and does not change training.
+
 ## Page type classification evaluation
 
 What the previous, image-only page type classifier reported. A starting point for evaluating
