@@ -36,3 +36,10 @@ Data reads use the published native FP16 SSD store; old LMDB paths remain proven
 The frozen source copy and checksums are saved beside the runtime configuration.
 The existing supervisor retains its 2-GiB available-memory stop guard and does not
 retry failed runs automatically.
+
+Validation before launch: 197 regression tests passed. The frozen source at
+`298d050` passed four real-data CUDA FP16 optimizer updates with batch 64 and
+8 loaders; all parameters and gradients were finite and the scaler stayed at
+1024. The smoke run consumed 130 supplied-metadata and 126 absent-metadata windows
+from 66 supplied and 58 absent constructed scans, and completed two dual-mode
+validations. Details are saved in runtime `smoke-verification.json`.
