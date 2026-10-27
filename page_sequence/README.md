@@ -439,6 +439,20 @@ on resume. Each task retains its own valid-target denominator. Window 512 is
 supported by BERT Mini's existing position table; scanning uses stride 256, and
 context diagnostics include a 512-page level when configured.
 
+To isolate a fine-tuning loss change, branch from the baseline's actual
+`finetune` / `stage_step: 0` transition checkpoint. This contains the selected
+pretraining model/optimizer/scaler plus the final pretraining sampler and RNG
+state used to enter fine-tuning; `pretrain_best.pt` alone has a different sampler
+position and is not that exact initialization. `fork_finetune.py` explicitly
+checks this transition and permits only the weak-type 0.2-to-0.05 fine-tuning
+change, new logging/run identity, and content-equivalent local store paths.
+It checks code/data/environment/features, verifies protected training state
+after serialization, and creates a separate ClearML history with a parent audit.
+The ordinary trainer then uses its normal strict resume checks. A watcher can
+snapshot this atomic transition checkpoint while the unchanged baseline keeps
+training. GPU numerical nondeterminism may still cause later roundoff differences,
+but both variants begin fine-tuning from exactly the same stored state.
+
 `auxiliary_edges: true` adds independent linear `page_start_head` and
 `page_end_head` classifiers on each contextual BERT vector. The existing
 previous/current-vector boundary head, its first-position mask, overlap merging,
