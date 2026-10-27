@@ -43,3 +43,7 @@ Validation before launch: 197 regression tests passed. The frozen source at
 1024. The smoke run consumed 130 supplied-metadata and 126 absent-metadata windows
 from 66 supplied and 58 absent constructed scans, and completed two dual-mode
 validations. Details are saved in runtime `smoke-verification.json`.
+
+Full training was verified advancing at step 14 with finite losses and
+gradients, loss scale 1024, both metadata modes sampled, and zero
+fallback storage reads. [ClearML task](http://semant.cz:8090/projects/cf7452f7555d4335a213e1f4159b80a9/tasks/b9f269d8e1804840b350b75bbca793db/output/log).
