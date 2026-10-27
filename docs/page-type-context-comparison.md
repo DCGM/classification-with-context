@@ -50,6 +50,33 @@ Reproduce using the command below with that directory's `best-snapshot.pt`, a ne
 output directory, and `--batch-size 16`; omit `--training-store` to retain the
 checkpoint's SSD store. Existing five-bit inference and comparison tests: 7 passed.
 
+### Follow-up: per-document boundary predictions
+
+The beginning/ending errors above are page-type classification errors in edge
+regions, not binary boundary errors. A separate read-only pass on the same
+step-15,000 snapshot, panel and inference settings measured binary heads at 0.5.
+Auxiliary logits were merged with the same page centre weights before sigmoid.
+
+The authoritative pair head produces 41 false internal boundaries among 429,417
+within-document pairs (0.00955%), affecting 33 of 1,979 documents (1.67%). The
+first scan page has no valid pair prediction; outer scan endpoints are known
+from the input rather than inferred by this head.
+
+| Auxiliary head | Correct true endpoints | Missed true endpoints | False positives elsewhere |
+|---|---:|---:|---:|
+| Document start | 1,700 / 1,979 (85.90%) | 279 | 348 |
+| Document end | 1,675 / 1,979 (84.64%) | 304 | 539 |
+
+The scan flags are learned features, not hard output overrides. Thus the auxiliary
+heads do not always recognize known scan endpoints, even though the page-type
+head benefits from per-document inference. These auxiliary positives are not used
+as the final split decisions. Preserving supplied outer boundaries explicitly in
+an application is distinct from measuring these raw model predictions.
+
+Diagnostic script: the artifact root's `check_boundaries.py`; output:
+`comparison/boundary-report.json` and `boundary-aux-probabilities.npz`. The script
+adds auxiliary logit accumulation without modifying training or production inference.
+
 ## Historical r10 comparison
 
 Measured on 2026-10-27. Select by human-labelled development page-type weighted F1;
