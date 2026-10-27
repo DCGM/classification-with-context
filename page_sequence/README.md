@@ -268,6 +268,10 @@ operating point on development before test evaluation.
 
 ### Five-bit boundary inputs and complete-document training
 
+The [NDK consistency study](../docs/ndk-consistency-study.md) explores future
+output constraints and valid acquisition-order augmentation, with a bounded
+fit-only metadata audit. These proposals do not change the current experiments.
+
 `boundary_features: true` adds a separate five-value feature branch, projected by
 the same kind of MLP as the other modalities. Its fixed input order is:
 

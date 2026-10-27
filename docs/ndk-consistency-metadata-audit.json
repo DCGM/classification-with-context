@@ -1,0 +1,1935 @@
+{
+  "measured": "2026-10-27T19:24:56.557459+01:00",
+  "index": "/home/ikohut/tmp/document-store-fp16-v1/catalogue.sqlite",
+  "selection": {
+    "uniform_document_id_modulus": 919,
+    "uniform_remainder": 17,
+    "annotation_document_id_modulus": 23,
+    "annotation_remainder": 0,
+    "uniform_documents": 1008,
+    "annotation_enriched_documents": 486,
+    "unique_documents": 1492,
+    "split": "fit"
+  },
+  "counts": {
+    "pages": 135829,
+    "adjacent_pairs": 134337,
+    "order_gaps": 26
+  },
+  "sources": {
+    "db": {
+      "classes": {
+        "advertisement": {
+          "pages": 359,
+          "first": 1,
+          "last": 107,
+          "side:unknown": 359,
+          "documents": 140,
+          "documents_with_multiple": 77
+        },
+        "backcover": {
+          "pages": 545,
+          "first": 1,
+          "last": 272,
+          "side:unknown": 394,
+          "documents": 543,
+          "documents_with_multiple": 2,
+          "side:single": 151
+        },
+        "backendpaper": {
+          "pages": 105,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 105,
+          "documents": 45,
+          "documents_with_multiple": 44
+        },
+        "backendsheet": {
+          "pages": 538,
+          "first": 0,
+          "last": 4,
+          "side:unknown": 386,
+          "documents": 537,
+          "documents_with_multiple": 1,
+          "side:right": 145,
+          "side:left": 4,
+          "side:single": 3
+        },
+        "bibliography": {
+          "pages": 10,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 10,
+          "documents": 1,
+          "documents_with_multiple": 1
+        },
+        "blank": {
+          "pages": 1872,
+          "first": 2,
+          "last": 8,
+          "side:unknown": 1868,
+          "documents": 207,
+          "documents_with_multiple": 151,
+          "side:left": 4
+        },
+        "calibrationtable": {
+          "pages": 122,
+          "first": 0,
+          "last": 69,
+          "side:unknown": 122,
+          "documents": 104,
+          "documents_with_multiple": 14
+        },
+        "cover": {
+          "pages": 55,
+          "first": 1,
+          "last": 36,
+          "side:unknown": 55,
+          "documents": 42,
+          "documents_with_multiple": 11
+        },
+        "dedication": {
+          "pages": 66,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 66,
+          "documents": 10,
+          "documents_with_multiple": 8
+        },
+        "edge": {
+          "pages": 129,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 129,
+          "documents": 43,
+          "documents_with_multiple": 43
+        },
+        "errata": {
+          "pages": 10,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 10,
+          "documents": 6,
+          "documents_with_multiple": 2
+        },
+        "flyleaf": {
+          "pages": 231,
+          "first": 0,
+          "last": 63,
+          "side:unknown": 148,
+          "documents": 70,
+          "documents_with_multiple": 55,
+          "side:single": 82,
+          "side:left": 1
+        },
+        "frontcover": {
+          "pages": 532,
+          "first": 427,
+          "last": 0,
+          "side:unknown": 379,
+          "documents": 532,
+          "documents_with_multiple": 0,
+          "side:single": 153
+        },
+        "frontendpaper": {
+          "pages": 94,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 94,
+          "documents": 41,
+          "documents_with_multiple": 40
+        },
+        "frontendsheet": {
+          "pages": 537,
+          "first": 4,
+          "last": 0,
+          "side:unknown": 382,
+          "documents": 535,
+          "documents_with_multiple": 2,
+          "side:left": 151,
+          "side:single": 4
+        },
+        "frontispiece": {
+          "pages": 9,
+          "first": 1,
+          "last": 0,
+          "side:unknown": 9,
+          "documents": 9,
+          "documents_with_multiple": 0
+        },
+        "frontjacket": {
+          "pages": 111,
+          "first": 109,
+          "last": 0,
+          "side:single": 28,
+          "documents": 111,
+          "documents_with_multiple": 0,
+          "side:unknown": 83
+        },
+        "illustration": {
+          "pages": 2319,
+          "first": 13,
+          "last": 10,
+          "side:unknown": 2319,
+          "documents": 74,
+          "documents_with_multiple": 60
+        },
+        "impressum": {
+          "pages": 2,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 2,
+          "documents": 2,
+          "documents_with_multiple": 0
+        },
+        "imprimatur": {
+          "pages": 2,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 2,
+          "documents": 2,
+          "documents_with_multiple": 0
+        },
+        "index": {
+          "pages": 1621,
+          "first": 0,
+          "last": 3,
+          "side:unknown": 1122,
+          "documents": 119,
+          "documents_with_multiple": 115,
+          "side:left": 247,
+          "side:right": 252
+        },
+        "jacket": {
+          "pages": 247,
+          "first": 60,
+          "last": 138,
+          "side:single": 45,
+          "documents": 167,
+          "documents_with_multiple": 66,
+          "side:unknown": 199,
+          "side:left": 2,
+          "side:right": 1
+        },
+        "listofillustrations": {
+          "pages": 241,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 196,
+          "documents": 38,
+          "documents_with_multiple": 24,
+          "side:left": 24,
+          "side:right": 21
+        },
+        "listofmaps": {
+          "pages": 15,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 15,
+          "documents": 2,
+          "documents_with_multiple": 1
+        },
+        "listoftables": {
+          "pages": 19,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 16,
+          "documents": 7,
+          "documents_with_multiple": 4,
+          "side:right": 2,
+          "side:left": 1
+        },
+        "map": {
+          "pages": 611,
+          "first": 5,
+          "last": 19,
+          "side:unknown": 488,
+          "documents": 72,
+          "documents_with_multiple": 43,
+          "side:single": 54,
+          "side:right": 35,
+          "side:left": 34
+        },
+        "normalpage": {
+          "pages": 95904,
+          "first": 85,
+          "last": 681,
+          "side:unknown": 64737,
+          "documents": 1303,
+          "documents_with_multiple": 1230,
+          "side:right": 15471,
+          "side:left": 15670,
+          "side:single": 26
+        },
+        "preface": {
+          "pages": 62,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 62,
+          "documents": 12,
+          "documents_with_multiple": 9
+        },
+        "sheetmusic": {
+          "pages": 2319,
+          "first": 4,
+          "last": 0,
+          "side:unknown": 2319,
+          "documents": 43,
+          "documents_with_multiple": 40
+        },
+        "spine": {
+          "pages": 97,
+          "first": 0,
+          "last": 41,
+          "side:unknown": 91,
+          "documents": 96,
+          "documents_with_multiple": 1,
+          "side:single": 5,
+          "side:left": 1
+        },
+        "table": {
+          "pages": 3297,
+          "first": 1,
+          "last": 4,
+          "side:unknown": 2932,
+          "documents": 127,
+          "documents_with_multiple": 104,
+          "side:left": 181,
+          "side:right": 182,
+          "side:single": 2
+        },
+        "tableofcontents": {
+          "pages": 973,
+          "first": 7,
+          "last": 16,
+          "side:unknown": 699,
+          "documents": 442,
+          "documents_with_multiple": 230,
+          "side:right": 162,
+          "side:left": 110,
+          "side:single": 2
+        },
+        "titlepage": {
+          "pages": 1342,
+          "first": 769,
+          "last": 4,
+          "side:unknown": 1162,
+          "documents": 1307,
+          "documents_with_multiple": 26,
+          "side:right": 152,
+          "side:left": 7,
+          "side:single": 21
+        }
+      },
+      "transitions": [
+        {
+          "previous": "advertisement",
+          "current": "advertisement",
+          "count": 201
+        },
+        {
+          "previous": "advertisement",
+          "current": "backcover",
+          "count": 2
+        },
+        {
+          "previous": "advertisement",
+          "current": "backendsheet",
+          "count": 3
+        },
+        {
+          "previous": "advertisement",
+          "current": "blank",
+          "count": 6
+        },
+        {
+          "previous": "advertisement",
+          "current": "normalpage",
+          "count": 33
+        },
+        {
+          "previous": "advertisement",
+          "current": "tableofcontents",
+          "count": 1
+        },
+        {
+          "previous": "advertisement",
+          "current": "titlepage",
+          "count": 6
+        },
+        {
+          "previous": "backcover",
+          "current": "backcover",
+          "count": 1
+        },
+        {
+          "previous": "backcover",
+          "current": "calibrationtable",
+          "count": 31
+        },
+        {
+          "previous": "backcover",
+          "current": "edge",
+          "count": 42
+        },
+        {
+          "previous": "backcover",
+          "current": "flyleaf",
+          "count": 39
+        },
+        {
+          "previous": "backcover",
+          "current": "frontendsheet",
+          "count": 1
+        },
+        {
+          "previous": "backcover",
+          "current": "jacket",
+          "count": 94
+        },
+        {
+          "previous": "backcover",
+          "current": "map",
+          "count": 11
+        },
+        {
+          "previous": "backcover",
+          "current": "normalpage",
+          "count": 1
+        },
+        {
+          "previous": "backcover",
+          "current": "spine",
+          "count": 48
+        },
+        {
+          "previous": "backcover",
+          "current": "table",
+          "count": 4
+        },
+        {
+          "previous": "backcover",
+          "current": "titlepage",
+          "count": 1
+        },
+        {
+          "previous": "backendpaper",
+          "current": "backendpaper",
+          "count": 60
+        },
+        {
+          "previous": "backendpaper",
+          "current": "backendsheet",
+          "count": 44
+        },
+        {
+          "previous": "backendsheet",
+          "current": "backcover",
+          "count": 531
+        },
+        {
+          "previous": "backendsheet",
+          "current": "backendsheet",
+          "count": 1
+        },
+        {
+          "previous": "backendsheet",
+          "current": "flyleaf",
+          "count": 1
+        },
+        {
+          "previous": "bibliography",
+          "current": "bibliography",
+          "count": 9
+        },
+        {
+          "previous": "bibliography",
+          "current": "normalpage",
+          "count": 1
+        },
+        {
+          "previous": "blank",
+          "current": "advertisement",
+          "count": 3
+        },
+        {
+          "previous": "blank",
+          "current": "backcover",
+          "count": 2
+        },
+        {
+          "previous": "blank",
+          "current": "backendpaper",
+          "count": 25
+        },
+        {
+          "previous": "blank",
+          "current": "backendsheet",
+          "count": 76
+        },
+        {
+          "previous": "blank",
+          "current": "blank",
+          "count": 256
+        },
+        {
+          "previous": "blank",
+          "current": "calibrationtable",
+          "count": 14
+        },
+        {
+          "previous": "blank",
+          "current": "dedication",
+          "count": 4
+        },
+        {
+          "previous": "blank",
+          "current": "errata",
+          "count": 1
+        },
+        {
+          "previous": "blank",
+          "current": "frontendpaper",
+          "count": 1
+        },
+        {
+          "previous": "blank",
+          "current": "frontispiece",
+          "count": 1
+        },
+        {
+          "previous": "blank",
+          "current": "frontjacket",
+          "count": 1
+        },
+        {
+          "previous": "blank",
+          "current": "illustration",
+          "count": 677
+        },
+        {
+          "previous": "blank",
+          "current": "index",
+          "count": 9
+        },
+        {
+          "previous": "blank",
+          "current": "jacket",
+          "count": 1
+        },
+        {
+          "previous": "blank",
+          "current": "listoftables",
+          "count": 1
+        },
+        {
+          "previous": "blank",
+          "current": "map",
+          "count": 4
+        },
+        {
+          "previous": "blank",
+          "current": "normalpage",
+          "count": 172
+        },
+        {
+          "previous": "blank",
+          "current": "preface",
+          "count": 4
+        },
+        {
+          "previous": "blank",
+          "current": "sheetmusic",
+          "count": 69
+        },
+        {
+          "previous": "blank",
+          "current": "table",
+          "count": 44
+        },
+        {
+          "previous": "blank",
+          "current": "tableofcontents",
+          "count": 39
+        },
+        {
+          "previous": "blank",
+          "current": "titlepage",
+          "count": 56
+        },
+        {
+          "previous": "calibrationtable",
+          "current": "calibrationtable",
+          "count": 18
+        },
+        {
+          "previous": "calibrationtable",
+          "current": "cover",
+          "count": 35
+        },
+        {
+          "previous": "cover",
+          "current": "cover",
+          "count": 12
+        },
+        {
+          "previous": "cover",
+          "current": "frontendsheet",
+          "count": 4
+        },
+        {
+          "previous": "cover",
+          "current": "illustration",
+          "count": 1
+        },
+        {
+          "previous": "cover",
+          "current": "normalpage",
+          "count": 1
+        },
+        {
+          "previous": "cover",
+          "current": "titlepage",
+          "count": 1
+        },
+        {
+          "previous": "dedication",
+          "current": "blank",
+          "count": 1
+        },
+        {
+          "previous": "dedication",
+          "current": "dedication",
+          "count": 55
+        },
+        {
+          "previous": "dedication",
+          "current": "illustration",
+          "count": 1
+        },
+        {
+          "previous": "dedication",
+          "current": "imprimatur",
+          "count": 1
+        },
+        {
+          "previous": "dedication",
+          "current": "index",
+          "count": 1
+        },
+        {
+          "previous": "dedication",
+          "current": "preface",
+          "count": 5
+        },
+        {
+          "previous": "edge",
+          "current": "calibrationtable",
+          "count": 40
+        },
+        {
+          "previous": "edge",
+          "current": "cover",
+          "count": 1
+        },
+        {
+          "previous": "edge",
+          "current": "edge",
+          "count": 86
+        },
+        {
+          "previous": "edge",
+          "current": "flyleaf",
+          "count": 2
+        },
+        {
+          "previous": "errata",
+          "current": "backendpaper",
+          "count": 1
+        },
+        {
+          "previous": "errata",
+          "current": "blank",
+          "count": 3
+        },
+        {
+          "previous": "errata",
+          "current": "errata",
+          "count": 4
+        },
+        {
+          "previous": "errata",
+          "current": "illustration",
+          "count": 1
+        },
+        {
+          "previous": "flyleaf",
+          "current": "backcover",
+          "count": 1
+        },
+        {
+          "previous": "flyleaf",
+          "current": "calibrationtable",
+          "count": 3
+        },
+        {
+          "previous": "flyleaf",
+          "current": "flyleaf",
+          "count": 160
+        },
+        {
+          "previous": "flyleaf",
+          "current": "frontjacket",
+          "count": 1
+        },
+        {
+          "previous": "flyleaf",
+          "current": "normalpage",
+          "count": 1
+        },
+        {
+          "previous": "flyleaf",
+          "current": "table",
+          "count": 2
+        },
+        {
+          "previous": "frontcover",
+          "current": "advertisement",
+          "count": 2
+        },
+        {
+          "previous": "frontcover",
+          "current": "backcover",
+          "count": 1
+        },
+        {
+          "previous": "frontcover",
+          "current": "blank",
+          "count": 2
+        },
+        {
+          "previous": "frontcover",
+          "current": "frontendsheet",
+          "count": 518
+        },
+        {
+          "previous": "frontcover",
+          "current": "map",
+          "count": 3
+        },
+        {
+          "previous": "frontcover",
+          "current": "normalpage",
+          "count": 2
+        },
+        {
+          "previous": "frontcover",
+          "current": "tableofcontents",
+          "count": 1
+        },
+        {
+          "previous": "frontendpaper",
+          "current": "blank",
+          "count": 3
+        },
+        {
+          "previous": "frontendpaper",
+          "current": "frontendpaper",
+          "count": 53
+        },
+        {
+          "previous": "frontendpaper",
+          "current": "frontispiece",
+          "count": 6
+        },
+        {
+          "previous": "frontendpaper",
+          "current": "illustration",
+          "count": 5
+        },
+        {
+          "previous": "frontendpaper",
+          "current": "normalpage",
+          "count": 2
+        },
+        {
+          "previous": "frontendpaper",
+          "current": "sheetmusic",
+          "count": 1
+        },
+        {
+          "previous": "frontendpaper",
+          "current": "titlepage",
+          "count": 19
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "blank",
+          "count": 23
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "errata",
+          "count": 1
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "frontendpaper",
+          "count": 4
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "frontendsheet",
+          "count": 1
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "illustration",
+          "count": 8
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "listofillustrations",
+          "count": 1
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "map",
+          "count": 3
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "normalpage",
+          "count": 267
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "sheetmusic",
+          "count": 1
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "spine",
+          "count": 47
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "tableofcontents",
+          "count": 2
+        },
+        {
+          "previous": "frontendsheet",
+          "current": "titlepage",
+          "count": 155
+        },
+        {
+          "previous": "frontispiece",
+          "current": "blank",
+          "count": 7
+        },
+        {
+          "previous": "frontispiece",
+          "current": "titlepage",
+          "count": 2
+        },
+        {
+          "previous": "frontjacket",
+          "current": "advertisement",
+          "count": 1
+        },
+        {
+          "previous": "frontjacket",
+          "current": "cover",
+          "count": 3
+        },
+        {
+          "previous": "frontjacket",
+          "current": "frontcover",
+          "count": 103
+        },
+        {
+          "previous": "frontjacket",
+          "current": "frontendsheet",
+          "count": 1
+        },
+        {
+          "previous": "frontjacket",
+          "current": "jacket",
+          "count": 1
+        },
+        {
+          "previous": "frontjacket",
+          "current": "tableofcontents",
+          "count": 1
+        },
+        {
+          "previous": "frontjacket",
+          "current": "titlepage",
+          "count": 1
+        },
+        {
+          "previous": "illustration",
+          "current": "backendpaper",
+          "count": 1
+        },
+        {
+          "previous": "illustration",
+          "current": "backendsheet",
+          "count": 1
+        },
+        {
+          "previous": "illustration",
+          "current": "blank",
+          "count": 723
+        },
+        {
+          "previous": "illustration",
+          "current": "dedication",
+          "count": 3
+        },
+        {
+          "previous": "illustration",
+          "current": "illustration",
+          "count": 643
+        },
+        {
+          "previous": "illustration",
+          "current": "index",
+          "count": 1
+        },
+        {
+          "previous": "illustration",
+          "current": "map",
+          "count": 1
+        },
+        {
+          "previous": "illustration",
+          "current": "normalpage",
+          "count": 6
+        },
+        {
+          "previous": "illustration",
+          "current": "table",
+          "count": 37
+        },
+        {
+          "previous": "illustration",
+          "current": "tableofcontents",
+          "count": 1
+        },
+        {
+          "previous": "impressum",
+          "current": "blank",
+          "count": 1
+        },
+        {
+          "previous": "impressum",
+          "current": "normalpage",
+          "count": 1
+        },
+        {
+          "previous": "imprimatur",
+          "current": "blank",
+          "count": 1
+        },
+        {
+          "previous": "imprimatur",
+          "current": "preface",
+          "count": 1
+        },
+        {
+          "previous": "index",
+          "current": "advertisement",
+          "count": 1
+        },
+        {
+          "previous": "index",
+          "current": "backendpaper",
+          "count": 1
+        },
+        {
+          "previous": "index",
+          "current": "backendsheet",
+          "count": 1
+        },
+        {
+          "previous": "index",
+          "current": "blank",
+          "count": 18
+        },
+        {
+          "previous": "index",
+          "current": "index",
+          "count": 1484
+        },
+        {
+          "previous": "index",
+          "current": "listofillustrations",
+          "count": 3
+        },
+        {
+          "previous": "index",
+          "current": "listofmaps",
+          "count": 1
+        },
+        {
+          "previous": "index",
+          "current": "map",
+          "count": 1
+        },
+        {
+          "previous": "index",
+          "current": "normalpage",
+          "count": 78
+        },
+        {
+          "previous": "index",
+          "current": "tableofcontents",
+          "count": 17
+        },
+        {
+          "previous": "jacket",
+          "current": "cover",
+          "count": 1
+        },
+        {
+          "previous": "jacket",
+          "current": "flyleaf",
+          "count": 17
+        },
+        {
+          "previous": "jacket",
+          "current": "frontcover",
+          "count": 1
+        },
+        {
+          "previous": "jacket",
+          "current": "jacket",
+          "count": 18
+        },
+        {
+          "previous": "jacket",
+          "current": "map",
+          "count": 5
+        },
+        {
+          "previous": "jacket",
+          "current": "normalpage",
+          "count": 55
+        },
+        {
+          "previous": "jacket",
+          "current": "tableofcontents",
+          "count": 10
+        },
+        {
+          "previous": "jacket",
+          "current": "titlepage",
+          "count": 2
+        },
+        {
+          "previous": "listofillustrations",
+          "current": "backendsheet",
+          "count": 1
+        },
+        {
+          "previous": "listofillustrations",
+          "current": "blank",
+          "count": 1
+        },
+        {
+          "previous": "listofillustrations",
+          "current": "frontendsheet",
+          "count": 1
+        },
+        {
+          "previous": "listofillustrations",
+          "current": "illustration",
+          "count": 2
+        },
+        {
+          "previous": "listofillustrations",
+          "current": "index",
+          "count": 5
+        },
+        {
+          "previous": "listofillustrations",
+          "current": "listofillustrations",
+          "count": 198
+        },
+        {
+          "previous": "listofillustrations",
+          "current": "listoftables",
+          "count": 1
+        },
+        {
+          "previous": "listofillustrations",
+          "current": "normalpage",
+          "count": 24
+        },
+        {
+          "previous": "listofillustrations",
+          "current": "tableofcontents",
+          "count": 7
+        },
+        {
+          "previous": "listofmaps",
+          "current": "map",
+          "count": 13
+        },
+        {
+          "previous": "listofmaps",
+          "current": "normalpage",
+          "count": 1
+        },
+        {
+          "previous": "listoftables",
+          "current": "listofillustrations",
+          "count": 1
+        },
+        {
+          "previous": "listoftables",
+          "current": "listoftables",
+          "count": 12
+        },
+        {
+          "previous": "listoftables",
+          "current": "normalpage",
+          "count": 4
+        },
+        {
+          "previous": "listoftables",
+          "current": "table",
+          "count": 1
+        },
+        {
+          "previous": "map",
+          "current": "backcover",
+          "count": 3
+        },
+        {
+          "previous": "map",
+          "current": "backendsheet",
+          "count": 3
+        },
+        {
+          "previous": "map",
+          "current": "blank",
+          "count": 3
+        },
+        {
+          "previous": "map",
+          "current": "flyleaf",
+          "count": 4
+        },
+        {
+          "previous": "map",
+          "current": "illustration",
+          "count": 1
+        },
+        {
+          "previous": "map",
+          "current": "index",
+          "count": 1
+        },
+        {
+          "previous": "map",
+          "current": "listofmaps",
+          "count": 12
+        },
+        {
+          "previous": "map",
+          "current": "map",
+          "count": 274
+        },
+        {
+          "previous": "map",
+          "current": "normalpage",
+          "count": 251
+        },
+        {
+          "previous": "map",
+          "current": "table",
+          "count": 19
+        },
+        {
+          "previous": "map",
+          "current": "tableofcontents",
+          "count": 2
+        },
+        {
+          "previous": "map",
+          "current": "titlepage",
+          "count": 3
+        },
+        {
+          "previous": "normalpage",
+          "current": "advertisement",
+          "count": 142
+        },
+        {
+          "previous": "normalpage",
+          "current": "backcover",
+          "count": 1
+        },
+        {
+          "previous": "normalpage",
+          "current": "backendpaper",
+          "count": 2
+        },
+        {
+          "previous": "normalpage",
+          "current": "backendsheet",
+          "count": 359
+        },
+        {
+          "previous": "normalpage",
+          "current": "bibliography",
+          "count": 1
+        },
+        {
+          "previous": "normalpage",
+          "current": "blank",
+          "count": 170
+        },
+        {
+          "previous": "normalpage",
+          "current": "cover",
+          "count": 2
+        },
+        {
+          "previous": "normalpage",
+          "current": "flyleaf",
+          "count": 1
+        },
+        {
+          "previous": "normalpage",
+          "current": "frontispiece",
+          "count": 1
+        },
+        {
+          "previous": "normalpage",
+          "current": "illustration",
+          "count": 6
+        },
+        {
+          "previous": "normalpage",
+          "current": "index",
+          "count": 87
+        },
+        {
+          "previous": "normalpage",
+          "current": "jacket",
+          "count": 60
+        },
+        {
+          "previous": "normalpage",
+          "current": "listofillustrations",
+          "count": 32
+        },
+        {
+          "previous": "normalpage",
+          "current": "listofmaps",
+          "count": 2
+        },
+        {
+          "previous": "normalpage",
+          "current": "listoftables",
+          "count": 5
+        },
+        {
+          "previous": "normalpage",
+          "current": "map",
+          "count": 239
+        },
+        {
+          "previous": "normalpage",
+          "current": "normalpage",
+          "count": 92669
+        },
+        {
+          "previous": "normalpage",
+          "current": "table",
+          "count": 766
+        },
+        {
+          "previous": "normalpage",
+          "current": "tableofcontents",
+          "count": 327
+        },
+        {
+          "previous": "normalpage",
+          "current": "titlepage",
+          "count": 283
+        },
+        {
+          "previous": "preface",
+          "current": "blank",
+          "count": 1
+        },
+        {
+          "previous": "preface",
+          "current": "illustration",
+          "count": 1
+        },
+        {
+          "previous": "preface",
+          "current": "index",
+          "count": 1
+        },
+        {
+          "previous": "preface",
+          "current": "listofillustrations",
+          "count": 1
+        },
+        {
+          "previous": "preface",
+          "current": "preface",
+          "count": 50
+        },
+        {
+          "previous": "preface",
+          "current": "tableofcontents",
+          "count": 2
+        },
+        {
+          "previous": "sheetmusic",
+          "current": "backendsheet",
+          "count": 2
+        },
+        {
+          "previous": "sheetmusic",
+          "current": "blank",
+          "count": 95
+        },
+        {
+          "previous": "sheetmusic",
+          "current": "calibrationtable",
+          "count": 11
+        },
+        {
+          "previous": "sheetmusic",
+          "current": "normalpage",
+          "count": 1
+        },
+        {
+          "previous": "sheetmusic",
+          "current": "sheetmusic",
+          "count": 2150
+        },
+        {
+          "previous": "sheetmusic",
+          "current": "titlepage",
+          "count": 1
+        },
+        {
+          "previous": "spine",
+          "current": "blank",
+          "count": 1
+        },
+        {
+          "previous": "spine",
+          "current": "flyleaf",
+          "count": 2
+        },
+        {
+          "previous": "spine",
+          "current": "frontendpaper",
+          "count": 35
+        },
+        {
+          "previous": "spine",
+          "current": "frontendsheet",
+          "count": 1
+        },
+        {
+          "previous": "spine",
+          "current": "jacket",
+          "count": 4
+        },
+        {
+          "previous": "spine",
+          "current": "normalpage",
+          "count": 1
+        },
+        {
+          "previous": "spine",
+          "current": "sheetmusic",
+          "count": 1
+        },
+        {
+          "previous": "spine",
+          "current": "spine",
+          "count": 1
+        },
+        {
+          "previous": "spine",
+          "current": "titlepage",
+          "count": 7
+        },
+        {
+          "previous": "table",
+          "current": "backendsheet",
+          "count": 4
+        },
+        {
+          "previous": "table",
+          "current": "blank",
+          "count": 53
+        },
+        {
+          "previous": "table",
+          "current": "errata",
+          "count": 1
+        },
+        {
+          "previous": "table",
+          "current": "flyleaf",
+          "count": 4
+        },
+        {
+          "previous": "table",
+          "current": "illustration",
+          "count": 2
+        },
+        {
+          "previous": "table",
+          "current": "index",
+          "count": 4
+        },
+        {
+          "previous": "table",
+          "current": "listofillustrations",
+          "count": 1
+        },
+        {
+          "previous": "table",
+          "current": "map",
+          "count": 35
+        },
+        {
+          "previous": "table",
+          "current": "normalpage",
+          "count": 751
+        },
+        {
+          "previous": "table",
+          "current": "table",
+          "count": 2176
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "advertisement",
+          "count": 2
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "backendpaper",
+          "count": 6
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "backendsheet",
+          "count": 10
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "blank",
+          "count": 37
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "flyleaf",
+          "count": 1
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "frontendsheet",
+          "count": 3
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "illustration",
+          "count": 2
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "index",
+          "count": 2
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "jacket",
+          "count": 4
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "listofillustrations",
+          "count": 2
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "map",
+          "count": 1
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "normalpage",
+          "count": 336
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "sheetmusic",
+          "count": 2
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "table",
+          "count": 2
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "tableofcontents",
+          "count": 494
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "titlepage",
+          "count": 8
+        },
+        {
+          "previous": "titlepage",
+          "current": "advertisement",
+          "count": 5
+        },
+        {
+          "previous": "titlepage",
+          "current": "blank",
+          "count": 60
+        },
+        {
+          "previous": "titlepage",
+          "current": "dedication",
+          "count": 2
+        },
+        {
+          "previous": "titlepage",
+          "current": "frontcover",
+          "count": 1
+        },
+        {
+          "previous": "titlepage",
+          "current": "frontendsheet",
+          "count": 3
+        },
+        {
+          "previous": "titlepage",
+          "current": "illustration",
+          "count": 2
+        },
+        {
+          "previous": "titlepage",
+          "current": "impressum",
+          "count": 1
+        },
+        {
+          "previous": "titlepage",
+          "current": "imprimatur",
+          "count": 1
+        },
+        {
+          "previous": "titlepage",
+          "current": "jacket",
+          "count": 5
+        },
+        {
+          "previous": "titlepage",
+          "current": "normalpage",
+          "count": 1119
+        },
+        {
+          "previous": "titlepage",
+          "current": "sheetmusic",
+          "count": 21
+        },
+        {
+          "previous": "titlepage",
+          "current": "tableofcontents",
+          "count": 22
+        },
+        {
+          "previous": "titlepage",
+          "current": "titlepage",
+          "count": 14
+        }
+      ],
+      "pairs": 111031
+    },
+    "curated": {
+      "classes": {
+        "advertisement": {
+          "pages": 3,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 3,
+          "documents": 3,
+          "documents_with_multiple": 0
+        },
+        "backcover": {
+          "pages": 66,
+          "first": 0,
+          "last": 63,
+          "side:unknown": 24,
+          "documents": 66,
+          "documents_with_multiple": 0,
+          "side:single": 42
+        },
+        "backendpaper": {
+          "pages": 2,
+          "first": 0,
+          "last": 0,
+          "side:left": 2,
+          "documents": 2,
+          "documents_with_multiple": 0
+        },
+        "backendsheet": {
+          "pages": 65,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 23,
+          "documents": 65,
+          "documents_with_multiple": 0,
+          "side:right": 42
+        },
+        "blank": {
+          "pages": 29,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 26,
+          "documents": 29,
+          "documents_with_multiple": 0,
+          "side:left": 3
+        },
+        "calibrationtable": {
+          "pages": 120,
+          "first": 0,
+          "last": 67,
+          "side:unknown": 120,
+          "documents": 102,
+          "documents_with_multiple": 14
+        },
+        "cover": {
+          "pages": 2,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 2,
+          "documents": 2,
+          "documents_with_multiple": 0
+        },
+        "dedication": {
+          "pages": 1,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 1,
+          "documents": 1,
+          "documents_with_multiple": 0
+        },
+        "errata": {
+          "pages": 1,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 1,
+          "documents": 1,
+          "documents_with_multiple": 0
+        },
+        "flyleaf": {
+          "pages": 50,
+          "first": 0,
+          "last": 22,
+          "side:single": 23,
+          "documents": 50,
+          "documents_with_multiple": 0,
+          "side:unknown": 27
+        },
+        "frontcover": {
+          "pages": 66,
+          "first": 63,
+          "last": 0,
+          "side:unknown": 24,
+          "documents": 66,
+          "documents_with_multiple": 0,
+          "side:single": 42
+        },
+        "frontendsheet": {
+          "pages": 7,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 7,
+          "documents": 7,
+          "documents_with_multiple": 0
+        },
+        "frontispiece": {
+          "pages": 3,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 3,
+          "documents": 3,
+          "documents_with_multiple": 0
+        },
+        "frontjacket": {
+          "pages": 55,
+          "first": 55,
+          "last": 0,
+          "side:unknown": 34,
+          "documents": 55,
+          "documents_with_multiple": 0,
+          "side:single": 21
+        },
+        "illustration": {
+          "pages": 5,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 5,
+          "documents": 5,
+          "documents_with_multiple": 0
+        },
+        "imprimatur": {
+          "pages": 1,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 1,
+          "documents": 1,
+          "documents_with_multiple": 0
+        },
+        "index": {
+          "pages": 23,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 13,
+          "documents": 23,
+          "documents_with_multiple": 0,
+          "side:right": 6,
+          "side:left": 4
+        },
+        "jacket": {
+          "pages": 13,
+          "first": 1,
+          "last": 11,
+          "side:single": 13,
+          "documents": 13,
+          "documents_with_multiple": 0
+        },
+        "listofillustrations": {
+          "pages": 19,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 13,
+          "documents": 19,
+          "documents_with_multiple": 0,
+          "side:left": 3,
+          "side:right": 3
+        },
+        "listofmaps": {
+          "pages": 1,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 1,
+          "documents": 1,
+          "documents_with_multiple": 0
+        },
+        "listoftables": {
+          "pages": 2,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 2,
+          "documents": 2,
+          "documents_with_multiple": 0
+        },
+        "map": {
+          "pages": 46,
+          "first": 0,
+          "last": 12,
+          "side:unknown": 33,
+          "documents": 46,
+          "documents_with_multiple": 0,
+          "side:single": 8,
+          "side:right": 5
+        },
+        "normalpage": {
+          "pages": 102,
+          "first": 0,
+          "last": 3,
+          "side:unknown": 54,
+          "documents": 101,
+          "documents_with_multiple": 1,
+          "side:right": 29,
+          "side:left": 18,
+          "side:single": 1
+        },
+        "sheetmusic": {
+          "pages": 28,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 28,
+          "documents": 28,
+          "documents_with_multiple": 0
+        },
+        "spine": {
+          "pages": 47,
+          "first": 0,
+          "last": 40,
+          "side:unknown": 41,
+          "documents": 47,
+          "documents_with_multiple": 0,
+          "side:single": 5,
+          "side:left": 1
+        },
+        "table": {
+          "pages": 37,
+          "first": 0,
+          "last": 0,
+          "side:unknown": 22,
+          "documents": 37,
+          "documents_with_multiple": 0,
+          "side:right": 11,
+          "side:single": 1,
+          "side:left": 3
+        },
+        "tableofcontents": {
+          "pages": 47,
+          "first": 1,
+          "last": 0,
+          "side:unknown": 20,
+          "documents": 47,
+          "documents_with_multiple": 0,
+          "side:left": 10,
+          "side:right": 16,
+          "side:single": 1
+        },
+        "titlepage": {
+          "pages": 79,
+          "first": 13,
+          "last": 0,
+          "side:unknown": 33,
+          "documents": 78,
+          "documents_with_multiple": 1,
+          "side:right": 40,
+          "side:left": 1,
+          "side:single": 5
+        }
+      },
+      "transitions": [
+        {
+          "previous": "backcover",
+          "current": "jacket",
+          "count": 2
+        },
+        {
+          "previous": "backcover",
+          "current": "spine",
+          "count": 1
+        },
+        {
+          "previous": "backendpaper",
+          "current": "backendsheet",
+          "count": 2
+        },
+        {
+          "previous": "backendsheet",
+          "current": "backcover",
+          "count": 60
+        },
+        {
+          "previous": "blank",
+          "current": "backendsheet",
+          "count": 8
+        },
+        {
+          "previous": "blank",
+          "current": "tableofcontents",
+          "count": 3
+        },
+        {
+          "previous": "blank",
+          "current": "titlepage",
+          "count": 1
+        },
+        {
+          "previous": "calibrationtable",
+          "current": "calibrationtable",
+          "count": 18
+        },
+        {
+          "previous": "frontcover",
+          "current": "frontendsheet",
+          "count": 7
+        },
+        {
+          "previous": "frontjacket",
+          "current": "frontcover",
+          "count": 2
+        },
+        {
+          "previous": "index",
+          "current": "blank",
+          "count": 1
+        },
+        {
+          "previous": "jacket",
+          "current": "flyleaf",
+          "count": 1
+        },
+        {
+          "previous": "map",
+          "current": "flyleaf",
+          "count": 1
+        },
+        {
+          "previous": "normalpage",
+          "current": "backendsheet",
+          "count": 2
+        },
+        {
+          "previous": "table",
+          "current": "backendsheet",
+          "count": 2
+        },
+        {
+          "previous": "tableofcontents",
+          "current": "backendsheet",
+          "count": 3
+        },
+        {
+          "previous": "titlepage",
+          "current": "blank",
+          "count": 3
+        },
+        {
+          "previous": "titlepage",
+          "current": "normalpage",
+          "count": 1
+        },
+        {
+          "previous": "titlepage",
+          "current": "titlepage",
+          "count": 1
+        }
+      ],
+      "pairs": 119
+    }
+  },
+  "seconds": 4.740902771241963,
+  "caveat": "Deterministic metadata sample enriched for annotated documents; not corpus-unbiased. DB labels are weak. No source images/OCR inspected. Missing labels remain missing; adjacency checks exclude observed page-index gaps.",
+  "published_index_sha256": "4cc82720b3330744c92cc54102bb989502d0b9e5dfefeb8488f62a2f40afec51",
+  "audit_script_sha256": "b125896b0e326005288cba232c69daaddc3ea8e6ea50acd11e2a4ebf3ec123bb",
+  "source_documents": [
+    {
+      "url": "https://old.ndk.cz/standardy-digitalizace/ppp_mono_2.5_final.pdf",
+      "sha256": "b3ab0d1da74aef2d7070f09b3d857b0b4a102ca4b400bb07a7978c1b72590684"
+    },
+    {
+      "url": "https://old.ndk.cz/standardy-digitalizace/ppp_perio_8.8_final.pdf",
+      "sha256": "2ffd1b6114a1818aa7903375f21e82bd8db21ddfa4b1741e0e5ae293abfb4f00"
+    }
+  ]
+}
