@@ -176,6 +176,18 @@ interval. With a pretraining coverage floor, only eligible validations compete f
 state, retaining the current sampler coverage/RNG and changing sampling quotas. Stage/update
 budgets remain explicit upper limits. `latest.pt` saves stage progress and plateau counters.
 
+Every completed phase also retains a full checkpoint, on budget completion or early
+stopping: `pretrain_final.pt` and `finetune_final.pt` contain the actual final phase
+state; the existing `*_best.pt` files retain the selected best states. Before the
+first fine-tuning update, `finetune_init.pt` records the selected pretraining
+model/optimizer/scaler together with the exact transition sampler and RNG state.
+These phase snapshots persist when `latest.pt` advances and are not overwritten on
+resume. Completed-pretraining snapshots resume through phase selection directly;
+initialization snapshots resume at fine-tuning step zero. Forking with different
+settings must still use an explicit audited config/provenance change, preserving
+ordinary strict resume checks. These files apply to future source snapshots;
+already running frozen experiments continue to use their installed watchers.
+
 ClearML is optional (`clearml.enabled`); configuration, provenance, scalar metrics, console and
 resource usage are logged to the configured API. Automatic framework/model uploads are disabled,
 `output_uri=False`, and checkpoints stay in `run_dir`: no ClearML file server is needed.
@@ -609,7 +621,7 @@ supported by BERT Mini's existing position table; scanning uses stride 256, and
 context diagnostics include a 512-page level when configured.
 
 To isolate a fine-tuning loss change, branch from the baseline's actual
-`finetune` / `stage_step: 0` transition checkpoint. This contains the selected
+`finetune_init.pt` (`finetune` / `stage_step: 0`) transition checkpoint. This contains the selected
 pretraining model/optimizer/scaler plus the final pretraining sampler and RNG
 state used to enter fine-tuning; `pretrain_best.pt` alone has a different sampler
 position and is not that exact initialization. `fork_finetune.py` explicitly
@@ -617,9 +629,9 @@ checks this transition and permits only the weak-type 0.2-to-0.05 fine-tuning
 change, new logging/run identity, and content-equivalent local store paths.
 It checks code/data/environment/features, verifies protected training state
 after serialization, and creates a separate ClearML history with a parent audit.
-The ordinary trainer then uses its normal strict resume checks. A watcher can
-snapshot this atomic transition checkpoint while the unchanged baseline keeps
-training. GPU numerical nondeterminism may still cause later roundoff differences,
+The ordinary trainer then uses its normal strict resume checks. Watchers prefer
+the durable `finetune_init.pt`, even after the parent finishes; legacy runs can
+still be captured through their transient `latest.pt` transition. GPU numerical nondeterminism may still cause later roundoff differences,
 but both variants begin fine-tuning from exactly the same stored state.
 The watcher supports `--wait-for-status` to capture and prepare the shared state
 immediately but queue training behind an occupied SSD. It then replaces itself

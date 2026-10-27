@@ -6,6 +6,16 @@ Commit completed, validated changes regularly in coherent, reasonably sized comm
 Keep unrelated changes separate rather than accumulating a large uncommitted backlog.
 Do not push unless requested.
 
+## Training phase checkpoints
+
+Always retain a full checkpoint when a training phase finishes, including early
+stopping, independently of the best checkpoint. Before entering a subsequent
+phase, retain its exact initialization checkpoint as well. Include model,
+optimizer, scaler, sampler, RNG, progress, configuration and provenance so later
+experiments can branch cleanly with an audited settings change. Advancing or
+resuming training must not overwrite these phase snapshots. Keep running
+experiments' frozen source unchanged.
+
 ## Private page text
 
 Never read, print, sample, grep or otherwise explore the source text of the **private** text dump

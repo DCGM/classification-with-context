@@ -294,7 +294,42 @@ def train(config, resume=None, stop_after=None):
         progress['stage_step'] = step if progress['stage'] == 'pretrain' else step - config['pretrain_steps']
     loader, batches = training_loader(dataset, sampler, config)
     model.train()
+
+    def finish_phase():
+        # Preserve both the actual last update and the selected next-phase state.
+        # phase_end makes a completed-pretraining snapshot directly resumable even
+        # if the process stops before publishing the fine-tuning initialization.
+        nonlocal progress
+        stage = progress['stage']
+        if stage != 'pretrain' or not config['finetune_steps']:
+            progress['finished'] = True
+        final_path = run_dir / (stage + '_final.pt')
+        if not final_path.exists():
+            save_checkpoint(final_path, model, optimizer, sampler, step, best,
+                            config, prov, features.state_dict(), progress)
+        if stage == 'pretrain' and config['finetune_steps']:
+            if not (run_dir / 'pretrain_best.pt').exists():
+                raise RuntimeError('pretraining budget ended before any eligible validation; increase its budget')
+            # Preserve the existing selection and RNG-consumption behavior.
+            restored_model, selected = load_checkpoint(run_dir / 'pretrain_best.pt', 'cpu')
+            model.load_state_dict(selected['model'])
+            optimizer.load_state_dict(selected['optimizer'])
+            if selected.get('grad_scaler'):
+                scaler.load_state_dict(selected['grad_scaler'])
+            del restored_model, selected
+            progress = {'stage': 'finetune', 'stage_step': 0, 'stage_best': -1.,
+                        'bad_validations': 0, 'finished': False}
+            sampler.set_stage('finetune')
+            initial_path = run_dir / 'finetune_init.pt'
+            if not initial_path.exists():
+                save_checkpoint(initial_path, model, optimizer, sampler, step, best,
+                                config, prov, features.state_dict(), progress)
+
     try:
+        if progress.get('phase_end'):
+            finish_phase()
+            save_checkpoint(run_dir / 'latest.pt', model, optimizer, sampler, step, best,
+                            config, prov, features.state_dict(), progress)
         while (step < limit or progress.get('pending_validation')) and not progress['finished']:
             stage = progress['stage']
             loss_weights = weights_by_stage[stage]
@@ -432,22 +467,8 @@ def train(config, resume=None, stop_after=None):
             if ended:
                 reason = 'validation_plateau' if plateau else 'stage_budget'
                 print(json.dumps({'stage_finished': stage, 'step': step, 'reason': reason}), flush=True)
-                if stage == 'pretrain' and config['finetune_steps']:
-                    if not (run_dir / 'pretrain_best.pt').exists():
-                        raise RuntimeError('pretraining budget ended before any eligible validation; increase its budget')
-                    # Construct on CPU as before (preserving RNG consumption), and
-                    # release immediately after restoring; no second CUDA model.
-                    restored_model, selected = load_checkpoint(run_dir / 'pretrain_best.pt', 'cpu')
-                    model.load_state_dict(selected['model'])
-                    optimizer.load_state_dict(selected['optimizer'])
-                    if selected.get('grad_scaler'):
-                        scaler.load_state_dict(selected['grad_scaler'])
-                    del restored_model, selected
-                    progress = {'stage': 'finetune', 'stage_step': 0, 'stage_best': -1.,
-                                'bad_validations': 0, 'finished': False}
-                    sampler.set_stage('finetune')
-                else:
-                    progress['finished'] = True
+                progress['phase_end'] = reason
+                finish_phase()
             save_checkpoint(run_dir / 'latest.pt', model, optimizer, sampler, step, best,
                             config, prov, features.state_dict(), progress)
         if progress['finished'] and diagnostic_blocks:

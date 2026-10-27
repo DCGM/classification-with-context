@@ -23,7 +23,8 @@ def write_status(root, phase, **fields):
 
 def capture_transition(parent_root, target_root, poll_seconds=2):
     config = json.loads((parent_root / 'config.json').read_text())
-    source = Path(config['run_dir']) / 'latest.pt'
+    run_dir = Path(config['run_dir'])
+    source = run_dir / 'latest.pt'
     snapshot = target_root / 'shared-finetune-init.pt'
     if snapshot.exists():
         raise FileExistsError('explicit recovery required for an existing shared snapshot')
@@ -32,6 +33,8 @@ def capture_transition(parent_root, target_root, poll_seconds=2):
         status = json.loads((parent_root / 'status.json').read_text())
         if any(job['state'] == 'failed' for job in status['jobs'].values()):
             raise RuntimeError('parent run stopped unsuccessfully; inspect before forking')
+        source = (run_dir / 'finetune_init.pt' if (run_dir / 'finetune_init.pt').exists()
+                  else run_dir / 'latest.pt')
         if source.exists():
             stat = source.stat()
             stamp = (stat.st_ino, stat.st_mtime_ns, stat.st_size)

@@ -275,7 +275,8 @@ class Monitor:
                 self.start_helper(job, 'prepare')
                 continue
             parent_cfg = load_json(Path(job['parent_root'])/'config.json')
-            checkpoint = Path(parent_cfg['run_dir'])/'latest.pt'
+            run = Path(parent_cfg['run_dir'])
+            checkpoint = run / ('finetune_init.pt' if (run / 'finetune_init.pt').exists() else 'latest.pt')
             if checkpoint.exists():
                 stat = checkpoint.stat(); stamp=[stat.st_ino,stat.st_mtime_ns,stat.st_size]
                 if stamp != state.get('inspected_stamp') and self.start_helper(job,'inspect'):

@@ -95,6 +95,70 @@ def test_watcher_captures_exact_atomic_transition(tmp_path, monkeypatch):
     (parent / 'config.json').write_text(json.dumps(config))
     (parent / 'status.json').write_text(json.dumps({'jobs': {'parent': {'state': 'running'}}}))
     shutil.copyfile(source, Path(config['run_dir']) / 'latest.pt')
+    # Legacy runs expose only the transient latest.pt transition.
+    (Path(config['run_dir']) / 'finetune_init.pt').unlink()
     snapshot = watch_transition(parent, target, poll_seconds=0)
     assert snapshot.read_bytes() == source.read_bytes()
     assert json.loads((target / 'pipeline-status.json').read_text())['phase'] == 'captured_transition'
+
+
+def test_durable_phase_checkpoints_and_exact_resume(tmp_path, monkeypatch):
+    config, snapshot = capture_transition(tmp_path, monkeypatch)
+    run = Path(config['run_dir'])
+    pre = torch.load(run / 'pretrain_final.pt', weights_only=False)
+    init = torch.load(run / 'finetune_init.pt', weights_only=False)
+    final = torch.load(run / 'finetune_final.pt', weights_only=False)
+    expected = torch.load(run / 'latest.pt', weights_only=False)
+    assert pre['training']['stage'] == 'pretrain'
+    assert pre['training']['phase_end'] == 'stage_budget'
+    assert pre['training']['stage_step'] == config['pretrain_steps']
+    require_transition(init)
+    assert protected_digest(init) == protected_digest(torch.load(snapshot, weights_only=False))
+    assert final['training']['finished'] and final['training']['phase_end'] == 'stage_budget'
+    assert protected_digest(final) == protected_digest(expected)
+    # Resume the completed pretraining boundary: no replayed pretraining update,
+    # no empty-segment loop, and the same fine-tuning trajectory.
+    original_bytes = {name: (run / name).read_bytes() for name in (
+        'pretrain_final.pt', 'finetune_init.pt', 'finetune_final.pt')}
+    runner.train(config, resume=run / 'pretrain_final.pt')
+    resumed = torch.load(run / 'latest.pt', weights_only=False)
+    assert protected_digest(resumed) == protected_digest(expected)
+    for name, data in original_bytes.items():
+        assert (run / name).read_bytes() == data
+    runner.train(config, resume=run / 'finetune_init.pt')
+    assert protected_digest(torch.load(run / 'latest.pt', weights_only=False)) == protected_digest(expected)
+
+
+def test_watcher_uses_durable_init_after_parent_has_finished(tmp_path, monkeypatch):
+    config, source = capture_transition(tmp_path, monkeypatch)
+    parent, target = tmp_path / 'parent-root', tmp_path / 'target-root'
+    parent.mkdir(); target.mkdir()
+    (parent / 'config.json').write_text(json.dumps(config))
+    (parent / 'status.json').write_text(json.dumps({'jobs': {'parent': {'state': 'finished'}}}))
+    snapshot = watch_transition(parent, target, poll_seconds=0)
+    assert snapshot.read_bytes() == (Path(config['run_dir']) / 'finetune_init.pt').read_bytes()
+
+
+def test_pretrain_only_retains_final_phase_checkpoint(tmp_path):
+    config = prepare_fixture(tmp_path / 'fixture', steps=4)
+    config['finetune_steps'] = 0
+    runner.train(config)
+    run = Path(config['run_dir'])
+    state = torch.load(run / 'pretrain_final.pt', weights_only=False)
+    assert state['training']['finished'] and state['training']['phase_end'] == 'stage_budget'
+    assert not (run / 'finetune_init.pt').exists()
+
+
+def test_phase_snapshots_survive_early_stopping(tmp_path):
+    config = prepare_fixture(tmp_path / 'fixture', steps=16)
+    config.update(validate_every=2, stopping={'pretrain': {'patience': 1}})
+    config['optimizer'].update(encoder_lr=0., new_lr=0.)
+    runner.train(config)
+    run = Path(config['run_dir'])
+    pre = torch.load(run / 'pretrain_final.pt', weights_only=False)
+    init = torch.load(run / 'finetune_init.pt', weights_only=False)
+    assert pre['training']['phase_end'] == 'validation_plateau'
+    assert pre['training']['stage_step'] < config['pretrain_steps']
+    assert pre['step'] == init['step']
+    require_transition(init)
+    assert (run / 'finetune_final.pt').exists()

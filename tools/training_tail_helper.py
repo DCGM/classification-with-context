@@ -21,7 +21,8 @@ def atomic_json(path, value):
 def inspect(parent, target, output):
     from fork_finetune import require_transition
     config = json.loads((parent / 'config.json').read_text())
-    source = Path(config['run_dir']) / 'latest.pt'
+    run = Path(config['run_dir'])
+    source = run / ('finetune_init.pt' if (run / 'finetune_init.pt').exists() else 'latest.pt')
     candidate = target / 'inspect-candidate.pt'
     # Opening the source survives the trainer's atomic checkpoint replacement.
     shutil.copyfile(source, candidate)
