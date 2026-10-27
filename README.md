@@ -374,6 +374,12 @@ The report streams SQL counts grouped by split and length, with a 4 MiB SQLite
 page cache and disk-backed temporary storage; Python retains only length
 histograms. It opens the catalogue read-only and does not change training.
 
+For how often the current sampler actually exposes complete documents, see
+[whole-document window exposure](docs/whole-document-window-estimate.md).
+Capacity alone overstates complete-document exposure for long documents: a
+randomly offset 512-page window retains an anchored 384-page document in only
+about 25% of placements, before edge crops.
+
 ## Page type classification evaluation
 
 What the previous, image-only page type classifier reported. A starting point for evaluating
