@@ -47,3 +47,28 @@ validations. Details are saved in runtime `smoke-verification.json`.
 Full training was verified advancing at step 14 with finite losses and
 gradients, loss scale 1024, both metadata modes sampled, and zero
 fallback storage reads. [ClearML task](http://semant.cz:8090/projects/cf7452f7555d4335a213e1f4159b80a9/tasks/b9f269d8e1804840b350b75bbca793db/output/log).
+
+## 512-page NVMe companion
+
+Launched on 2026-10-28 alongside the ongoing r15 512 scan-only and r16 256
+metadata experiments. The new run uses the identical frozen source (`298d050`)
+and metadata policy as the 256 run, with window 512, stride 256 and edge ramp
+128. Batch size 64, eight loaders, training budgets and other settings remain
+unchanged. Initialization is fresh pretrained BERT Mini, not a resumed optimizer.
+The native store is `/home/ikohut/tmp/document-store-fp16-v1`; pagination is read
+from `/home/ikohut/tmp/pagination-experiment-w128/pagination.npy`. No LMDB fallback
+is enabled. Both metadata evaluation modes and final context comparisons remain on.
+
+Runtime: `/home/ikohut/tmp/boundary-metadata-r16/w512/`.
+Run: `/home/ikohut/tmp/page-sequence-runs/bert-mini-fp16-nvme-b64-w512-boundary5-metadata50-scattered-seed17-r16/`.
+Service: `page-sequence-w512-boundary-metadata-r16.service`.
+The new job's supervisor stops it when available RAM stays below 3 GiB for ten
+seconds, ahead of the older jobs' 2-GiB guards. It does not retry automatically.
+
+Its real-data smoke test passed four CUDA FP16 optimizer updates at batch 64 with
+eight loaders and two dual-mode validations. All parameters and gradients remained
+finite; loss scale stayed at 1024; fallback reads were zero. It sampled 170 supplied
+and 86 absent metadata windows. This small sample is not an estimate of the long-run
+50% per-scan probability. Around 7.4 GiB RAM remained available during the check
+with the two existing jobs active. Source checksums and smoke verification are
+saved with the runtime configuration.
