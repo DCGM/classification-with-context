@@ -181,6 +181,41 @@ identified above remain upstream of this equivalent encoder computation.
 Reusable test: `metakat_checks/compare_encoder_implementations.py`.
 Result: `/home/ikohut/tmp/metakat-evaluation-parity/encoder-code-comparison.json`.
 
+## Image mismatch by reference page type
+
+The cached image vectors were grouped by human annotation where available,
+otherwise DB page type. Unlabelled pages remain separate; contextual predictions
+are not treated as reference labels. This is the same 245-page diagnostic sample,
+not all 6,116 evaluation pages. It includes no reference-labelled TOC pages.
+The thumbnail column uses aspect-preserving max-size 256 and JPEG quality 90
+with rounded dimensions and the controlled unrelated utility described above.
+
+| Reference type | Pages | Full-resolution mean cosine | Thumbnail mean cosine | Thumbnail minimum |
+|---|---:|---:|---:|---:|
+| Edge | 9 | 0.545867 | 0.980638 | 0.948157 |
+| Spine | 3 | 0.548331 | 0.982983 | 0.964659 |
+| FrontEndPaper | 4 | 0.970310 | 0.989770 | 0.969466 |
+| Preface | 2 | 0.617033 | 0.990982 | 0.983096 |
+| TitlePage | 7 | 0.928667 | 0.993700 | 0.984370 |
+| FrontCover | 3 | 0.968781 | 0.993885 | 0.989786 |
+| Dedication | 2 | 0.848510 | 0.994080 | 0.993989 |
+| NormalPage | 26 | 0.931437 | 0.994530 | 0.979059 |
+| Unlabelled | 153 | 0.761585 | 0.994937 | 0.980324 |
+| Cover | 1 | 0.983285 | 0.995040 | 0.995040 |
+| Frontispiece | 1 | 0.976505 | 0.995132 | 0.995132 |
+| Blank | 15 | 0.973102 | 0.995287 | 0.982873 |
+| BackEndSheet | 3 | 0.966997 | 0.995312 | 0.993865 |
+| CalibrationTable | 4 | 0.970729 | 0.995371 | 0.986896 |
+| Advertisement | 2 | 0.955040 | 0.996840 | 0.994874 |
+| BackCover | 3 | 0.977141 | 0.997497 | 0.996267 |
+| BackEndPaper | 4 | 0.983481 | 0.998276 | 0.997540 |
+| FrontEndSheet | 3 | 0.964248 | 0.998591 | 0.997998 |
+
+The strongest remaining mismatch is on Edge and Spine pages. The small per-type
+sample counts prevent a population-level conclusion. The per-page CSV and the
+20 largest residuals are saved under
+`/home/ikohut/tmp/metakat-evaluation-parity/image-types/`.
+
 ## Outputs
 
 Completed native comparison:

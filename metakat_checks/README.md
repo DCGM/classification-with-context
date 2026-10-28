@@ -203,3 +203,7 @@ functions from `MetaKat_text_embeddings` and the current MetaKat encoders on
 identical public inputs and controlled batch groups, sharing loaded models.
 It also byte-compares the DINO checkpoint loader sources. Run with MetaKat's
 Python/source and pass `--original-root`, `--batch`, `--config`, and `--output`.
+
+`summarize_image_mismatch.py` groups cached full-resolution and thumbnail DINO
+comparisons by reference type (human first, then DB, with unlabelled separate).
+It writes per-type means/minima and per-page scores; it does not rerun encoders.
