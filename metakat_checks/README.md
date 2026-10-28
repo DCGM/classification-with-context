@@ -164,3 +164,25 @@ reviewed and is explicitly skipped:
   --work /home/ikohut/tmp/metakat-evaluation-cli-images-alto \
   --skip-batch issues_001_nkp_b4cf0b13
 ```
+
+## Compare deployment with training inference
+
+`compare_batch_results.py` runs the original training checkpoint on the native
+FP16 feature store for each completed evaluation batch. It uses the same batch
+scan order, MetaKat's detected page numbers, unknown document boundaries, W512,
+O64, regular tail, cubic merge, ramp endpoint 48 and ignored edge 12. Checkpoint
+weights and the native-store build identity are checked before inference. No DB
+pagination or true document boundaries are injected. With `--wait`, it follows
+the CLI batch job until all prepared batches have results.
+
+Live outputs: `/home/ikohut/tmp/metakat-evaluation-parity/native-report.json`,
+`disagreements.csv` and `<batch>.native.npz`. Report coverage is the length of
+`batches`; partial reports must not be described as the full 50-batch result.
+
+`extract_batch_features.py` runs with the MetaKat environment and source checkout
+and saves real image/text/statistics features and all model probabilities for
+selected public batches. `diagnose_batch_features.py` runs with the context
+environment, compares them with the native store, and feeds identical features
+through the independent training implementation. It also substitutes one fresh
+modality at a time into native features to identify the source of disagreements.
+Only feature vectors, predictions and compact statistics are saved.
