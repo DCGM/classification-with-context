@@ -14,7 +14,7 @@ def checkpoint():
         'intermediate_size': 16, 'max_position_embeddings': 32, 'vocab_size': 1,
         'hidden_dropout_prob': 0., 'attention_probs_dropout_prob': 0.})
     backbone.initial_scale = .02
-    model = PageTagger(backbone, {'image': 4, 'text': 3, 'stats': 2, 'pagination': 5},
+    model = PageTagger(backbone, {'image': 4, 'text': 3, 'stats': 2, 'pagination': 5, 'boundaries': 5},
                        'separate_mlp', auxiliary_edges=True).eval()
     state = {'format': 1, 'page_types': PAGE_TYPES, 'placements': PLACEMENTS,
              'specification': model.specification(), 'features': {'stats_names': ('a', 'b')},
@@ -32,10 +32,12 @@ def test_export_preserves_all_five_heads_and_inference_without_training_paths(tm
     torch.save(state, source)
     export_checkpoint(source, output)
     exported = torch.load(output, weights_only=True)
-    assert exported['format'] == 'metakat_context_v3'
+    assert exported['format'] == 'metakat_context_v4'
     assert exported['specification']['auxiliary_edges'] is True
     assert exported['features']['stats_names'] == ['a', 'b']
-    assert exported['inference'] == {'window_size': 16, 'stride': 8}
+    assert exported['inference']['window_size'] == 512
+    assert exported['inference']['stride'] == 448
+    assert exported['inference']['tail'] == 'regular'
     assert exported['pagination'] == {'policy': POLICY, 'cap': 20000}
     assert not {'config', 'optimizer', 'rng'} & exported.keys()
     assert 'private' not in repr(exported)
@@ -52,7 +54,7 @@ def test_export_preserves_all_five_heads_and_inference_without_training_paths(tm
             torch.testing.assert_close(actual[key], expected[key], rtol=0, atol=0)
 
 
-@pytest.mark.parametrize('change', ['labels', 'no_heads', 'missing_head', 'fusion', 'backbone', 'pagination', 'policy'])
+@pytest.mark.parametrize('change', ['labels', 'no_heads', 'missing_head', 'fusion', 'backbone', 'pagination', 'policy', 'no_boundaries'])
 def test_export_rejects_unsupported_models_without_overwriting_destination(tmp_path, change):
     source, output = tmp_path / 'training.pt', tmp_path / 'context.pt'
     state, _ = checkpoint()
@@ -69,6 +71,8 @@ def test_export_rejects_unsupported_models_without_overwriting_destination(tmp_p
             state['specification']['backbone']['kind'] = 'page'
     elif change == 'pagination':
         state['specification']['dims'].pop('pagination')
+    elif change == 'no_boundaries':
+        state['specification']['dims'].pop('boundaries')
     else:
         state['provenance']['pagination']['policy'] = 'other'
     torch.save(state, source)

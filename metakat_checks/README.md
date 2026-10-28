@@ -108,3 +108,25 @@ all 176 documents and 11,457 pages as public and all 40 related-document sequenc
 as adjacent siblings. Three synthetic regression tests cover budget/order rules,
 copy exclusion, reference-label isolation and materialized input layout. No
 classification inference has been performed yet.
+
+## Context model and merging parity
+
+`compare_context_inference` exports the selected five-bit-boundary checkpoint
+as `metakat_context_v4`, then compares training-repo inference with the MetaKat
+engine in its own environment. It checks fixed compact synthetic features,
+including unavailable modalities, singleton/short/full windows and 1,024-page
+inputs with the regular 128-page tail, with and without complete document metadata.
+All five heads are checked after merging; image/OCR encoders are mocked. This
+checks architecture and scanning parity, not image/OCR preprocessing parity.
+
+```bash
+python -m metakat_checks.compare_context_inference \
+  --checkpoint /path/to/finetune_best.pt \
+  --metakat /path/to/MetaKat \
+  --metakat-python /home/ikohut/python_env/metakat/bin/python \
+  --output /home/ikohut/tmp/metakat-boundary5-r16
+```
+
+The exported `context.pt` can be used as the MetaKat core's `checkpoint_path`;
+the matching DINO and mmBERT weights must still be configured separately.
+`parity-report.json` records the settings and numerical differences.

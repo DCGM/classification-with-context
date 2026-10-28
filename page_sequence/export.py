@@ -18,13 +18,14 @@ def export_checkpoint(checkpoint, output):
             or tuple(state['placements']) != PLACEMENTS):
         raise ValueError('Checkpoint schema/label mismatch')
     spec = state['specification']
-    if spec.get('scan_borders') or 'boundaries' in spec.get('dims', {}):
-        raise ValueError('Scan-border architecture requires a newer MetaKat inference artifact contract')
+    if spec.get('scan_borders'):
+        raise ValueError('Special scan tokens are unsupported; use the five-bit boundary architecture')
     if (spec.get('auxiliary_edges') is not True or spec.get('backbone', {}).get('kind') != 'bert'
             or spec.get('fusion') != 'separate_mlp' or spec.get('dims', {}).get('pagination') != 5
-            or set(spec.get('dims', {})) != {'image', 'text', 'stats', 'pagination'}
+            or spec.get('dims', {}).get('boundaries') != 5
+            or set(spec.get('dims', {})) != {'image', 'text', 'stats', 'pagination', 'boundaries'}
             or spec.get('num_types') != len(PAGE_TYPES)):
-        raise ValueError('MetaKat requires pagination-aware BERT with separate MLPs and auxiliary start/end heads')
+        raise ValueError('MetaKat requires five-bit boundary and pagination-aware BERT with separate MLPs and auxiliary start/end heads')
     from .models import from_specification
     from_specification(spec).load_state_dict(state['model'], strict=True)
     from .pagination import POLICY, encode, RECORD
@@ -39,10 +40,12 @@ def export_checkpoint(checkpoint, output):
     # JSON round-trip drops Python-specific containers from metadata.
     specification = dict(state['specification'])
     metadata = json.loads(json.dumps({
-        'format': 'metakat_context_v3',
+        'format': 'metakat_context_v4',
         'specification': specification, 'features': state['features'],
         'page_types': state['page_types'], 'placements': state['placements'],
-        'inference': state['config'].get('inference', {}),
+        'inference': {'window_size': 512, 'stride': 448, 'tail': 'regular',
+                      'merge': 'center_logits', 'edge_ramp': 32, 'edge_ignore': 0,
+                      'start_threshold': .5, 'batch_size': 8},
     }))
     metadata['pagination'] = pagination_contract
     artifact = dict(metadata, model={k: v.detach().cpu().clone() for k, v in state['model'].items()})

@@ -597,7 +597,11 @@ python -m page_sequence.export --checkpoint /path/to/best.pt --output /path/to/c
 ```
 
 The artifact contains weights, model specification, feature normalization,
-class order and inference settings. MetaKat's `page_type_core_engine_context`
+class order and deployment inference settings: window 512, stride 448 (overlap 64),
+regular short tail, centre-weighted logits with ramp 32 and no edge exclusion.
+These deliberately replace the older validation overlap saved in the checkpoint.
+The v4 consumer requires the five-bit boundary branch and auxiliary start/end heads;
+scan endpoints are always supplied, while complete document metadata is optional. MetaKat's `page_type_core_engine_context`
 loads it with `weights_only=True`. Supply the matching LightlyTrain DINO export
 and a local copy of the training mmBERT revision separately. Its binder writes
 `pageType`, canonical `side`, and optional `startsDocument` for every scan page.
@@ -761,7 +765,7 @@ prefixes, tails and interior negatives, without neighbouring documents. These
 diagnostics are logged under `final_document_edges` and do not select checkpoints.
 Portable MetaKat export preserves both auxiliary heads and their specification flag.
 MetaKat accepts only the pagination-aware BERT/separate-MLP architecture with
-these heads (`metakat_context_v3`). The pair boundary head still supplies the
+these heads (`metakat_context_v4`). The pair boundary head still supplies the
 final boundary prediction; auxiliary probabilities are not combined into it.
 
 For concurrent runs, `worker_start_method: "forkserver"` starts workers from a
@@ -815,10 +819,10 @@ and checkpoints retain their original three-modality behavior.
 
 For arbitrary-scan inference, `Page.pagenum` / the predict CLI's JSONL `pagenum` is optional.
 The same parser and normalizer apply; missing numbers require no imputation.
-MetaKat exports use `metakat_context_v3`, preserving the start/end heads and carrying
+MetaKat exports use `metakat_context_v4`, preserving the start/end heads and carrying
 the candidate policy and fixed cap alongside the model. The consumer reads existing
 `MetakatPage.pageNumber.text` and applies the same parser and FP16 encoding. Legacy
-v1/v2 artifacts and checkpoints without auxiliary heads are rejected. The artifact
+v1/v2/v3 artifacts and checkpoints without auxiliary heads or five-bit boundary inputs are rejected. The artifact
 needs neither the sidecar nor the DB dump; `predict`/`tag_pages` also support caller-provided numbers.
 
 Whole-modality robustness training is optional:
