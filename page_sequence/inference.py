@@ -18,6 +18,7 @@ class InferenceConfig:
     start_threshold: float = .5
     batch_size: int = 8
     tail: str = 'regular'
+    edge_ignore: int = 0
 
     def __post_init__(self):
         if not (self.window_size >= 2 and 1 <= self.stride < self.window_size):
@@ -26,6 +27,8 @@ class InferenceConfig:
             raise ValueError('unknown merge strategy')
         if self.edge_ramp < 1 or self.batch_size < 1 or not 0 < self.start_threshold < 1:
             raise ValueError('invalid inference settings')
+        if not 0 <= 2 * self.edge_ignore <= self.window_size - self.stride:
+            raise ValueError('edge_ignore must be nonnegative and at most half the overlap')
         if self.tail not in ('anchored', 'regular'):
             raise ValueError('tail must be anchored or regular')
 
@@ -43,12 +46,17 @@ def window_spans(n, size, stride, tail='anchored'):
     return [(s, min(n, s + size)) for s in starts]
 
 
-def context_weights(start, end, n, ramp):
+def context_weights(start, end, n, ramp, ignore=0):
     r = np.arange(end - start)
     # True stream endpoints have no missing outside context to penalize.
     left = r + 1 if start > 0 else np.full(end - start, np.inf)
     right = end - start - r if end < n else np.full(end - start, np.inf)
-    return (.1 + .9 * np.minimum(1, np.minimum(left, right) / ramp)).astype(np.float32)
+    distance = np.minimum(left, right)
+    if ignore:
+        # Exactly `ignore` pages at artificial edges contribute nothing. Real
+        # scan endpoints are exempt, including the short final window.
+        return np.clip((distance - ignore) / ramp, 0, 1).astype(np.float32)
+    return (.1 + .9 * np.minimum(1, distance / ramp)).astype(np.float32)
 
 
 def softmax(x):
@@ -81,10 +89,16 @@ class StreamMerger:
         if not 0 <= start < end <= self.n:
             raise ValueError('window outside stream')
         c = self.config
-        w = context_weights(start, end, self.n, c.edge_ramp)
+        w = context_weights(start, end, self.n, c.edge_ramp, c.edge_ignore)
         if c.merge.startswith('uniform'):
-            w[:] = 1
+            w[w > 0] = 1
         pair_w = np.r_[0, np.minimum(w[:-1], w[1:])].astype(np.float32)
+        if c.edge_ignore:
+            # When trimming half the overlap, retained regions meet between
+            # two pages. Keep that seam pair if either endpoint is retained;
+            # pairs with both endpoints inside the discarded region stay zero.
+            seam = (w[:-1] == 0) != (w[1:] == 0)
+            pair_w[1:][seam] = np.maximum(w[:-1], w[1:])[seam]
         p = np.asarray(output['pair_mask'], bool)
         if p.shape != (end - start,) or p[0] or not p[1:].all():
             raise ValueError('invalid pair coverage in an unpadded inference window')
@@ -127,7 +141,7 @@ class StreamMerger:
         if self.collect_window_stats:
             probabilities = softmax(np.asarray(output['type_logits'], np.float32))
             entropy = -(probabilities * np.log(np.maximum(probabilities, 1e-30))).sum(-1)
-            self.window_count[start:end] += 1
+            self.window_count[start:end] += (w > 0)
             self.stats_weight[start:end] += w
             self.prob_sum[start:end] += probabilities * w[:, None]
             self.entropy_sum[start:end] += entropy * w

@@ -17,9 +17,11 @@ from .schema import IGNORE, PAGE_TYPES, PLACEMENTS
 
 
 def sweep(model, dataset, streams, inference, overlaps, output, device='cpu',
-          processing='continuous'):
+          processing='continuous', edge_ignore_fraction=0.):
     if processing not in ('continuous', 'per_document'):
         raise ValueError('unknown processing mode')
+    if not 0 <= edge_ignore_fraction <= .5:
+        raise ValueError('edge ignore fraction must be in 0..0.5')
     overlaps = list(overlaps)
     if not overlaps or len(set(overlaps)) != len(overlaps) or any(
             not 1 <= n < inference.window_size for n in overlaps):
@@ -50,7 +52,8 @@ def sweep(model, dataset, streams, inference, overlaps, output, device='cpu',
         report['results'][mode] = {}
         baseline = None
         for overlap in overlaps:
-            settings = replace(inference, stride=inference.window_size - overlap)
+            settings = replace(inference, stride=inference.window_size - overlap,
+                               edge_ignore=int(overlap * edge_ignore_fraction))
             if str(device).startswith('cuda'):
                 torch.cuda.synchronize()
             start = time.perf_counter()
@@ -107,6 +110,8 @@ def main():
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--overlaps', nargs='+', type=int, default=[256, 128, 64, 32, 16])
+    parser.add_argument('--edge-ignore-fraction', type=float, default=0.,
+                        help='Discard this fraction of overlap at each artificial window edge (0..0.5)')
     parser.add_argument('--processing', choices=['continuous', 'per_document'], default='continuous')
     parser.add_argument('--tail', choices=['anchored', 'regular'],
                         help='Override final-window placement; regular keeps stride and permits a short tail')
@@ -125,7 +130,7 @@ def main():
     if args.tail is not None:
         settings = replace(settings, tail=args.tail)
     report = dict(metadata, **sweep(model, dataset, streams, settings, args.overlaps, args.output,
-                                   args.device, args.processing))
+                                   args.device, args.processing, args.edge_ignore_fraction))
     (Path(args.output) / 'report.json').write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
 
 

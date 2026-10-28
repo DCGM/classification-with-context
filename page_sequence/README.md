@@ -441,6 +441,30 @@ inside documents, since no between-document pairs are processed. Reports also
 separately score annotated pages in documents longer than the window; shorter
 documents are unaffected by the overlap setting.
 
+### Exclude artificial window edges
+
+`InferenceConfig.edge_ignore` (default 0) optionally discards that many pages
+at each artificial window edge, then ramps linearly from zero to full weight
+across `edge_ramp` pages. True scan endpoints are exempt. The same weights apply
+to page types, sides, auxiliary heads and contextual vectors. Uniform merge
+modes discard the same edges but give retained pages equal weight. Leave
+`edge_ignore: 0` to retain the original nonzero-floor weighting.
+
+The discard width must not exceed half the overlap, to preserve coverage.
+The overlap evaluator accepts `--edge-ignore-fraction 0.5`: overlaps 256, 128,
+64, 32 and 16 discard respectively 128, 64, 32, 16 and 8 pages at artificial
+edges. At exactly half overlap, successive retained regions meet without a
+blended region; use a smaller fraction, such as 0.25, to retain blending.
+The boundary pair crossing that join remains usable when either of its pages
+is retained; pairs whose two pages are discarded contribute nothing.
+
+Window counts and disagreement describe positive-weight contributions only.
+At half-overlap trimming, many pages have just one contributing prediction,
+so zero disagreement does not establish agreement between multiple windows.
+This is an inference-only option and does not change training or window spans.
+The [W512 comparison](../docs/edge-exclusion-r16-w512.md) found no consistent gain;
+existing smoothing remains the default.
+
 ### Tag caller-ordered pages
 
 New inference defaults to `inference.tail: "regular"` (also selectable with
