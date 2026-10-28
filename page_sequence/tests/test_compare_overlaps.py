@@ -9,7 +9,7 @@ from page_sequence.schema import PAGE_TYPES
 from page_sequence.tests.test_compare_page_context import Index
 
 
-@pytest.mark.parametrize('ramp_fraction', [None, .5])
+@pytest.mark.parametrize('ramp_fraction', [None, .5, .75])
 @pytest.mark.parametrize('ignore_fraction', [0., .125])
 @pytest.mark.parametrize('processing', ['continuous', 'per_document'])
 @pytest.mark.parametrize('tail', ['anchored', 'regular'])

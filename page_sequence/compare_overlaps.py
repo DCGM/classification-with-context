@@ -22,8 +22,8 @@ def sweep(model, dataset, streams, inference, overlaps, output, device='cpu',
         raise ValueError('unknown processing mode')
     if not 0 <= edge_ignore_fraction <= .5:
         raise ValueError('edge ignore fraction must be in 0..0.5')
-    if edge_ramp_fraction is not None and not 0 < edge_ramp_fraction <= .5:
-        raise ValueError('edge ramp fraction must be in (0,0.5]')
+    if edge_ramp_fraction is not None and not 0 < edge_ramp_fraction <= 1:
+        raise ValueError('edge ramp fraction must be in (0,1]')
     overlaps = list(overlaps)
     if not overlaps or len(set(overlaps)) != len(overlaps) or any(
             not 1 <= n < inference.window_size for n in overlaps):
@@ -117,7 +117,8 @@ def main():
     parser.add_argument('--edge-ignore-fraction', type=float, default=0.,
                         help='Discard this fraction of overlap at each artificial window edge (0..0.5)')
     parser.add_argument('--edge-ramp-fraction', type=float,
-                        help='Scale ramp with overlap (0..0.5); omitted preserves checkpoint ramp')
+                        help='Scale ramp with overlap (0..1); omitted preserves checkpoint ramp')
+    parser.add_argument('--edge-power', type=int, help='Polynomial ramp degree; overrides checkpoint/default')
     parser.add_argument('--processing', choices=['continuous', 'per_document'], default='continuous')
     parser.add_argument('--tail', choices=['anchored', 'regular'],
                         help='Override final-window placement; regular keeps stride and permits a short tail')
@@ -130,9 +131,12 @@ def main():
                     checkpoint_sha256=file_sha256(args.checkpoint), checkpoint_step=state['step'],
                     manifest_sha256=file_sha256(args.manifest),
                     index_sha256=state['provenance']['index_sha256'],
-                    comparison_code_sha256=file_sha256(__file__))
+                    comparison_code_sha256=file_sha256(__file__),
+                    inference_code_sha256=file_sha256(Path(__file__).with_name('inference.py')))
     del state
     settings = InferenceConfig(**dict(config['inference'], batch_size=args.batch_size))
+    if args.edge_power is not None:
+        settings = replace(settings, edge_power=args.edge_power)
     if args.tail is not None:
         settings = replace(settings, tail=args.tail)
     report = dict(metadata, **sweep(model, dataset, streams, settings, args.overlaps, args.output,
