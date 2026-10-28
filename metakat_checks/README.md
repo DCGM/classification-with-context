@@ -131,6 +131,6 @@ The exported `context.pt` can be used as the MetaKat core's `checkpoint_path`;
 the matching DINO and mmBERT weights must still be configured separately.
 The artifact stores `inference.overlap_merge` with method `center_logits`,
 ramp endpoint fraction 0.75 of overlap, ignored-edge fraction 0.1875 of overlap
-and power 3. The ignored edge precedes the active ramp.
+and `ramp_power: 3`. The ignored edge precedes the active ramp.
 The default overlap is 64, resolving to ramp 48 and ignore 12.
 `parity-report.json` records the settings and numerical differences.

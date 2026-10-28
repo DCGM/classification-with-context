@@ -49,7 +49,7 @@ def compare(args):
     ramp = max(1, int(overlap * policy['ramp_end_fraction_of_overlap']))
     settings.update(merge=policy['method'], edge_ramp=ramp,
                     edge_ignore=int(overlap * policy['ignored_edge_fraction_of_overlap']),
-                    edge_power=policy['power'])
+                    edge_power=policy['ramp_power'])
     cfg = InferenceConfig(**settings)
     rng = np.random.default_rng(17)
     for n in (1, 17, 512, 1024):

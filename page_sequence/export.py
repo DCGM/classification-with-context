@@ -47,7 +47,7 @@ def export_checkpoint(checkpoint, output):
                       'start_threshold': .5, 'batch_size': 8, 'overlap': 64,
                       'overlap_merge': {'method': 'center_logits',
                                         'ramp_end_fraction_of_overlap': .75,
-                                        'ignored_edge_fraction_of_overlap': .1875, 'power': 3}},
+                                        'ignored_edge_fraction_of_overlap': .1875, 'ramp_power': 3}},
     }))
     metadata['pagination'] = pagination_contract
     artifact = dict(metadata, model={k: v.detach().cpu().clone() for k, v in state['model'].items()})
