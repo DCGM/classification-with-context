@@ -473,6 +473,33 @@ python -m page_sequence.runner predict --checkpoint /path/to/best.pt \
 normalization. Output retains input order and repeated page occurrences, page keys, all three
 probability arrays, class IDs/label vocabularies, boundary validity and segment IDs.
 
+Models with auxiliary heads also return `page_start_probs` and `page_end_probs`
+for every real page, including the first and last. Their logits use page weights
+and are merged before sigmoid in logit-merging modes; they are separate from the
+pair-boundary output, whose first position remains invalid.
+
+For annotation selection and retrieval exports, pass `collect_embeddings=True`
+and `collect_window_stats=True` to `predict_stream` or `tag_pages`. The runner's
+`predict` and `evaluate` commands expose `--collect-embeddings` and
+`--collect-window-stats`; evaluation predictions are saved with `--predictions-dir`.
+These options add:
+
+- `embeddings`: the raw contextual backbone vectors before task heads, merged with
+  the same page weights in FP32, without L2 normalization. For BERT Mini this is
+  256 values per page. Cast to FP16 when writing the full-DB embedding store.
+- `window_count`: the number of contributing windows per page.
+- `type_window_js`: weighted Jensen–Shannon divergence between the windows' type
+  probability distributions, in natural-log units. This is entropy of the weighted
+  mean distribution minus weighted mean entropy, not entropy of merged logits.
+  Single-window pages have zero disagreement, which means no comparison is available.
+
+Probability-merging modes retain their original semantics. The `central` mode
+selects the highest-weight window for representations and auxiliary heads too;
+disagreement still describes all contributing windows. Embeddings and disagreement
+accumulators are optional to avoid their memory cost during routine validation.
+No individual window vectors are retained after accumulation. Checkpoint weights,
+training outputs and existing classification merging are unchanged.
+
 ## Verify before SSD arrival
 
 Benchmark an existing real-data index and configured vector stores with:

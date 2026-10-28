@@ -140,7 +140,7 @@ def make_optimizer(model, config):
 
 
 def evaluate_streams(model, dataset, streams, inference, device, predictions_dir=None,
-                     provide_document_metadata=False):
+                     provide_document_metadata=False, collect_embeddings=False, collect_window_stats=False):
     evaluator = Evaluator(inference.start_threshold)
     if predictions_dir is not None:
         Path(predictions_dir).mkdir(parents=True, exist_ok=True)
@@ -151,7 +151,8 @@ def evaluate_streams(model, dataset, streams, inference, device, predictions_dir
             from .data import page_edge_targets
             targets = page_edge_targets(dataset.index, stream['rows'])
             metadata = dict(document_starts=targets['page_start'], document_ends=targets['page_end'])
-        result = predict_stream(model, dataset, stream['rows'], inference, device, **metadata)
+        result = predict_stream(model, dataset, stream['rows'], inference, device, **metadata,
+                                collect_embeddings=collect_embeddings, collect_window_stats=collect_window_stats)
         documents = {(d.library, d.doc): d for d in dataset.index.documents_for_rows(stream['rows'])}
         evaluator.add(stream['id'], dataset.index.pages(stream['rows']), result, documents,
                       stream['censored_left'], stream['censored_right'])
@@ -563,12 +564,16 @@ def main():
     ev.add_argument('--training-store', help='Relocated, completed native store; identity and catalogue are verified')
     ev.add_argument('--inference-config', help='Optional JSON InferenceConfig for development merge comparisons')
     ev.add_argument('--device', default='cpu')
+    ev.add_argument('--collect-embeddings', action='store_true')
+    ev.add_argument('--collect-window-stats', action='store_true')
     pred = sub.add_parser('predict')
     pred.add_argument('--checkpoint', required=True)
     pred.add_argument('--pages', required=True, help='Scan-ordered JSONL: library, page, path')
     pred.add_argument('--output', required=True, help='Output .npz with probabilities/labels/segments')
     pred.add_argument('--sources', help='Optional JSON mapping image/text/stats to new vector-store specs')
     pred.add_argument('--device', default='cpu')
+    pred.add_argument('--collect-embeddings', action='store_true')
+    pred.add_argument('--collect-window-stats', action='store_true')
     args = parser.parse_args()
     if args.command == 'train':
         train(json.loads(Path(args.config).read_text()), args.resume, args.stop_after)
@@ -579,7 +584,9 @@ def main():
         inference = InferenceConfig(**settings)
         streams = load_streams(args.manifest, dataset.index, args.split)
         report = evaluate_streams(model, dataset, streams, inference,
-                                 args.device, args.predictions_dir)
+                                 args.device, args.predictions_dir,
+                                 collect_embeddings=args.collect_embeddings,
+                                 collect_window_stats=args.collect_window_stats)
         report['inference'] = asdict(inference)
         report['manifest_sha256'] = file_sha256(args.manifest)
         Path(args.output).write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
@@ -597,7 +604,9 @@ def main():
                 p = json.loads(line)
                 pages.append(Page(p['library'], '', p['page'], i, path=p.get('path', ''), pagenum=p.get('pagenum', '')))
         result = tag_pages(model, features, pages, InferenceConfig(**state['config']['inference']), args.device,
-                           pagination_cap=state['config'].get('pagination', {}).get('cap', 10000))
+                           pagination_cap=state['config'].get('pagination', {}).get('cap', 10000),
+                           collect_embeddings=args.collect_embeddings,
+                           collect_window_stats=args.collect_window_stats)
         np.savez_compressed(args.output, page_types=np.array(PAGE_TYPES), placements=np.array(PLACEMENTS), **result)
 
 

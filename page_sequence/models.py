@@ -119,7 +119,7 @@ class PageTagger(nn.Module):
             self.page_start_head = nn.Linear(h, 1)
             self.page_end_head = nn.Linear(h, 1)
 
-    def forward(self, features, attention_mask):
+    def forward(self, features, attention_mask, return_embeddings=False):
         if not attention_mask.any(dim=-1).all():
             raise ValueError('empty sequence in batch')
         x = self.fusion(features)
@@ -159,6 +159,8 @@ class PageTagger(nn.Module):
         if self.auxiliary_edges:
             output.update(page_start_logits=self.page_start_head(h).squeeze(-1),
                           page_end_logits=self.page_end_head(h).squeeze(-1))
+        if return_embeddings:
+            output['embeddings'] = h
         return output
 
     def specification(self):
