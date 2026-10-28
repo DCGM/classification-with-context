@@ -4,8 +4,11 @@ The selected W512 r16 fine-tuning checkpoint (weak DB weight 0.05, step 15927)
 was exported to `metakat_context_v4`. Source SHA256:
 `e52a49a453ce844e449d92918cf359260192e13bf9a7edb34b681cbff0ac5c4a`.
 
-Deployment uses window 512, stride 448 (overlap 64), regular short tails,
-centre-weighted logits, ramp 32 and no edge exclusion. The five-bit boundary
+Deployment uses window 512, overlap 64 (internal stride 448), regular short
+tails and centre-weighted cubic logits. The grouped `overlap_merge` policy
+sets `ramp_fraction_of_overlap=0.75`, `ignore_fraction_of_ramp=0.25` and
+`power=3`, resolving to ramp 48 and ignore 12. There is no additive weight
+floor. Changing overlap rescales both distances. The five-bit boundary
 MLP, pair boundary head and auxiliary start/end heads load strictly. Scan
 endpoints are inputs; complete document metadata is optional. CUDA uses FP16
 autocast with FP32 weights and merge accumulators.

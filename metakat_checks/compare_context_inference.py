@@ -43,7 +43,13 @@ def compare(args):
     model = from_specification(state['specification']).eval()
     model.load_state_dict(state['model'], strict=True)
     settings = dict(state['inference'])
-    settings['stride'] = settings['window_size'] - settings.pop('overlap')
+    overlap = settings.pop('overlap')
+    settings['stride'] = settings['window_size'] - overlap
+    policy = settings.pop('overlap_merge')
+    ramp = max(1, int(overlap * policy['ramp_fraction_of_overlap']))
+    settings.update(merge=policy['method'], edge_ramp=ramp,
+                    edge_ignore=int(ramp * policy['ignore_fraction_of_ramp']),
+                    edge_power=policy['power'])
     cfg = InferenceConfig(**settings)
     rng = np.random.default_rng(17)
     for n in (1, 17, 512, 1024):
