@@ -417,6 +417,24 @@ This is a development experiment; it does not open the held-out test set.
 The [2026-10-27 comparison](../docs/page-type-context-comparison.md) records
 checkpoint selection, full development results and per-class changes.
 
+To compare smaller overlaps on one continuous stream of the same development
+pages, keeping the checkpoint, fusion and merge weights unchanged:
+
+```bash
+python -m page_sequence.compare_overlaps \
+  --checkpoint /path/to/finetune_best.pt --manifest /path/to/dev.jsonl \
+  --output /path/to/new-overlap-comparison --overlaps 256 128 64 32 16
+```
+
+Overlap counts pages; stride is window size minus overlap. The first overlap is
+the paired baseline. Each overlap is evaluated with complete document metadata
+supplied and with it unknown, retaining the scan endpoints in both modes. This
+requires a model supporting the five-bit boundary inputs. Reports include curated
+page-type metrics, weak-label and side agreement, raw pair-boundary metrics,
+paired page-type changes, inference time and processed-page counts. Aligned type
+probabilities and panel identities are retained. Timing includes feature reads
+and inference, excludes report writing, and is subject to filesystem cache effects.
+
 ### Tag caller-ordered pages
 
 The `tag_pages(model, features, pages, config, device)` API accepts caller-ordered Page metadata

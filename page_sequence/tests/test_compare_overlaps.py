@@ -1,0 +1,47 @@
+import numpy as np
+import torch
+
+from page_sequence.compare_overlaps import sweep
+from page_sequence.data import make_example
+from page_sequence.inference import InferenceConfig
+from page_sequence.schema import PAGE_TYPES
+from page_sequence.tests.test_compare_page_context import Index
+
+
+def test_overlap_sweep_preserves_panel_and_supplies_complete_metadata(tmp_path):
+    index = Index()
+
+    class Dataset:
+        def __getitem__(self, window):
+            return make_example(index.pages(window.rows),
+                                lambda pages: {'image': np.ones((len(pages), 1), np.float32)}, window)
+
+    class Model(torch.nn.Module):
+        num_types = len(PAGE_TYPES)
+        boundary_features = True
+
+        def forward(self, features, mask):
+            b, n = mask.shape
+            assert features['boundaries'].shape == (b, n, 5)
+            logits = torch.zeros(b, n, self.num_types)
+            logits[:, :, 0] = 1
+            pair = mask.clone()
+            pair[:, 0] = False
+            return dict(type_logits=logits, placement_logits=torch.zeros(b, n, 3),
+                        starts_document_logits=torch.zeros(b, n), pair_mask=pair)
+
+    dataset = Dataset()
+    dataset.index = index
+    report = sweep(Model(), dataset, [{'rows': list(range(1, 8))}],
+                   InferenceConfig(window_size=4, stride=2, batch_size=2), [2, 1], tmp_path / 'sweep')
+    assert report['pages'] == 7 and report['documents'] == 2
+    for mode in ('unknown', 'provided'):
+        for overlap in (2, 1):
+            entry = report['results'][mode][str(overlap)]
+            assert entry['inference']['stride'] == 4 - overlap
+            assert entry['curated_type']['n'] == 4
+            assert entry['starts']['n'] == 6
+            assert entry['starts']['positive'] == 1
+            assert entry['curated_type']['weighted_f1'] == 1
+            assert entry['paired_against_baseline']['all_pages_changed'] == 0
+        assert report['results'][mode]['1']['processed_pages'] < report['results'][mode]['2']['processed_pages']
