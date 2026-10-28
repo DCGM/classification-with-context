@@ -121,6 +121,29 @@ remain unchanged. The reusable test is
 with its checkout on `PYTHONPATH`. It imports the supplied resize utility and
 saves vectors and similarity statistics; temporary thumbnails are removed.
 
+## Lower-JPEG-quality sweep
+
+Only JPEG quality was varied; OpenCV decoding (including grayscale), aspect
+preserving 256-pixel longest-edge resizing, rounded dimensions, and DINO model
+preprocessing were held fixed. This remains a sensitivity probe, not provenance
+for the original image exporter. All seven qualities were tested on the same
+245 public pages across the three diagnostic batches.
+
+| JPEG quality | Mean cosine to stored DINO vectors | Minimum cosine |
+|---|---:|---:|
+| 90 | 0.994231 | 0.948157 |
+| 85 | 0.991622 | 0.941688 |
+| 80 | 0.987500 | 0.918207 |
+| 75 | 0.981996 | 0.880712 |
+| 70 | 0.976541 | 0.874646 |
+| 60 | 0.959652 | 0.811079 |
+| 50 | 0.939923 | 0.719436 |
+
+Reducing JPEG quality below 90 worsened similarity on this sample. Quality 90
+is the best of these tested values, not an established historical setting.
+Results: `/home/ikohut/tmp/metakat-evaluation-parity/jpeg-quality-sweep/`.
+Production encoder settings and saved evaluation predictions remain unchanged.
+
 ## Outputs
 
 Completed native comparison:

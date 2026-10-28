@@ -193,3 +193,7 @@ native image features. Pass `--root`, `--store`, `--resize-script`,
 Python and source checkout on `PYTHONPATH`. Default max-size is 256 and quality
 comes from the exporter unless `--quality` is supplied. This utility is unrelated to the original dump; these tests demonstrate
 preprocessing sensitivity only and establish no historical export settings.
+
+Pass several JPEG qualities, for example `--quality 90 85 80 75 70 60 50`, to
+compare them with one DINO model load and one source-image decode per batch.
+Each quality gets separate vectors; `report.json` records all quality/batch cases.
