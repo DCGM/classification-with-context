@@ -57,6 +57,12 @@ The statistics are exactly equal after rounding MetaKat's freshly computed
 values to FP16. Pagination, presence flags and five-bit boundary inputs match
 exactly on all three diagnostic batches.
 
+The user confirmed that original thumbnails preserve aspect ratio and have a
+256-pixel longest edge. This geometry is established independently of the
+unrelated resizing utility. Interpolation, integer rounding, JPEG settings and
+the exact decoder remain unverified. No crop or square stretch belongs in this
+thumbnail stage; the separate DINO input stage resizes the thumbnail to 224x224.
+
 The largest difference is the image input. DINO training-store metadata records
 `/homes/ihradis/naki.images/public.256` as its source. The prepared batches contain
 full-resolution archived images. On three pages selected for large DINO mismatch,
@@ -101,7 +107,9 @@ sensitivity probe, and must not be used as historical provenance. It lives in
 It reads with `cv2.IMREAD_UNCHANGED`, preserving grayscale, keeps aspect ratio,
 uses `cv2.INTER_AREA`, rounds target dimensions, clamps them to at least one
 pixel, and never enlarges smaller images. The utility's size default is 512;
-256 was explicitly selected for these tests to match the training-source name.
+256 was explicitly selected for these tests and was subsequently confirmed by
+the user as the original thumbnail longest-edge size. The utility itself is
+still unrelated to the original export.
 Neither its JPEG quality default nor its resizing rules establish any setting
 of the original image dump. The original exporter still needs to be located.
 
