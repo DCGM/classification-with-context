@@ -6,6 +6,7 @@ from page_sequence.scan_borders import scan_windows
 
 
 def test_regular_tail_keeps_stride_instead_of_shifting_back():
+    assert InferenceConfig().tail == 'regular'
     assert window_spans(1024, 512, 448, 'regular') == [(0, 512), (448, 960), (896, 1024)]
     assert window_spans(970, 512, 448, 'regular') == [(0, 512), (448, 960), (896, 970)]
     assert window_spans(970, 512, 448, 'anchored') == [(0, 512), (448, 960), (458, 970)]

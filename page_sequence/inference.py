@@ -17,7 +17,7 @@ class InferenceConfig:
     edge_ramp: int = 32
     start_threshold: float = .5
     batch_size: int = 8
-    tail: str = 'anchored'
+    tail: str = 'regular'
 
     def __post_init__(self):
         if not (self.window_size >= 2 and 1 <= self.stride < self.window_size):

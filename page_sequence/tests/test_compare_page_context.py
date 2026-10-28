@@ -72,7 +72,7 @@ def test_compare_real_window_merging_same_pages_and_full_continuous_windows(tmp_
     dataset.index = index
     output = tmp_path / 'comparison'
     report = compare(Model(), dataset, [{'rows': list(range(1, 8))}],
-                     InferenceConfig(window_size=4, stride=2, batch_size=2), output)
+                     InferenceConfig(window_size=4, stride=2, batch_size=2, tail='anchored'), output)
     assert report['pages'] == 7 and report['documents'] == 2
     assert report['modes']['continuous']['full_windows'] == report['modes']['continuous']['windows'] == 3
     assert report['modes']['per_document']['full_windows'] == 2

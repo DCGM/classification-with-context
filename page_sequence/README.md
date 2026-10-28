@@ -443,16 +443,17 @@ documents are unaffected by the overlap setting.
 
 ### Tag caller-ordered pages
 
-For upcoming inference/export, set `inference.tail: "regular"` (or use
-`--tail regular` in the overlap evaluator). Window starts then stay on the stride
+New inference defaults to `inference.tail: "regular"` (also selectable with
+`--tail regular` in the overlap evaluator). Window starts stay on the stride
 grid, stopping as soon as the scan is fully covered; the last window may be
 shorter. For 1,024 pages, window 512 and overlap 64, spans are 1–512,
 449–960 and 897–1,024: the final window has 128 pages. Its length depends on
 the scan length. No extra window is added if a full window already ends at the
 scan end. Scan-border inputs and actual sequence lengths remain accurate;
-batch padding is masked. The merger weights are unchanged. Historical configs
-without a tail policy retain `"anchored"` so old evaluations and training sampling
-remain reproducible. Previously reported overlap comparisons use anchored tails.
+batch padding is masked. The merger weights are unchanged. To reproduce
+historical inference, explicitly set `inference.tail: "anchored"` or pass
+`--tail anchored` to the overlap evaluator. Training sampling retains its original
+anchored placement. Previously reported old-tail comparisons use anchored tails.
 The [combined old/new-tail evaluation](../docs/tail-strategy-comparison-r16-w512.md)
 compares stream and per-document processing on the same held-out development pages.
 
