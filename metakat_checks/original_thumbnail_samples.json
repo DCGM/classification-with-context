@@ -1,0 +1,487 @@
+{
+  "source_root": "/homes/ikohut/naki.images/public.256",
+  "selection": "all 9 Edge and 3 Spine pages; low/high similarity representatives per reference type; remaining worst residuals",
+  "pages": 48,
+  "samples": [
+    {
+      "relative_path": "nkp/b4cf0b13-435d-11dd-b505-00145e5790ea.images/a5cf014c-36fa-44c0-b91e-5050aaaebce6.jpg",
+      "batch": "issues_001_nkp_b4cf0b13",
+      "page": "a5cf014c-36fa-44c0-b91e-5050aaaebce6",
+      "row_id": 42043628,
+      "page_type": "NormalPage",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9997590560512772,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/issues_001_nkp_b4cf0b13/images/000005_a5cf014c-36fa-44c0-b91e-5050aaaebce6.jpg"
+    },
+    {
+      "relative_path": "uzei/adfec4ad-5f53-42c2-b324-0511473d9921.images/c5403afb-2e8c-11e8-b5af-001999480be2.jpg",
+      "batch": "issues_002_uzei_adfec4ad",
+      "page": "c5403afb-2e8c-11e8-b5af-001999480be2",
+      "row_id": 44600966,
+      "page_type": "TitlePage",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9843701715758302,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/issues_002_uzei_adfec4ad/images/000001_c5403afb-2e8c-11e8-b5af-001999480be2.jpg"
+    },
+    {
+      "relative_path": "uzei/adfec4ad-5f53-42c2-b324-0511473d9921.images/c5406212-2e8c-11e8-b5af-001999480be2.jpg",
+      "batch": "issues_002_uzei_adfec4ad",
+      "page": "c5406212-2e8c-11e8-b5af-001999480be2",
+      "row_id": 44600973,
+      "page_type": "Advertisement",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9988064251539935,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/issues_002_uzei_adfec4ad/images/000008_c5406212-2e8c-11e8-b5af-001999480be2.jpg"
+    },
+    {
+      "relative_path": "uzei/b2e4f420-0ed0-4747-b5cc-d43d909e104f.images/c5b43286-2e8c-11e8-b5af-001999480be2.jpg",
+      "batch": "issues_002_uzei_adfec4ad",
+      "page": "c5b43286-2e8c-11e8-b5af-001999480be2",
+      "row_id": 44617227,
+      "page_type": "NormalPage",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9790594508840172,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/issues_002_uzei_adfec4ad/images/000012_c5b43286-2e8c-11e8-b5af-001999480be2.jpg"
+    },
+    {
+      "relative_path": "uzei/b2e4f420-0ed0-4747-b5cc-d43d909e104f.images/c5b4328a-2e8c-11e8-b5af-001999480be2.jpg",
+      "batch": "issues_002_uzei_adfec4ad",
+      "page": "c5b4328a-2e8c-11e8-b5af-001999480be2",
+      "row_id": 44617231,
+      "page_type": "Advertisement",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9948743905485223,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/issues_002_uzei_adfec4ad/images/000016_c5b4328a-2e8c-11e8-b5af-001999480be2.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/00942af7-14ff-4b27-8c6f-fa79be63094d.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "00942af7-14ff-4b27-8c6f-fa79be63094d",
+      "row_id": 5135687,
+      "page_type": "Edge",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9775695457387679,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000114_00942af7-14ff-4b27-8c6f-fa79be63094d.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/01110d89-8a12-40ba-a499-c7eae32cc4da.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "01110d89-8a12-40ba-a499-c7eae32cc4da",
+      "row_id": 5135620,
+      "page_type": "Dedication",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9941715766532989,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000047_01110d89-8a12-40ba-a499-c7eae32cc4da.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/03c03258-7fd3-4082-a500-d61100be3598.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "03c03258-7fd3-4082-a500-d61100be3598",
+      "row_id": 4180199,
+      "page_type": "FrontEndSheet",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9991121298316233,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000002_03c03258-7fd3-4082-a500-d61100be3598.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/03fb9607-0be1-4c76-a46f-7f597dedaa77.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "03fb9607-0be1-4c76-a46f-7f597dedaa77",
+      "row_id": 28940662,
+      "page_type": "Unlabelled",
+      "label_source": "none",
+      "thumbnail_cosine": 0.9842416249100869,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000131_03fb9607-0be1-4c76-a46f-7f597dedaa77.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/089106b9-b53c-4272-aab9-50e918945f54.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "089106b9-b53c-4272-aab9-50e918945f54",
+      "row_id": 5135686,
+      "page_type": "Edge",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9966258061416267,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000113_089106b9-b53c-4272-aab9-50e918945f54.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/0bd38876-9ac6-43ae-8372-c24e19ff8411.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "0bd38876-9ac6-43ae-8372-c24e19ff8411",
+      "row_id": 4180229,
+      "page_type": "Edge",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9615137286545343,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000032_0bd38876-9ac6-43ae-8372-c24e19ff8411.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/0c477fb4-53d8-4679-bc04-b490639a8c4b.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "0c477fb4-53d8-4679-bc04-b490639a8c4b",
+      "row_id": 5135683,
+      "page_type": "BackEndSheet",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9979481182860843,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000110_0c477fb4-53d8-4679-bc04-b490639a8c4b.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/0fe0687a-76ea-45ac-8e05-e1519a2d45e3.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "0fe0687a-76ea-45ac-8e05-e1519a2d45e3",
+      "row_id": 28940720,
+      "page_type": "Unlabelled",
+      "label_source": "none",
+      "thumbnail_cosine": 0.9829829217118582,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000189_0fe0687a-76ea-45ac-8e05-e1519a2d45e3.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/186d97bf-e326-43eb-91db-f75685d13dfa.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "186d97bf-e326-43eb-91db-f75685d13dfa",
+      "row_id": 4180226,
+      "page_type": "BackEndPaper",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9989997381805465,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000029_186d97bf-e326-43eb-91db-f75685d13dfa.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/1ebbd332-995a-4c24-91d5-6862a1d2e7fc.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "1ebbd332-995a-4c24-91d5-6862a1d2e7fc",
+      "row_id": 5135684,
+      "page_type": "BackCover",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9962671366360851,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000111_1ebbd332-995a-4c24-91d5-6862a1d2e7fc.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/21022668-b653-47d1-80e9-e74523a5ebf0.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "21022668-b653-47d1-80e9-e74523a5ebf0",
+      "row_id": 5135612,
+      "page_type": "Spine",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9961311490026813,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000039_21022668-b653-47d1-80e9-e74523a5ebf0.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/261ea27f-a8d7-4d90-b9f3-d22dc7a4d97e.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "261ea27f-a8d7-4d90-b9f3-d22dc7a4d97e",
+      "row_id": 5135685,
+      "page_type": "Edge",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9965923571065552,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000112_261ea27f-a8d7-4d90-b9f3-d22dc7a4d97e.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/3323d396-dd80-4ce6-81f3-20e78e2471d6.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "3323d396-dd80-4ce6-81f3-20e78e2471d6",
+      "row_id": 4180198,
+      "page_type": "FrontCover",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9972456909905036,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000001_3323d396-dd80-4ce6-81f3-20e78e2471d6.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/33edf5be-5f8b-4f5d-8ead-27531638c9b2.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "33edf5be-5f8b-4f5d-8ead-27531638c9b2",
+      "row_id": 4180200,
+      "page_type": "Spine",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9646594495155459,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000003_33edf5be-5f8b-4f5d-8ead-27531638c9b2.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/3cd78103-a687-4a70-a715-d7e3f2ed4daf.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "3cd78103-a687-4a70-a715-d7e3f2ed4daf",
+      "row_id": 28940722,
+      "page_type": "Unlabelled",
+      "label_source": "none",
+      "thumbnail_cosine": 0.9852092888730092,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000191_3cd78103-a687-4a70-a715-d7e3f2ed4daf.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/470b1692-919f-4509-b159-a6f3c2b9cdf5.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "470b1692-919f-4509-b159-a6f3c2b9cdf5",
+      "row_id": 28940739,
+      "page_type": "BackCover",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9992728566406761,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000208_470b1692-919f-4509-b159-a6f3c2b9cdf5.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/50e4770c-0ce2-4497-b3b4-3f42d52e6b7f.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "50e4770c-0ce2-4497-b3b4-3f42d52e6b7f",
+      "row_id": 28940743,
+      "page_type": "CalibrationTable",
+      "label_source": "human",
+      "thumbnail_cosine": 0.9996450811396921,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000212_50e4770c-0ce2-4497-b3b4-3f42d52e6b7f.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/52d19018-c77f-4bcb-99f2-af655a26ee10.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "52d19018-c77f-4bcb-99f2-af655a26ee10",
+      "row_id": 5135659,
+      "page_type": "Unlabelled",
+      "label_source": "none",
+      "thumbnail_cosine": 0.9997652977947018,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000086_52d19018-c77f-4bcb-99f2-af655a26ee10.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/56e8caf8-7fae-43ff-a0d9-2d29c25f839b.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "56e8caf8-7fae-43ff-a0d9-2d29c25f839b",
+      "row_id": 4180208,
+      "page_type": "Blank",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.982872621917805,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000011_56e8caf8-7fae-43ff-a0d9-2d29c25f839b.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/57e3c63f-7a89-4d88-a1c3-cc7def70cf77.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "57e3c63f-7a89-4d88-a1c3-cc7def70cf77",
+      "row_id": 28940647,
+      "page_type": "FrontCover",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9897861290093193,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000116_57e3c63f-7a89-4d88-a1c3-cc7def70cf77.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/598d5890-2bb9-483b-82ba-acce61447702.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "598d5890-2bb9-483b-82ba-acce61447702",
+      "row_id": 5135682,
+      "page_type": "BackEndPaper",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9975403333066587,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000109_598d5890-2bb9-483b-82ba-acce61447702.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/63646a9f-e878-48f6-85f8-c37b0092641e.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "63646a9f-e878-48f6-85f8-c37b0092641e",
+      "row_id": 28940649,
+      "page_type": "Spine",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9881580066075859,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000118_63646a9f-e878-48f6-85f8-c37b0092641e.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/6e0ba682-2ca1-4c69-bfd1-2306baffae61.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "6e0ba682-2ca1-4c69-bfd1-2306baffae61",
+      "row_id": 4180232,
+      "page_type": "CalibrationTable",
+      "label_source": "human",
+      "thumbnail_cosine": 0.98689572592808,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000035_6e0ba682-2ca1-4c69-bfd1-2306baffae61.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/6e6225fe-a45a-4ea2-8208-1d2987295f5d.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "6e6225fe-a45a-4ea2-8208-1d2987295f5d",
+      "row_id": 28940741,
+      "page_type": "Edge",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9840772973742866,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000210_6e6225fe-a45a-4ea2-8208-1d2987295f5d.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/7156d545-772d-4b1e-a463-e1bf844d201b.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "7156d545-772d-4b1e-a463-e1bf844d201b",
+      "row_id": 28940666,
+      "page_type": "Unlabelled",
+      "label_source": "none",
+      "thumbnail_cosine": 0.980324058851817,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000135_7156d545-772d-4b1e-a463-e1bf844d201b.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/7b7b5c8f-87c0-4380-a064-969ed5d479cf.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "7b7b5c8f-87c0-4380-a064-969ed5d479cf",
+      "row_id": 5135615,
+      "page_type": "Blank",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9995379291779404,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000042_7b7b5c8f-87c0-4380-a064-969ed5d479cf.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/7d3b6dec-9936-458d-9cfd-b577ce5f052e.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "7d3b6dec-9936-458d-9cfd-b577ce5f052e",
+      "row_id": 4180210,
+      "page_type": "Preface",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9830958102043905,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000013_7d3b6dec-9936-458d-9cfd-b577ce5f052e.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/845acb8d-bd57-4d31-95c0-7f09063b16b1.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "845acb8d-bd57-4d31-95c0-7f09063b16b1",
+      "row_id": 4180201,
+      "page_type": "FrontEndPaper",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9694662747918454,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000004_845acb8d-bd57-4d31-95c0-7f09063b16b1.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/8d2334c7-86ac-4eb3-a109-4783e0935ce4.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "8d2334c7-86ac-4eb3-a109-4783e0935ce4",
+      "row_id": 28940738,
+      "page_type": "BackEndSheet",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9938647628312063,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000207_8d2334c7-86ac-4eb3-a109-4783e0935ce4.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/988c367c-8bbc-490b-a116-13ad1580a162.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "988c367c-8bbc-490b-a116-13ad1580a162",
+      "row_id": 4180207,
+      "page_type": "TitlePage",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9991420975635923,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000010_988c367c-8bbc-490b-a116-13ad1580a162.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/a03685e5-abe1-4f24-a4b7-3bc8232e9f60.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "a03685e5-abe1-4f24-a4b7-3bc8232e9f60",
+      "row_id": 28940658,
+      "page_type": "Unlabelled",
+      "label_source": "none",
+      "thumbnail_cosine": 0.9824196645888932,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000127_a03685e5-abe1-4f24-a4b7-3bc8232e9f60.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/a4329c90-adca-4ebf-99cc-18660fb72f1c.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "a4329c90-adca-4ebf-99cc-18660fb72f1c",
+      "row_id": 4180206,
+      "page_type": "Frontispiece",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9951324867324881,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000009_a4329c90-adca-4ebf-99cc-18660fb72f1c.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/a949eba9-cab5-44df-b842-3eb4efd01754.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "a949eba9-cab5-44df-b842-3eb4efd01754",
+      "row_id": 4180209,
+      "page_type": "Preface",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9988674866508038,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000012_a949eba9-cab5-44df-b842-3eb4efd01754.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/af0e371c-c162-46dd-abee-e980afc89874.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "af0e371c-c162-46dd-abee-e980afc89874",
+      "row_id": 4180222,
+      "page_type": "Unlabelled",
+      "label_source": "none",
+      "thumbnail_cosine": 0.9828987146808341,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000025_af0e371c-c162-46dd-abee-e980afc89874.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/b0060629-66e8-4f67-b4c7-c631ae22fa13.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "b0060629-66e8-4f67-b4c7-c631ae22fa13",
+      "row_id": 28940740,
+      "page_type": "Edge",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9969989214060123,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000209_b0060629-66e8-4f67-b4c7-c631ae22fa13.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/b1d0ea29-8895-4d42-956f-e20631fbfaf2.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "b1d0ea29-8895-4d42-956f-e20631fbfaf2",
+      "row_id": 5135619,
+      "page_type": "Dedication",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9939887961123438,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000046_b1d0ea29-8895-4d42-956f-e20631fbfaf2.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/b93442db-0082-4b90-b793-4072b7f4c242.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "b93442db-0082-4b90-b793-4072b7f4c242",
+      "row_id": 28940742,
+      "page_type": "Edge",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9978896887461806,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000211_b93442db-0082-4b90-b793-4072b7f4c242.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/bbaab106-9194-4aff-9992-87d1c1c306cb.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "bbaab106-9194-4aff-9992-87d1c1c306cb",
+      "row_id": 28940648,
+      "page_type": "FrontEndSheet",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9979981751554557,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000117_bbaab106-9194-4aff-9992-87d1c1c306cb.jpg"
+    },
+    {
+      "relative_path": "mzk/a139fa09-83ec-43a2-b875-54301346f59e.images/c113a238-6abb-4f01-8fc6-0bf7f92cf413.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "c113a238-6abb-4f01-8fc6-0bf7f92cf413",
+      "row_id": 28940744,
+      "page_type": "Cover",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9950396861832014,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000213_c113a238-6abb-4f01-8fc6-0bf7f92cf413.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/c5812372-044f-4468-a555-3c7c2be0c4c4.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "c5812372-044f-4468-a555-3c7c2be0c4c4",
+      "row_id": 5135614,
+      "page_type": "FrontEndPaper",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9978200616970525,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000041_c5812372-044f-4468-a555-3c7c2be0c4c4.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/e3aa4000-312e-4d69-bc47-fe9f0504b947.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "e3aa4000-312e-4d69-bc47-fe9f0504b947",
+      "row_id": 4180230,
+      "page_type": "Edge",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9481568362140392,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000033_e3aa4000-312e-4d69-bc47-fe9f0504b947.jpg"
+    },
+    {
+      "relative_path": "knav/cd98dd6c-67f7-4bb1-817e-13815e93fd3a.images/ed348413-5fe4-42fe-bf54-4d7f0792185b.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "ed348413-5fe4-42fe-bf54-4d7f0792185b",
+      "row_id": 5135670,
+      "page_type": "Unlabelled",
+      "label_source": "none",
+      "thumbnail_cosine": 0.9849152257395258,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000097_ed348413-5fe4-42fe-bf54-4d7f0792185b.jpg"
+    },
+    {
+      "relative_path": "knav/9d239827-5696-49c2-bb5a-89bce95b5852.images/f5d0750f-b7b6-448d-bce8-2b9d428c74a0.jpg",
+      "batch": "monographs_002_mixed",
+      "page": "f5d0750f-b7b6-448d-bce8-2b9d428c74a0",
+      "row_id": 4180231,
+      "page_type": "Edge",
+      "label_source": "DB",
+      "thumbnail_cosine": 0.9663217182679351,
+      "full_resolution_image": "/mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation/monographs_002_mixed/images/000034_f5d0750f-b7b6-448d-bce8-2b9d428c74a0.jpg"
+    }
+  ]
+}

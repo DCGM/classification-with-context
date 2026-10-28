@@ -207,3 +207,30 @@ Python/source and pass `--original-root`, `--batch`, `--config`, and `--output`.
 `summarize_image_mismatch.py` groups cached full-resolution and thumbnail DINO
 comparisons by reference type (human first, then DB, with unlabelled separate).
 It writes per-type means/minima and per-page scores; it does not rerun encoders.
+
+## Copy actual original thumbnails from Sophie2
+
+Run locally:
+
+```bash
+bash metakat_checks/copy_original_thumbnail_samples.sh
+```
+
+The script reads `ikohut@sophie2:/homes/ikohut/naki.images/public.256/` using rsync
+and the exact image-LMDB relative paths. The fixed 48-page list includes all nine
+reference-labelled edges and three spines from the diagnostic sample, low/high
+similarity representatives of other types, and further large residuals. It
+copies original JPEG bytes, preserving library/document paths, into
+`/home/ikohut/tmp/metakat-evaluation-parity/original-thumbnails/`. No image
+processing or inference is run. The remote source is read only; no `--delete`
+is used. A local `SHA256SUMS` and `samples.json` identify the downloaded files and
+their corresponding full-resolution batch images/native row IDs.
+
+To use a different SSH hostname or destination:
+
+```bash
+SOPHIE_HOST=ikohut@sophie2.fit.vutbr.cz \
+  bash metakat_checks/copy_original_thumbnail_samples.sh /path/to/local/output
+```
+
+It is safe to rerun the copy; rsync checks content and resumes partial files.
