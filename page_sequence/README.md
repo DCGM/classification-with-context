@@ -453,6 +453,8 @@ scan end. Scan-border inputs and actual sequence lengths remain accurate;
 batch padding is masked. The merger weights are unchanged. Historical configs
 without a tail policy retain `"anchored"` so old evaluations and training sampling
 remain reproducible. Previously reported overlap comparisons use anchored tails.
+The [combined old/new-tail evaluation](../docs/tail-strategy-comparison-r16-w512.md)
+compares stream and per-document processing on the same held-out development pages.
 
 The `tag_pages(model, features, pages, config, device)` API accepts caller-ordered Page metadata
 with empty `doc` values. No document index or true boundaries are required. CLI input is JSONL:
