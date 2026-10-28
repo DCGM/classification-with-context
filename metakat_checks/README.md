@@ -234,3 +234,10 @@ SOPHIE_HOST=ikohut@sophie2.fit.vutbr.cz \
 ```
 
 It is safe to rerun the copy; rsync checks content and resumes partial files.
+
+After copying originals, `compare_original_thumbnails.py` verifies their local
+SHA256 checksums, runs the current DINO encoder against the stored raw/native
+vectors, and compares JPEG dimensions, quantization tables, chroma sampling and
+decoded pixels with the cached Q90 reconstructions. Run in MetaKat's environment
+and source checkout with `--originals`, `--reconstructed`, `--batches`, `--store`,
+`--checkpoint`, and `--output`. This comparison preserves original JPEG bytes.

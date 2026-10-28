@@ -349,6 +349,48 @@ rounding and DINO's final 224x224 preparation unchanged.
 Production settings and completed predictions remain unchanged. Results are in
 `/home/ikohut/tmp/metakat-evaluation-parity/thumbnail-224-q90/`.
 
+## Actual original thumbnails from Sophie2: encoder parity established
+
+The user copied the 48 selected original JPEGs from
+`sophie2:/homes/ikohut/naki.images/public.256/`, preserving exact LMDB-relative
+paths. All local SHA256 checksums passed. Feeding these original files directly
+to the current MetaKat DINO encoder reproduced the stored training vectors:
+
+| Measure | Result |
+|---|---:|
+| Pages | 48 |
+| Mean cosine | 0.999999893 |
+| Minimum cosine | 0.999999593 |
+| Raw FP16 vectors bitwise identical | 32 / 48 |
+| Spine raw FP16 vectors bitwise identical | 3 / 3 |
+| Edge raw FP16 vectors bitwise identical | 5 / 9 |
+| Mean spine cosine | 0.999999979 |
+| Mean edge cosine | 0.999999889 |
+
+The residual on the remaining vectors is at small numerical-rounding scale.
+This establishes inference parity on actual original inputs and removes the
+need to change crop policy or the model to explain the earlier mismatches.
+Those mismatches arise when reconstructing thumbnails from the archived
+full-resolution images, not when embedding the originals.
+
+The original files also establish the following JPEG properties:
+
+- All 48 have a 256-pixel longest edge and RGB mode.
+- All 48 have quantization tables exactly matching standard JPEG quality 90.
+- All 48 use 4:2:0 chroma subsampling, matching the Q90 reconstructions.
+- Only 26/48 reconstructed thumbnails have the same dimensions as the originals.
+  Original dimensions agree with a direct floor rule on 23/48 pages, round on
+  26/48, and ceil on 25/48; none of these simple direct rules explains every page.
+- Even dimension-matched examples have differing decoded pixels. Therefore
+  thumbnail generation/source-image/decoder details remain to be identified;
+  JPEG quality alone and a single direct rounding-rule change are insufficient.
+
+Reusable check: `metakat_checks/compare_original_thumbnails.py`.
+Report and vectors:
+`/home/ikohut/tmp/metakat-evaluation-parity/original-thumbnail-check/`.
+Originals: `/home/ikohut/tmp/metakat-evaluation-parity/original-thumbnails/`.
+Production encoder settings and completed evaluation predictions remain unchanged.
+
 ## Outputs
 
 Completed native comparison:
