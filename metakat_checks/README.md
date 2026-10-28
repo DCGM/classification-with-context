@@ -186,3 +186,10 @@ environment, compares them with the native store, and feeds identical features
 through the independent training implementation. It also substitutes one fresh
 modality at a time into native features to identify the source of disagreements.
 Only feature vectors, predictions and compact statistics are saved.
+
+`probe_thumbnail_preprocessing.py` tests the naki-tools exporter directly against
+native image features. Pass `--root`, `--store`, `--resize-script`,
+`--dino-checkpoint`, `--output`, and repeatable `--batch` names, using MetaKat's
+Python and source checkout on `PYTHONPATH`. Default max-size is 256 and quality
+comes from the exporter unless `--quality` is supplied. The original utility's
+256-pixel setting is a tested hypothesis, not proven historical provenance.

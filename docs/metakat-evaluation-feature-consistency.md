@@ -90,6 +90,35 @@ investigation. Matching the original thumbnail preprocessing and reconstructing
 text in region reading order should precede a claim of end-to-end numerical
 parity with the training feature store.
 
+## Thumbnail-exporter follow-up
+
+The checked semAnt branches contain the OCR dumper but no image resize/export
+implementation. A candidate exporter was found in
+`/home/ikohut/Projects/naki-tools/naki_tools/data/resize_images.py` (tracked version
+`f84b178` is the last commit touching that file). Its JPEG quality default is 90.
+It reads with `cv2.IMREAD_UNCHANGED`, preserving grayscale, keeps aspect ratio,
+uses `cv2.INTER_AREA`, rounds target dimensions, clamps them to at least one
+pixel, and never enlarges smaller images. The utility's size default is 512;
+256 was explicitly selected for these tests to match the training-source name.
+The script permits quality overrides, so its default alone does not prove the
+historical command-line setting.
+
+Using that implementation directly with max-size 256 and JPEG quality 90:
+
+| Batch | Original full-image mean cosine | Exporter mean cosine | Exporter minimum cosine |
+|---|---:|---:|---:|
+| issues_001_nkp_b4cf0b13 | 0.949272 | 0.994724 | 0.986934 |
+| issues_002_uzei_adfec4ad | 0.912634 | 0.993554 | 0.979059 |
+| monographs_002_mixed | 0.792183 | 0.994244 | 0.948157 |
+
+A floor-dimension variant at the same quality was also checked; it was worse on
+the 213-page monograph batch (mean 0.988771). Neither variant establishes exact
+thumbnail reproduction. Production preprocessing and completed batch outputs
+remain unchanged. The reusable test is
+`metakat_checks/probe_thumbnail_preprocessing.py`, run in MetaKat's environment
+with its checkout on `PYTHONPATH`. It imports the supplied resize utility and
+saves vectors and similarity statistics; temporary thumbnails are removed.
+
 ## Outputs
 
 Completed native comparison:
