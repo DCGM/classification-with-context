@@ -144,6 +144,35 @@ is the best of these tested values, not an established historical setting.
 Results: `/home/ikohut/tmp/metakat-evaluation-parity/jpeg-quality-sweep/`.
 Production encoder settings and saved evaluation predictions remain unchanged.
 
+## Direct original-encoder code comparison
+
+The actual original functions from `Projects/MetaKat_text_embeddings` were run
+on the same 16 public pages as the current MetaKat encoders, using shared loaded
+models, the same runtime environment and controlled matching batch groups.
+
+- Original DINO `load_image(path, 224)` and current `DinoEncoder.load_image`
+  returned identical pixel arrays for every page.
+- Original DINO `embed(..., float16, 'cls', ...)`, rounded to its FP16 storage
+  format, and the current image encoder returned bitwise-identical vectors
+  (maximum absolute error 0).
+- The original and current `dinov2_checkpoint.py` loader files are byte-identical.
+- Original mmBERT `embed_chunk` with `mean_pool` and BF16 autocast, rounded to
+  FP16 storage, and the current text encoder returned bitwise-identical vectors
+  (maximum absolute error 0). Both received the same 4,000-character prefixes,
+  tokenization limits and eight-page batch groups.
+
+This checks encoder computation given identical inputs, not reproduction of
+historical GPU/software versions or arbitrary batch groupings. The original
+image script has a default batch size of 256 versus 32 in the deployment config;
+the text dump sorts much larger chunks than MetaKat's bounded groups of eight.
+Such grouping changes can cause numerical rounding differences. Original text
+inference consumes the already-truncated text LMDB; MetaKat applies the character
+limit inside its encoder. The actual image-file and text-order differences
+identified above remain upstream of this equivalent encoder computation.
+
+Reusable test: `metakat_checks/compare_encoder_implementations.py`.
+Result: `/home/ikohut/tmp/metakat-evaluation-parity/encoder-code-comparison.json`.
+
 ## Outputs
 
 Completed native comparison:

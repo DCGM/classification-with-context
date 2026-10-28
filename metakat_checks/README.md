@@ -197,3 +197,9 @@ preprocessing sensitivity only and establish no historical export settings.
 Pass several JPEG qualities, for example `--quality 90 85 80 75 70 60 50`, to
 compare them with one DINO model load and one source-image decode per batch.
 Each quality gets separate vectors; `report.json` records all quality/batch cases.
+
+`compare_encoder_implementations.py` calls the real original DINO and mmBERT
+functions from `MetaKat_text_embeddings` and the current MetaKat encoders on
+identical public inputs and controlled batch groups, sharing loaded models.
+It also byte-compares the DINO checkpoint loader sources. Run with MetaKat's
+Python/source and pass `--original-root`, `--batch`, `--config`, and `--output`.
