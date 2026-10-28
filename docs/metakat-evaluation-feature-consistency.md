@@ -316,6 +316,24 @@ Torch 2.14) before changing production preprocessing.
 Artifacts: `historical-loader-probe.json` and
 `native-vs-original-image-lmdb.json` under the parity work directory.
 
+## Checkpoint and source revision confirmed by original dump machine
+
+The user supplied the original machine's checkpoint MD5:
+`0eb8baa6b8de4c4ab94c211aaf632c83`, and Git revision
+`8a2d3e2d334132ff0b85e9495be574d782687037`.
+
+Both the SSD source checkpoint and the DINO checkpoint in the MetaKat v1.7.0
+bundle have exactly that MD5 and size 346,396,515 bytes. Their SHA256 is
+`d08f6d05da58efff5748274f487c2583d94cad5ee9e0490a57e40c3a3832f80e`,
+matching the training-vector metadata and bundle configuration. This excludes
+selection of a different exported checkpoint as the cause.
+
+Comparing the local `MetaKat_text_embeddings` image-inference script against the
+supplied commit shows only the LMDB map-size default changing from 100 to 300 GB;
+its image preparation and embedding computation do not differ. The checkpoint
+loader file is unchanged. The user-supplied Git revision identifies the original
+checkout HEAD, without independently establishing absence of uncommitted changes.
+
 ## Outputs
 
 Completed native comparison:
