@@ -25,8 +25,9 @@ including pair masks and segment IDs. Page/pair merge weights matched exactly.
 All five heads' merged probabilities agreed within 0.000002 absolute error.
 The real artifact also passed the engine's feature/label/normalization contract
 validation; image/OCR feature encoders were mocked. This does not establish
-feature extraction parity on archived images and ALTO, nor compare the separate
-boundary resolver's final decisions with raw model predictions.
+feature extraction parity on archived images and ALTO. The context engine now
+bypasses the page-type boundary resolver: pipeline inference preserves merged
+model boundaries, while the old ViT engine retains type-based resolution.
 
 Local artifact and detailed results:
 `/home/ikohut/tmp/metakat-boundary5-r16/context.pt` and
