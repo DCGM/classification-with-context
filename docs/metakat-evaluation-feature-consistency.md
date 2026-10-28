@@ -381,6 +381,14 @@ The original files also establish the following JPEG properties:
 - Only 26/48 reconstructed thumbnails have the same dimensions as the originals.
   Original dimensions agree with a direct floor rule on 23/48 pages, round on
   26/48, and ceil on 25/48; none of these simple direct rules explains every page.
+- Every dimension mismatch is exactly one pixel on the shorter edge: 11
+  originals are one pixel wider, nine are one pixel narrower, one is one pixel
+  taller, and one is one pixel shorter. The 256-pixel longest edge matches in
+  all 48 cases. Examples: original spine 32x256 versus reconstruction 31x256;
+  another spine 36x256 versus 35x256; edge 42x256 versus 43x256; title page
+  186x256 versus 185x256. Thus these are small integer-geometry differences,
+  not gross scaling failures. The exact originating rounding/intermediate
+  resize rule is still unknown.
 - Even dimension-matched examples have differing decoded pixels. Therefore
   thumbnail generation/source-image/decoder details remain to be identified;
   JPEG quality alone and a single direct rounding-rule change are insufficient.
