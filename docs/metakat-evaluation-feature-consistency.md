@@ -216,6 +216,47 @@ sample counts prevent a population-level conclusion. The per-page CSV and the
 20 largest residuals are saved under
 `/home/ikohut/tmp/metakat-evaluation-parity/image-types/`.
 
+## Crop-history audit
+
+The user recalled reproducing the DINO training loader's center-crop behavior
+for thin spines. The earlier encoder-equality check did not test that training
+loader; it only compared the current dump script with the current MetaKat port.
+
+The tracked dump inference script was introduced in `b82c008` on 2026-09-29
+with whole-image bilinear resizing and documentation explicitly saying
+"without its random crops". The next change, `ef0e763` the same day, replaced
+bilinear interpolation with `cv2.INTER_AREA`; it did not remove a center crop.
+The MetaKat context port introduced in `3b47119` on 2026-10-26 copied this
+whole-image path. Subsequent relocation changed imports, not image geometry.
+This history shows an explicit choice to omit crops when the tracked dump
+script was introduced, but establishes no later removal of the user's verified
+center-crop implementation and does not identify that implementation.
+
+The original DINO run's `train.log` identifies LightlyTrain 0.17.0 and records
+random-resize global views with scale range 0.32..1.0 and local views with
+scale range 0.05..0.32. That differs from deterministic whole-image extraction;
+this log alone does not reproduce the precise crop implementation or fallback.
+The cached public image-vector metadata itself declares whole-image 224x224
+`INTER_AREA` extraction, not center cropping.
+
+As an additional diagnostic, three plausible central crops were applied to the
+same simulated 256/Q90 thumbnails on the reference-labelled spines and edges:
+
+| Input variant | Spine mean cosine (3 pages) | Edge mean cosine (9 pages) |
+|---|---:|---:|
+| Whole thumbnail to 224x224 | 0.982983 | 0.980639 |
+| Central square to 224x224 | 0.700661 | 0.600998 |
+| Central aspect-ratio-constrained crop | 0.734112 | 0.635836 |
+| Short-edge-256 / center-224 equivalent extent | 0.664797 | 0.586800 |
+
+These are crop sensitivity probes, not an exact reproduction of the original
+training transform. They support whole-image extraction as the source of these
+stored contextual-training vectors. A DINO-pretraining-versus-extraction mismatch
+is distinct from MetaKat-versus-context-training-store parity. Production image
+inference was not changed during this audit.
+
+Audit data: `/home/ikohut/tmp/metakat-evaluation-parity/center-crop-probe.json`.
+
 ## Outputs
 
 Completed native comparison:
