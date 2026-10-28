@@ -257,6 +257,65 @@ inference was not changed during this audit.
 
 Audit data: `/home/ikohut/tmp/metakat-evaluation-parity/center-crop-probe.json`.
 
+## Full dump-script history and historical-loader replay
+
+Fetched the shared MetaKat repository and checked all branches, reflogs and
+107 unreferenced recoverable commits. None of the unreferenced commits contained
+another snapshot of the DINO dump script at its historical path. The separate
+`65d65da` thin-image fix concerns Gaussian-blur padding in an older classifier
+dataset; it does not change DINO embedding inference.
+
+| Commit | Date | Change | Changes pixel preparation? |
+|---|---|---|---|
+| `b82c008` | 2026-09-29 | Introduce DINO export loader, full-page PIL bilinear resize, JPEG draft decoding | Initial behavior |
+| `ef0e763` | 2026-09-29 | PIL bilinear -> OpenCV INTER_AREA | Yes |
+| `4b87327` | 2026-10-02 | Find images inside per-document directories | No, changes file discovery |
+| `8a2d3e2` | 2026-10-02 | Key vectors by image-relative path instead of library/page UUID | No, changes identity/keying |
+| `13546fa` | 2026-10-06 | LMDB map-size default | No |
+| `3b47119` | 2026-10-26 | Introduce context-engine DINO port using whole-page INTER_AREA | Same image computation |
+| `8cf98b7` | 2026-10-27 | Remove old training CLI and relocate checkpoint loader | No |
+
+The first dump-script version already uses FP16 CUDA compute by default, CLS
+pooling and SDPA. No tracked change replaces center cropping with whole-page
+resizing in this script. A different verified loader or an uncommitted original
+server edit is still possible; neither is established by this Git history.
+
+The original public dump's `log.txt` starts at 2026-10-02 14:24:39 UTC and records
+`/homes/ihradis/metakat/MetaKat/.../infer_dinov2_vitb14.py`, source
+`/homes/ihradis/naki.images/public.256/`, Torch 2.8.0+cu128 and Transformers 4.57.6.
+This is after both October 2 file/keying commits, accounting for their +0200 Git
+timestamps. The log does not record a source-file hash or prove that the remote
+working tree was clean.
+
+The actual `load_image` function from Git revisions `b82c008` and `ef0e763` was
+replayed on identical simulated 256/Q90 thumbnails. The current DINO model and
+pooling were held fixed:
+
+| Historical loader | Mean cosine, 213-page batch | Spine mean (3 pages) | Edge mean (9 pages) |
+|---|---:|---:|---:|
+| PIL bilinear (`b82c008`) | 0.987983 | 0.875050 | 0.893088 |
+| INTER_AREA (`ef0e763`) | 0.994244 | 0.982983 | 0.980638 |
+
+The old interpolation explains substantial sensitivity on thin pages but does
+not improve reproduction of the cached vectors in this probe. Central cropping
+also worsens it, as shown above. These tests use reconstructed thumbnails, so
+none settles the historical file-level preprocessing exactly.
+
+To exclude the shared-store migration and key mapping as causes, all 245 native
+raw image vectors were compared against the original public image LMDB using
+each manifest's exact relative-path key. All exist and are bitwise identical
+(maximum absolute difference 0).
+
+The most useful next comparison is an actual 256-pixel spine/edge JPEG used by
+the original dump. Using the original file eliminates thumbnail reconstruction
+uncertainty. If the original file reproduces the cached vector, investigate
+thumbnail generation/source-image differences; if it does not, investigate the
+original server's code snapshot and runtime (including Torch 2.8 versus current
+Torch 2.14) before changing production preprocessing.
+
+Artifacts: `historical-loader-probe.json` and
+`native-vs-original-image-lmdb.json` under the parity work directory.
+
 ## Outputs
 
 Completed native comparison:
