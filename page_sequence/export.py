@@ -43,11 +43,11 @@ def export_checkpoint(checkpoint, output):
         'format': 'metakat_context_v4',
         'specification': specification, 'features': state['features'],
         'page_types': state['page_types'], 'placements': state['placements'],
-        'inference': {'window_size': 512, 'overlap': 64, 'tail': 'regular',
-                      'start_threshold': .5, 'batch_size': 8,
+        'inference': {'window_size': 512, 'tail': 'regular',
+                      'start_threshold': .5, 'batch_size': 8, 'overlap': 64,
                       'overlap_merge': {'method': 'center_logits',
-                                        'ramp_fraction_of_overlap': .75,
-                                        'ignore_fraction_of_ramp': .25, 'power': 3}},
+                                        'ramp_end_fraction_of_overlap': .75,
+                                        'ignored_edge_fraction_of_overlap': .1875, 'power': 3}},
     }))
     metadata['pagination'] = pagination_contract
     artifact = dict(metadata, model={k: v.detach().cpu().clone() for k, v in state['model'].items()})

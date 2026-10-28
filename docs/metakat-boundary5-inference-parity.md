@@ -6,7 +6,7 @@ was exported to `metakat_context_v4`. Source SHA256:
 
 Deployment uses window 512, overlap 64 (internal stride 448), regular short
 tails and centre-weighted cubic logits. The grouped `overlap_merge` policy
-sets `ramp_fraction_of_overlap=0.75`, `ignore_fraction_of_ramp=0.25` and
+sets `ramp_end_fraction_of_overlap=0.75`, `ignored_edge_fraction_of_overlap=0.1875` and
 `power=3`, resolving to ramp 48 and ignore 12. There is no additive weight
 floor. Changing overlap rescales both distances. The five-bit boundary
 MLP, pair boundary head and auxiliary start/end heads load strictly. Scan

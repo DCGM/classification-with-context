@@ -598,8 +598,9 @@ python -m page_sequence.export --checkpoint /path/to/best.pt --output /path/to/c
 
 The artifact contains weights, model specification, feature normalization,
 class order and deployment inference settings: window 512, stride 448 (overlap 64),
-regular short tail, centre-weighted cubic logits with a ramp of 3/4 overlap and an ignored
-region of 1/4 ramp, under the explicit `overlap_merge` configuration.
+regular short tail, centre-weighted cubic logits: an ignored edge of 3/16 overlap, followed by
+an active ramp reaching full weight at 3/4 overlap. These regions are explicit
+in the `overlap_merge` configuration.
 These deliberately replace the older validation overlap saved in the checkpoint.
 The v4 consumer requires the five-bit boundary branch and auxiliary start/end heads;
 scan endpoints are always supplied, while complete document metadata is optional. MetaKat's `page_type_core_engine_context`
