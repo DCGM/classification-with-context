@@ -434,6 +434,12 @@ page-type metrics, weak-label and side agreement, raw pair-boundary metrics,
 paired page-type changes, inference time and processed-page counts. Aligned type
 probabilities and panel identities are retained. Timing includes feature reads
 and inference, excludes report writing, and is subject to filesystem cache effects.
+Use `--processing per_document` to restart inference at each complete document,
+retaining true scan-border signals and excluding each document's first position
+from pair-boundary scoring. In that mode boundary metrics measure false splits
+inside documents, since no between-document pairs are processed. Reports also
+separately score annotated pages in documents longer than the window; shorter
+documents are unaffected by the overlap setting.
 
 ### Tag caller-ordered pages
 

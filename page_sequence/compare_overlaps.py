@@ -1,4 +1,4 @@
-"""Compare overlap sizes on identical continuous-stream pages and checkpoint."""
+"""Compare overlap sizes on identical pages, continuously or per document."""
 import argparse
 from dataclasses import asdict, replace
 import json
@@ -16,7 +16,10 @@ from .runner import evaluation_dataset, load_checkpoint
 from .schema import IGNORE, PAGE_TYPES, PLACEMENTS
 
 
-def sweep(model, dataset, streams, inference, overlaps, output, device='cpu'):
+def sweep(model, dataset, streams, inference, overlaps, output, device='cpu',
+          processing='continuous'):
+    if processing not in ('continuous', 'per_document'):
+        raise ValueError('unknown processing mode')
     overlaps = list(overlaps)
     if not overlaps or len(set(overlaps)) != len(overlaps) or any(
             not 1 <= n < inference.window_size for n in overlaps):
@@ -34,7 +37,12 @@ def sweep(model, dataset, streams, inference, overlaps, output, device='cpu'):
     for lo in range(0, len(rows), 4096):
         sides[lo:lo + 4096] = [p.target()[2] for p in dataset.index.pages(rows[lo:lo + 4096])]
     side_mask = sides != IGNORE
+    runs = spans if processing == 'per_document' else [(0, len(rows))]
+    long_document = np.zeros(len(rows), bool)
+    for lo, hi in spans:
+        long_document[lo:hi] = hi - lo > inference.window_size
     report = dict(pages=len(rows), documents=len(spans), baseline_overlap=overlaps[0],
+                  processing=processing,
                   continuous_order='source manifest streams concatenated in recorded order',
                   results={})
     for provided in (False, True):
@@ -43,15 +51,25 @@ def sweep(model, dataset, streams, inference, overlaps, output, device='cpu'):
         baseline = None
         for overlap in overlaps:
             settings = replace(inference, stride=inference.window_size - overlap)
-            metadata = dict(document_starts=starts, document_ends=ends) if provided else {}
             if str(device).startswith('cuda'):
                 torch.cuda.synchronize()
             start = time.perf_counter()
-            result = predict_stream(model, dataset, rows, settings, device, **metadata)
+            result = dict(type_probs=np.empty((len(rows), len(PAGE_TYPES)), np.float32),
+                          placement=np.empty(len(rows), np.int64),
+                          starts_document_probs=np.empty(len(rows), np.float32),
+                          pair_mask=np.empty(len(rows), bool), processed_pages=0)
+            for lo, hi in runs:
+                metadata = (dict(document_starts=starts[lo:hi], document_ends=ends[lo:hi])
+                            if provided else {})
+                current = predict_stream(model, dataset, rows[lo:hi], settings, device, **metadata)
+                for name in ('type_probs', 'placement', 'starts_document_probs', 'pair_mask'):
+                    result[name][lo:hi] = current[name]
+                result['processed_pages'] += current['processed_pages']
+                del current
             if str(device).startswith('cuda'):
                 torch.cuda.synchronize()
             seconds = time.perf_counter() - start
-            prediction = result['type']
+            prediction = result['type_probs'].argmax(-1)
             if baseline is None:
                 baseline = prediction.copy()
             mask = result['pair_mask']
@@ -59,8 +77,11 @@ def sweep(model, dataset, streams, inference, overlaps, output, device='cpu'):
                              minlength=9).reshape(3, 3)
             entry = dict(inference=asdict(settings), seconds=seconds,
                          processed_pages=result['processed_pages'], pages_per_second=len(rows) / seconds,
-                         windows=len(window_spans(len(rows), settings.window_size, settings.stride)),
+                         windows=sum(len(window_spans(hi - lo, settings.window_size, settings.stride))
+                                     for lo, hi in runs),
                          curated_type=type_scores(labels, prediction, gold & (labels != IGNORE)),
+                         curated_long_documents=type_scores(
+                             labels, prediction, gold & (labels != IGNORE) & long_document),
                          weak_type_agreement=type_scores(labels, prediction, ~gold & (labels != IGNORE)),
                          placement_db_agreement=classification_metrics(cm, PLACEMENTS),
                          starts=binary_metrics(starts[mask], result['starts_document_probs'][mask],
@@ -85,6 +106,7 @@ def main():
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--overlaps', nargs='+', type=int, default=[256, 128, 64, 32, 16])
+    parser.add_argument('--processing', choices=['continuous', 'per_document'], default='continuous')
     args = parser.parse_args()
     torch.set_num_threads(1)
     model, state = load_checkpoint(args.checkpoint, args.device)
@@ -97,7 +119,8 @@ def main():
                     comparison_code_sha256=file_sha256(__file__))
     del state
     settings = InferenceConfig(**dict(config['inference'], batch_size=args.batch_size))
-    report = dict(metadata, **sweep(model, dataset, streams, settings, args.overlaps, args.output, args.device))
+    report = dict(metadata, **sweep(model, dataset, streams, settings, args.overlaps, args.output,
+                                   args.device, args.processing))
     (Path(args.output) / 'report.json').write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
 
 
