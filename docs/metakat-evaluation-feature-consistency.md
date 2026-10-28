@@ -334,6 +334,21 @@ its image preparation and embedding computation do not differ. The checkpoint
 loader file is unchanged. The user-supplied Git revision identifies the original
 checkout HEAD, without independently establishing absence of uncommitted changes.
 
+## 224-pixel thumbnail probe
+
+Tested 224 instead of 256 as the aspect-preserving thumbnail longest edge on
+the same 245 pages, keeping JPEG quality 90, decoding, interpolation, dimension
+rounding and DINO's final 224x224 preparation unchanged.
+
+| Thumbnail longest edge | Pages | Mean cosine | Minimum cosine |
+|---|---:|---:|---:|
+| 256 | 245 | 0.994231 | 0.948157 |
+| 224 | 245 | 0.851737 | 0.580920 |
+
+224-pixel thumbnails are a worse match to stored DINO vectors on this sample.
+Production settings and completed predictions remain unchanged. Results are in
+`/home/ikohut/tmp/metakat-evaluation-parity/thumbnail-224-q90/`.
+
 ## Outputs
 
 Completed native comparison:
