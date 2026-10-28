@@ -13,6 +13,7 @@ cp -- "$script_dir/original_thumbnail_samples.paths" "$output_dir/samples.paths"
 cp -- "$script_dir/original_thumbnail_samples.json" "$output_dir/samples.json"
 
 rsync --archive --relative --protect-args --checksum --partial \
+  --rsh="ssh -4" \
   --info=progress2 \
   --files-from="$script_dir/original_thumbnail_samples.paths" \
   "$remote:$source_root/" "$output_dir/"

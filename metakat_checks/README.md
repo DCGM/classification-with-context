@@ -217,7 +217,7 @@ bash metakat_checks/copy_original_thumbnail_samples.sh
 ```
 
 The script reads `ikohut@sophie2:/homes/ikohut/naki.images/public.256/` using rsync
-and the exact image-LMDB relative paths. The fixed 48-page list includes all nine
+over `ssh -4` (IPv4 only) and the exact image-LMDB relative paths. The fixed 48-page list includes all nine
 reference-labelled edges and three spines from the diagnostic sample, low/high
 similarity representatives of other types, and further large residuals. It
 copies original JPEG bytes, preserving library/document paths, into
