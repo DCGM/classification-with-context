@@ -10,7 +10,8 @@ from page_sequence.tests.test_compare_page_context import Index
 
 
 @pytest.mark.parametrize('processing', ['continuous', 'per_document'])
-def test_overlap_sweep_preserves_panel_and_supplies_complete_metadata(tmp_path, processing):
+@pytest.mark.parametrize('tail', ['anchored', 'regular'])
+def test_overlap_sweep_preserves_panel_and_supplies_complete_metadata(tmp_path, processing, tail):
     index = Index()
 
     class Dataset:
@@ -35,7 +36,7 @@ def test_overlap_sweep_preserves_panel_and_supplies_complete_metadata(tmp_path, 
     dataset = Dataset()
     dataset.index = index
     report = sweep(Model(), dataset, [{'rows': list(range(1, 8))}],
-                   InferenceConfig(window_size=4, stride=2, batch_size=2), [2, 1], tmp_path / 'sweep',
+                   InferenceConfig(window_size=4, stride=2, batch_size=2, tail=tail), [2, 1], tmp_path / 'sweep',
                    processing=processing)
     assert report['pages'] == 7 and report['documents'] == 2
     for mode in ('unknown', 'provided'):

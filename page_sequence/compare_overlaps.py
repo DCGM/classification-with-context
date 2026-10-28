@@ -77,7 +77,8 @@ def sweep(model, dataset, streams, inference, overlaps, output, device='cpu',
                              minlength=9).reshape(3, 3)
             entry = dict(inference=asdict(settings), seconds=seconds,
                          processed_pages=result['processed_pages'], pages_per_second=len(rows) / seconds,
-                         windows=sum(len(window_spans(hi - lo, settings.window_size, settings.stride))
+                         windows=sum(len(window_spans(hi - lo, settings.window_size,
+                                                      settings.stride, settings.tail))
                                      for lo, hi in runs),
                          curated_type=type_scores(labels, prediction, gold & (labels != IGNORE)),
                          curated_long_documents=type_scores(
@@ -107,6 +108,8 @@ def main():
     parser.add_argument('--batch-size', type=int, default=32)
     parser.add_argument('--overlaps', nargs='+', type=int, default=[256, 128, 64, 32, 16])
     parser.add_argument('--processing', choices=['continuous', 'per_document'], default='continuous')
+    parser.add_argument('--tail', choices=['anchored', 'regular'],
+                        help='Override final-window placement; regular keeps stride and permits a short tail')
     args = parser.parse_args()
     torch.set_num_threads(1)
     model, state = load_checkpoint(args.checkpoint, args.device)
@@ -119,6 +122,8 @@ def main():
                     comparison_code_sha256=file_sha256(__file__))
     del state
     settings = InferenceConfig(**dict(config['inference'], batch_size=args.batch_size))
+    if args.tail is not None:
+        settings = replace(settings, tail=args.tail)
     report = dict(metadata, **sweep(model, dataset, streams, settings, args.overlaps, args.output,
                                    args.device, args.processing))
     (Path(args.output) / 'report.json').write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')

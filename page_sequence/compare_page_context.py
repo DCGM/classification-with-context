@@ -97,9 +97,11 @@ def compare(model, dataset, streams, inference, output, device='cpu', provide_do
             border_tokens = getattr(model, 'scan_borders', False)
             if border_tokens or getattr(model, 'boundary_features', False):
                 from .scan_borders import scan_windows
-                tiles = scan_windows(hi - lo, inference.window_size, inference.stride, border_tokens)
+                tiles = scan_windows(hi - lo, inference.window_size, inference.stride,
+                                     border_tokens, tail=inference.tail)
             else:
-                tiles = [(s, e, False, False) for s, e in window_spans(hi - lo, inference.window_size, inference.stride)]
+                tiles = [(s, e, False, False) for s, e in window_spans(
+                    hi - lo, inference.window_size, inference.stride, inference.tail)]
             windows += len(tiles)
             full += sum(e - s + (begin + end) * border_tokens == inference.window_size
                         for s, e, begin, end in tiles)

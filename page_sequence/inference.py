@@ -17,6 +17,7 @@ class InferenceConfig:
     edge_ramp: int = 32
     start_threshold: float = .5
     batch_size: int = 8
+    tail: str = 'anchored'
 
     def __post_init__(self):
         if not (self.window_size >= 2 and 1 <= self.stride < self.window_size):
@@ -25,16 +26,20 @@ class InferenceConfig:
             raise ValueError('unknown merge strategy')
         if self.edge_ramp < 1 or self.batch_size < 1 or not 0 < self.start_threshold < 1:
             raise ValueError('invalid inference settings')
+        if self.tail not in ('anchored', 'regular'):
+            raise ValueError('tail must be anchored or regular')
 
 
-def window_spans(n, size, stride):
+def window_spans(n, size, stride, tail='anchored'):
     if n < 1 or size < 2 or not 1 <= stride < size:
         raise ValueError('nonempty stream and pair-covering window/stride required')
+    if tail not in ('anchored', 'regular'):
+        raise ValueError('tail must be anchored or regular')
     if n <= size:
         return [(0, n)]
     starts = list(range(0, n - size + 1, stride))
-    if starts[-1] != n - size:
-        starts.append(n - size)
+    if starts[-1] + size < n:
+        starts.append(starts[-1] + stride if tail == 'regular' else n - size)
     return [(s, min(n, s + size)) for s in starts]
 
 
@@ -124,9 +129,11 @@ def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu',
     boundary_features = getattr(model, 'boundary_features', False)
     if borders or boundary_features:
         from .scan_borders import scan_windows
-        tiles = scan_windows(len(rows), config.window_size, config.stride, border_tokens=borders)
+        tiles = scan_windows(len(rows), config.window_size, config.stride,
+                             border_tokens=borders, tail=config.tail)
     else:
-        tiles = [(s, e, False, False) for s, e in window_spans(len(rows), config.window_size, config.stride)]
+        tiles = [(s, e, False, False) for s, e in
+                 window_spans(len(rows), config.window_size, config.stride, config.tail)]
     supplied = None
     if document_starts is not None or document_ends is not None:
         if not boundary_features:
