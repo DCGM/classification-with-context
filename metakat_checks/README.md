@@ -134,3 +134,33 @@ ramp endpoint fraction 0.75 of overlap, ignored-edge fraction 0.1875 of overlap
 and `ramp_power: 3`. The ignored edge precedes the active ramp.
 The default overlap is 64, resolving to ramp 48 and ignore 12.
 `parity-report.json` records the settings and numerical differences.
+
+## Local CLI evaluation with detected pagination
+
+`run_cli_batches.py` processes prepared batches sequentially in separate MetaKat
+CLI processes. It supplies only page identities, scan order, asset mappings and
+dimensions; DB page numbers, page types, sides and document boundaries are removed.
+The original prepared inputs remain unchanged. The configured local pipeline
+runs page-number detection before context page classification, bibliography and
+chapters. It never calls the worker or API.
+
+Each batch gets a sibling `<batch>.results/` containing `input.images-alto.json`,
+`metakat.json`, `metakat.pdf`, `mods/`, `mods-overview.txt`, `run.log` and
+`cli-run.json`. The runner writes aggregate `status.json` and takes an exclusive
+lock in `--work`. Completed batches are skipped on resume; failed batches are
+recorded and processing continues without automatic retries within the run.
+
+The evaluation run started on 2026-10-28 uses the resolved local-model config,
+source provenance and logs in
+`/home/ikohut/tmp/metakat-evaluation-cli-images-alto/`. Its first batch was already
+reviewed and is explicitly skipped:
+
+```bash
+/home/ikohut/python_env/metakat/bin/python -u -m metakat_checks.run_cli_batches \
+  --root /mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation \
+  --metakat-root /home/ikohut/Projects/MetaKat/.claude/worktrees/schema-shared-base \
+  --metakat-python /home/ikohut/python_env/metakat/bin/python \
+  --engine-config /home/ikohut/tmp/metakat-evaluation-cli-images-alto/engine_config.resolved.json \
+  --work /home/ikohut/tmp/metakat-evaluation-cli-images-alto \
+  --skip-batch issues_001_nkp_b4cf0b13
+```
