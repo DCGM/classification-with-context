@@ -940,3 +940,15 @@ true scan endpoints are exempt. This replaces the historical
 `0.1 + 0.9 * min(1, distance / edge_ramp)` rule; existing reports and completed
 exports retain their recorded historical behavior and require reevaluation
 before comparisons with this version.
+
+With `edge_ignore > 0`, weights are
+`clip((distance - edge_ignore) / (edge_ramp - edge_ignore), 0, 1)`.
+Thus the ignored initial region is zero and full weight is reached at the
+original `edge_ramp` distance, not `edge_ignore + edge_ramp`.
+`edge_ignore` must be smaller than `edge_ramp`. For a ramp of half the overlap
+and an ignored quarter of that ramp, overlap 64 uses ramp 32 and ignore 8.
+
+The overlap sweep can explicitly select this policy using
+`--edge-ramp-fraction 0.5 --edge-ignore-fraction 0.125`.
+Without `--edge-ramp-fraction`, it preserves the checkpoint's fixed ramp.
+Each report records the resolved ramp and ignore counts for every overlap.

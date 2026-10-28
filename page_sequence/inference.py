@@ -29,6 +29,8 @@ class InferenceConfig:
             raise ValueError('invalid inference settings')
         if not 0 <= 2 * self.edge_ignore <= self.window_size - self.stride:
             raise ValueError('edge_ignore must be nonnegative and at most half the overlap')
+        if self.edge_ignore >= self.edge_ramp:
+            raise ValueError('edge_ignore must be smaller than edge_ramp')
         if self.tail not in ('anchored', 'regular'):
             raise ValueError('tail must be anchored or regular')
 
@@ -54,8 +56,11 @@ def context_weights(start, end, n, ramp, ignore=0):
     distance = np.minimum(left, right)
     if ignore:
         # Exactly `ignore` pages at artificial edges contribute nothing. Real
-        # scan endpoints are exempt, including the short final window.
-        return np.clip((distance - ignore) / ramp, 0, 1).astype(np.float32)
+        # scan endpoints are exempt, including the short final window. The
+        # ramp still reaches full weight at the original distance `ramp`.
+        if ignore >= ramp:
+            raise ValueError('ignore must be smaller than ramp')
+        return np.clip((distance - ignore) / (ramp - ignore), 0, 1).astype(np.float32)
     return np.minimum(1, distance / ramp).astype(np.float32)
 
 

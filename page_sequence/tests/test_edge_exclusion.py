@@ -17,10 +17,16 @@ def output(n, value):
 def test_excluded_edges_ramp_and_real_endpoints():
     # No additive floor: retain the original first-page distance of one.
     np.testing.assert_array_equal(context_weights(5, 10, 10, 4), [.25, .5, .75, 1, 1])
-    np.testing.assert_array_equal(context_weights(5, 15, 20, 2, 2),
+    np.testing.assert_array_equal(context_weights(5, 15, 20, 4, 2),
                                   [0, 0, .5, 1, 1, 1, 1, .5, 0, 0])
-    np.testing.assert_array_equal(context_weights(0, 5, 5, 2, 2), np.ones(5))
-    np.testing.assert_array_equal(context_weights(5, 10, 10, 2, 2), [0, 0, .5, 1, 1])
+    np.testing.assert_array_equal(context_weights(0, 5, 5, 4, 2), np.ones(5))
+    # Quarter-ramp exclusion: zero through 8, reach full weight at 32.
+    weights = context_weights(5, 38, 38, 32, 8)
+    np.testing.assert_array_equal(weights[:8], np.zeros(8))
+    assert weights[8] == np.float32(1/24)
+    assert weights[19] == .5
+    assert weights[31] == 1.
+    np.testing.assert_array_equal(context_weights(5, 10, 10, 4, 2), [0, 0, .5, 1, 1])
 
 
 @pytest.mark.parametrize('tail', ['regular', 'anchored'])
@@ -28,7 +34,7 @@ def test_excluded_edges_ramp_and_real_endpoints():
 def test_all_pages_and_pairs_covered_even_at_half_overlap(tail, strategy):
     for overlap in range(2, 8):
         config = InferenceConfig(window_size=8, stride=8-overlap, merge=strategy,
-                                 edge_ramp=2, tail=tail, edge_ignore=overlap//2)
+                                 edge_ramp=overlap//2 + 2, tail=tail, edge_ignore=overlap//2)
         for n in range(1, 35):
             merger = StreamMerger(n, 2, config, True, True)
             for lo, hi in window_spans(n, 8, config.stride, tail):
@@ -42,7 +48,7 @@ def test_all_pages_and_pairs_covered_even_at_half_overlap(tail, strategy):
 
 
 def test_discarded_predictions_cannot_affect_pages_embeddings_aux_or_disagreement():
-    config = InferenceConfig(window_size=8, stride=4, edge_ramp=2, edge_ignore=2)
+    config = InferenceConfig(window_size=8, stride=4, edge_ramp=4, edge_ignore=2)
     merger = StreamMerger(12, 2, config, True, True)
     first, last = output(8, 2.), output(8, 2.)
     # Overlap [4,8): first window retains 4,5; last retains 6,7.
