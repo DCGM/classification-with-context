@@ -36,7 +36,8 @@ def test_export_preserves_all_five_heads_and_inference_without_training_paths(tm
     assert exported['specification']['auxiliary_edges'] is True
     assert exported['features']['stats_names'] == ['a', 'b']
     assert exported['inference']['window_size'] == 512
-    assert exported['inference']['stride'] == 448
+    assert exported['inference']['overlap'] == 64
+    assert 'stride' not in exported['inference']
     assert exported['inference']['tail'] == 'regular'
     assert exported['pagination'] == {'policy': POLICY, 'cap': 20000}
     assert not {'config', 'optimizer', 'rng'} & exported.keys()

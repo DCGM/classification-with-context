@@ -42,7 +42,9 @@ def compare(args):
     state = torch.load(args.output / 'context.pt', weights_only=True, map_location='cpu')
     model = from_specification(state['specification']).eval()
     model.load_state_dict(state['model'], strict=True)
-    cfg = InferenceConfig(**state['inference'])
+    settings = dict(state['inference'])
+    settings['stride'] = settings['window_size'] - settings.pop('overlap')
+    cfg = InferenceConfig(**settings)
     rng = np.random.default_rng(17)
     for n in (1, 17, 512, 1024):
         base = {k: rng.normal(size=(n, d)).astype(np.float32) for k, d in model.dims.items()}

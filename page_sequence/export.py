@@ -43,7 +43,7 @@ def export_checkpoint(checkpoint, output):
         'format': 'metakat_context_v4',
         'specification': specification, 'features': state['features'],
         'page_types': state['page_types'], 'placements': state['placements'],
-        'inference': {'window_size': 512, 'stride': 448, 'tail': 'regular',
+        'inference': {'window_size': 512, 'overlap': 64, 'tail': 'regular',
                       'merge': 'center_logits', 'edge_ramp': 32, 'edge_ignore': 0,
                       'start_threshold': .5, 'batch_size': 8},
     }))
