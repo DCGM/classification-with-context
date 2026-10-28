@@ -933,3 +933,10 @@ shards stop execution. `status.json` reports live progress; failures retain a
 traceback in `failure.json`. `--max-shards 1` supports a resumable first-shard
 validation. Reserve at least 60 GiB for a new export. Keep the launching code
 frozen until this run finishes.
+
+Window smoothing uses `min(1, distance / edge_ramp)` with no additive weight floor.
+Distance starts at 1 for the first included page at an artificial window edge;
+true scan endpoints are exempt. This replaces the historical
+`0.1 + 0.9 * min(1, distance / edge_ramp)` rule; existing reports and completed
+exports retain their recorded historical behavior and require reevaluation
+before comparisons with this version.

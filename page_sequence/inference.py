@@ -56,7 +56,7 @@ def context_weights(start, end, n, ramp, ignore=0):
         # Exactly `ignore` pages at artificial edges contribute nothing. Real
         # scan endpoints are exempt, including the short final window.
         return np.clip((distance - ignore) / ramp, 0, 1).astype(np.float32)
-    return (.1 + .9 * np.minimum(1, distance / ramp)).astype(np.float32)
+    return np.minimum(1, distance / ramp).astype(np.float32)
 
 
 def softmax(x):

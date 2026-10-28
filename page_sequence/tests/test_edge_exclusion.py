@@ -15,6 +15,8 @@ def output(n, value):
 
 
 def test_excluded_edges_ramp_and_real_endpoints():
+    # No additive floor: retain the original first-page distance of one.
+    np.testing.assert_array_equal(context_weights(5, 10, 10, 4), [.25, .5, .75, 1, 1])
     np.testing.assert_array_equal(context_weights(5, 15, 20, 2, 2),
                                   [0, 0, .5, 1, 1, 1, 1, .5, 0, 0])
     np.testing.assert_array_equal(context_weights(0, 5, 5, 2, 2), np.ones(5))
