@@ -90,20 +90,22 @@ investigation. Matching the original thumbnail preprocessing and reconstructing
 text in region reading order should precede a claim of end-to-end numerical
 parity with the training feature store.
 
-## Thumbnail-exporter follow-up
+## Unrelated thumbnail utility: sensitivity probe only
 
 The checked semAnt branches contain the OCR dumper but no image resize/export
-implementation. A candidate exporter was found in
+implementation. The user clarified that the following naki-tools utility is
+not the exporter used for this dump. It was tested only as a preprocessing
+sensitivity probe, and must not be used as historical provenance. It lives in
 `/home/ikohut/Projects/naki-tools/naki_tools/data/resize_images.py` (tracked version
 `f84b178` is the last commit touching that file). Its JPEG quality default is 90.
 It reads with `cv2.IMREAD_UNCHANGED`, preserving grayscale, keeps aspect ratio,
 uses `cv2.INTER_AREA`, rounds target dimensions, clamps them to at least one
 pixel, and never enlarges smaller images. The utility's size default is 512;
 256 was explicitly selected for these tests to match the training-source name.
-The script permits quality overrides, so its default alone does not prove the
-historical command-line setting.
+Neither its JPEG quality default nor its resizing rules establish any setting
+of the original image dump. The original exporter still needs to be located.
 
-Using that implementation directly with max-size 256 and JPEG quality 90:
+For this unrelated sensitivity probe, using max-size 256 and JPEG quality 90:
 
 | Batch | Original full-image mean cosine | Exporter mean cosine | Exporter minimum cosine |
 |---|---:|---:|---:|

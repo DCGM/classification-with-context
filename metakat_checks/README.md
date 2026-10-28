@@ -191,5 +191,5 @@ Only feature vectors, predictions and compact statistics are saved.
 native image features. Pass `--root`, `--store`, `--resize-script`,
 `--dino-checkpoint`, `--output`, and repeatable `--batch` names, using MetaKat's
 Python and source checkout on `PYTHONPATH`. Default max-size is 256 and quality
-comes from the exporter unless `--quality` is supplied. The original utility's
-256-pixel setting is a tested hypothesis, not proven historical provenance.
+comes from the exporter unless `--quality` is supplied. This utility is unrelated to the original dump; these tests demonstrate
+preprocessing sensitivity only and establish no historical export settings.
