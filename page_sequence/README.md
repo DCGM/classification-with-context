@@ -878,3 +878,54 @@ panel with all pagination removed. Results go to `final-context-without-paginati
 and ClearML `final_context_without_pagination`, alongside the normal final diagnostics.
 This adds a final diagnostic pass, without adding work to recurring validation or
 changing checkpoint selection.
+
+### Full native-store prediction and embedding export
+
+`page_sequence.dump_inference` processes every retained catalogue document (fit,
+ dev and test) independently with the selected five-bit boundary model and both
+auxiliary heads. It uses window 512, overlap 64, a regular short tail and the
+existing center-weighted logit merge. Complete document metadata is supplied;
+there is no prediction override. Pagination uses the audited sidecar; test rows
+have no pagination candidates because that sidecar deliberately excludes test.
+
+```bash
+python -m page_sequence.dump_inference \
+  --checkpoint /path/to/finetune_best.pt \
+  --training-store /nvme/document-store-fp16-v1 \
+  --output /ssd/page-context-dump-v1 --batch-size 64 --workers 8
+```
+
+Windows from independent documents share GPU batches with attention padding;
+context and merging never cross document boundaries. Eight workers prefetch at
+most one batch each. Only one document's merge accumulators and one output shard
+are active. No source OCR/text or original LMDB is opened.
+
+Each native input shard produces two memory-mappable arrays, in the same physical
+page order: `NNNNNN.records.npy` (FP32 probabilities and compact metadata) and
+`NNNNNN.embeddings.npy` (256-dimensional raw contextual BERT vectors, FP16 without
+L2 normalization). Records include logical row/document identity, zero-based
+position, document length, original page index, weak/gold type labels, DB side,
+modality availability bits, accepted pagination candidate/system, full type/side
+probabilities, predictions, top-two margin, entropy, probabilities assigned to
+DB/human labels and disagreement flags, pair-boundary probability and validity,
+auxiliary start/end probabilities, window count and type-window JS divergence.
+Missing labels use -100; missing label probabilities and each document's first
+pair probability are NaN. An all-zero availability mask means no original modality.
+
+`metadata/catalogue.sqlite` preserves UUIDs, library, hierarchy, splits and raw
+labels. Join `records.row = pages.id`, then `pages.document = documents.id`.
+`metadata/documents.npy` retains the document-to-shard mapping.
+`metadata/raw-pagination.csv` snapshots the original metadata CSV: library,
+document UUID, page UUID and raw pagination are columns 0, 3, 4 and 9. This CSV
+covers fit/dev; test pagination remains unavailable. The filtered sidecar, its
+policy/provenance, and the chosen checkpoint are also copied. `manifest.json`
+records hashes, labels, preprocessing, model, precision and merge settings.
+
+Output arrays are flushed, fsynced and hashed before the atomic `.done.json`
+marker publishes a shard. Repeating the same command verifies completed shards
+and skips them; an interrupted shard is recomputed. A single-process file lock
+prevents competing writers. Contract/source changes and corrupted completed
+shards stop execution. `status.json` reports live progress; failures retain a
+traceback in `failure.json`. `--max-shards 1` supports a resumable first-shard
+validation. Reserve at least 60 GiB for a new export. Keep the launching code
+frozen until this run finishes.
