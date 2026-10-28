@@ -19,6 +19,7 @@ class InferenceConfig:
     batch_size: int = 8
     tail: str = 'regular'
     edge_ignore: int = 0
+    edge_power: int = 2
 
     def __post_init__(self):
         if not (self.window_size >= 2 and 1 <= self.stride < self.window_size):
@@ -29,6 +30,8 @@ class InferenceConfig:
             raise ValueError('invalid inference settings')
         if not 0 <= 2 * self.edge_ignore <= self.window_size - self.stride:
             raise ValueError('edge_ignore must be nonnegative and at most half the overlap')
+        if type(self.edge_power) is not int or self.edge_power < 1:
+            raise ValueError('edge_power must be a positive integer')
         if self.edge_ignore >= self.edge_ramp:
             raise ValueError('edge_ignore must be smaller than edge_ramp')
         if self.tail not in ('anchored', 'regular'):
@@ -48,7 +51,7 @@ def window_spans(n, size, stride, tail='anchored'):
     return [(s, min(n, s + size)) for s in starts]
 
 
-def context_weights(start, end, n, ramp, ignore=0):
+def context_weights(start, end, n, ramp, ignore=0, power=2):
     r = np.arange(end - start)
     # True stream endpoints have no missing outside context to penalize.
     left = r + 1 if start > 0 else np.full(end - start, np.inf)
@@ -60,8 +63,8 @@ def context_weights(start, end, n, ramp, ignore=0):
         # ramp still reaches full weight at the original distance `ramp`.
         if ignore >= ramp:
             raise ValueError('ignore must be smaller than ramp')
-        return np.clip((distance - ignore) / (ramp - ignore), 0, 1).astype(np.float32)
-    return np.minimum(1, distance / ramp).astype(np.float32)
+        return np.power(np.clip((distance - ignore) / (ramp - ignore), 0, 1), power).astype(np.float32)
+    return np.power(np.minimum(1, distance / ramp), power).astype(np.float32)
 
 
 def softmax(x):
@@ -94,7 +97,7 @@ class StreamMerger:
         if not 0 <= start < end <= self.n:
             raise ValueError('window outside stream')
         c = self.config
-        w = context_weights(start, end, self.n, c.edge_ramp, c.edge_ignore)
+        w = context_weights(start, end, self.n, c.edge_ramp, c.edge_ignore, c.edge_power)
         if c.merge.startswith('uniform'):
             w[w > 0] = 1
         pair_w = np.r_[0, np.minimum(w[:-1], w[1:])].astype(np.float32)

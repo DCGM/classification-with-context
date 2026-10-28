@@ -14,19 +14,21 @@ def output(n, value):
                 pair_mask=np.arange(n) > 0)
 
 
-def test_excluded_edges_ramp_and_real_endpoints():
+@pytest.mark.parametrize('power', [1, 2, 3])
+def test_excluded_edges_ramp_and_real_endpoints(power):
     # No additive floor: retain the original first-page distance of one.
-    np.testing.assert_array_equal(context_weights(5, 10, 10, 4), [.25, .5, .75, 1, 1])
-    np.testing.assert_array_equal(context_weights(5, 15, 20, 4, 2),
-                                  [0, 0, .5, 1, 1, 1, 1, .5, 0, 0])
-    np.testing.assert_array_equal(context_weights(0, 5, 5, 4, 2), np.ones(5))
+    np.testing.assert_array_equal(context_weights(5, 10, 10, 4, power=power),
+                                  np.array([.25, .5, .75, 1, 1]) ** power)
+    np.testing.assert_array_equal(context_weights(5, 15, 20, 4, 2, power),
+                                  np.array([0, 0, .5, 1, 1, 1, 1, .5, 0, 0]) ** power)
+    np.testing.assert_array_equal(context_weights(0, 5, 5, 4, 2, power), np.ones(5))
     # Quarter-ramp exclusion: zero through 8, reach full weight at 32.
-    weights = context_weights(5, 38, 38, 32, 8)
+    weights = context_weights(5, 38, 38, 32, 8, power)
     np.testing.assert_array_equal(weights[:8], np.zeros(8))
-    assert weights[8] == np.float32(1/24)
-    assert weights[19] == .5
+    assert weights[8] == np.float32((1/24) ** power)
+    assert weights[19] == .5 ** power
     assert weights[31] == 1.
-    np.testing.assert_array_equal(context_weights(5, 10, 10, 4, 2), [0, 0, .5, 1, 1])
+    np.testing.assert_array_equal(context_weights(5, 10, 10, 4, 2, power), np.array([0, 0, .5, 1, 1]) ** power)
 
 
 @pytest.mark.parametrize('tail', ['regular', 'anchored'])

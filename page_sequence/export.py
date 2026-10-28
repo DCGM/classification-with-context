@@ -44,7 +44,7 @@ def export_checkpoint(checkpoint, output):
         'specification': specification, 'features': state['features'],
         'page_types': state['page_types'], 'placements': state['placements'],
         'inference': {'window_size': 512, 'overlap': 64, 'tail': 'regular',
-                      'merge': 'center_logits', 'edge_ramp': 32, 'edge_ignore': 0,
+                      'merge': 'center_logits', 'edge_ramp': 32, 'edge_ignore': 0, 'edge_power': 2,
                       'start_threshold': .5, 'batch_size': 8},
     }))
     metadata['pagination'] = pagination_contract
