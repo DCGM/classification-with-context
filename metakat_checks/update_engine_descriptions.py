@@ -12,7 +12,7 @@ import subprocess
 
 ROOT = Path('/mnt/kolosus/data/metakat_worker/src_engines')
 API = 'https://metakat.smart.lib.cas.cz'
-KEY_FILE = '/home/ikohut/Projects/MetaKat/metakat/worker/docapi/.docapi_admin_key'
+KEY_FILE = '/home/ikohut/Projects/MetaKat.worker/metakat/worker/docapi/.docapi_admin_key'
 WORK = Path('/home/ikohut/tmp/metakat-engine-descriptions')
 
 BOOK_EN = ('Use for one standalone book, several unrelated standalone books, or parts of one multipart work. '

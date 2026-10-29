@@ -24,7 +24,7 @@ def checksum(path):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',type=Path,default=Path('/mnt/kolosus/data/metakat_worker/test_batches/page_types'))
-    parser.add_argument('--metakat-root',type=Path,default=Path('/home/ikohut/Projects/MetaKat/.claude/worktrees/schema-shared-base'))
+    parser.add_argument('--metakat-root',type=Path,default=Path('/home/ikohut/Projects/MetaKat.worker/.claude/worktrees/schema-shared-base'))
     parser.add_argument('--checksums',action='store_true')
     args=parser.parse_args()
     sys.path.insert(0,str(args.metakat_root))

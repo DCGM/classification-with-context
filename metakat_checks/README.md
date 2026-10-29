@@ -158,7 +158,7 @@ reviewed and is explicitly skipped:
 ```bash
 /home/ikohut/python_env/metakat/bin/python -u -m metakat_checks.run_cli_batches \
   --root /mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation \
-  --metakat-root /home/ikohut/Projects/MetaKat/.claude/worktrees/schema-shared-base \
+  --metakat-root /home/ikohut/Projects/MetaKat.worker/.claude/worktrees/schema-shared-base \
   --metakat-python /home/ikohut/python_env/metakat/bin/python \
   --engine-config /home/ikohut/tmp/metakat-evaluation-cli-images-alto/engine_config.resolved.json \
   --work /home/ikohut/tmp/metakat-evaluation-cli-images-alto \
@@ -259,7 +259,7 @@ requirements, dependency preflight, DINO identity and the SHA256 of every archiv
 file. It makes no API calls and leaves bundle configurations unchanged.
 
 ```bash
-PYTHONPATH=/home/ikohut/Projects/MetaKat/.claude/worktrees/biblio-spans \
+PYTHONPATH=/home/ikohut/Projects/MetaKat.worker/.claude/worktrees/biblio-spans \
   /home/ikohut/python_env/metakat/bin/python metakat_checks/prepare_luna_uploads.py
 ```
 

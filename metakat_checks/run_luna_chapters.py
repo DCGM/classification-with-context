@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 ROOT = Path('/mnt/kolosus/data/metakat_worker/test_batches/page_types')
-SOURCE = Path('/home/ikohut/Projects/MetaKat/.claude/worktrees/biblio-spans')
+SOURCE = Path('/home/ikohut/Projects/MetaKat.worker/.claude/worktrees/biblio-spans')
 ENGINE = 'chapter.openai.gpt-6-luna.medium'
 VERSION = 'v1.7.0'
 CONFIG = Path('/mnt/kolosus/data/metakat_worker/src_engines') / f'{ENGINE}.{VERSION}/engine_config.json'
@@ -141,7 +141,7 @@ def main():
         return
     if not args.all and not args.only:
         parser.error('Choose --only for coverage review, or --all after review')
-    key_file = Path('/home/ikohut/Projects/MetaKat/metakat/worker/docapi/.openrouter_api_key_naki-tools')
+    key_file = Path('/home/ikohut/Projects/MetaKat.worker/metakat/worker/docapi/.openrouter_api_key_naki-tools')
     env = {**os.environ, 'PYTHONPATH': str(SOURCE), 'OPENROUTER_API_KEY': key_file.read_text().strip()}
     for batch, old, manifest, toc in batches:
         if args.only and batch.name != args.only:
