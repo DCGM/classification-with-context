@@ -171,15 +171,21 @@ def render_markdown(report, engines, sources=()):
                     f'(fixed {curated["second_right_first_wrong"]}, broken {curated["first_right_second_wrong"]}).']
         table = section['per_type']['table']
         out += ['', '#### Per page type', '',
-                f'Precision (P), recall (R) and F1 per engine; *fixed*/*broken* count the pages of that reference '
-                f'class that {second} gets right or wrong where {first} did not or did.', '',
-                f'| Page type | Support | {first} P | R | F1 | {second} P | R | F1 | Fixed | Broken |',
-                '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|']
+                f'Precision (P), recall (R) and F1 per engine. Two views of the change, which together explain P and R: '
+                f'*fixed*/*broken* count the pages **of that reference class** that {second} gets right or wrong '
+                f'where {first} did not or did (the change in recall); *alarms removed*/*added* count the pages '
+                f'**of other classes** that {first} wrongly labelled as this type and {second} no longer does, or '
+                f'the reverse (the change in precision). A class can have more broken than fixed pages and still '
+                f'improve in F1 when it loses many false alarms.', '',
+                f'| Page type | Support | {first} P | R | F1 | {second} P | R | F1 | Fixed | Broken | '
+                'Alarms removed | Alarms added |',
+                '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|']
         for label in section['per_type']['labels']:
             a, b, c = table[first][label], table[second][label], table[label]
             out.append(f'| {label} | {a["support"]} | {percent(a["precision"])} | {percent(a["recall"])} | '
                        f'{percent(a["f1"])} | {percent(b["precision"])} | {percent(b["recall"])} | '
-                       f'{percent(b["f1"])} | {c["fixed"]} | {c["broken"]} |')
+                       f'{percent(b["f1"])} | {c["fixed"]} | {c["broken"]} | {c["alarms_removed"]} | '
+                       f'{c["alarms_added"]} |')
         out += ['', '#### Most frequent page-type errors (reference → predicted)', '']
         for engine in engines:
             out.append(f'- **{engine}:** ' + ', '.join(f'{t} → {p} ({n})'
@@ -284,8 +290,14 @@ def main():
         table = per_class(truth, {e: [r[e]['type'] for r in usable] for e in args.engines}, labels)
         for label in labels:
             members = [r for r in usable if r['type'] == label]
+            others = [r for r in usable if r['type'] != label]
             table[label] = {'fixed': sum(r[second]['type'] == label and r[first]['type'] != label for r in members),
-                            'broken': sum(r[first]['type'] == label and r[second]['type'] != label for r in members)}
+                            'broken': sum(r[first]['type'] == label and r[second]['type'] != label for r in members),
+                            # as a prediction: pages of other classes wrongly given this label
+                            'alarms_removed': sum(r[first]['type'] == label and r[second]['type'] != label
+                                                  for r in others),
+                            'alarms_added': sum(r[second]['type'] == label and r[first]['type'] != label
+                                                for r in others)}
         section['per_type'] = {'labels': labels, 'table': table,
                                'confusions': {e: Counter((r['type'], r[e]['type']) for r in usable
                                                          if r[e]['type'] != r['type']).most_common(10)
