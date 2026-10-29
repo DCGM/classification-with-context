@@ -211,6 +211,8 @@ def main():
         Path('/mnt/kolosus/data/metakat_worker/src_engines/chapter.v1.6.0.engine.json'),
         Path('/mnt/kolosus/data/metakat_worker/src_engines/chapter.v1.7.0.engine.json')])
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--conditions', type=Path, help='Output directory of page_sequence.evaluate_conditions; its '
+                                                         'evaluation is appended to the Markdown report.')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     first, second = args.engines
@@ -280,7 +282,11 @@ def main():
                       **{f'{e}_{k}': r[e][k] for e in args.engines for k in ('type', 'side', 'start')}}
                      for r in rows]
     (args.output / 'engine-comparison.json').write_text(json.dumps(report, indent=2, default=str) + '\n')
-    (args.output / 'engine-comparison.md').write_text(render_markdown(report, args.engines))
+    markdown = render_markdown(report, args.engines)
+    if args.conditions is not None:
+        from metakat_checks.context_report import render_context_section
+        markdown += '\n' + render_context_section(args.conditions)
+    (args.output / 'engine-comparison.md').write_text(markdown)
     with (args.output / 'engine-comparison-pages.csv').open('w', newline='') as stream:
         writer = csv.DictWriter(stream, fieldnames=list(csv_rows[0]))
         writer.writeheader()
