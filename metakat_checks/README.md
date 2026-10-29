@@ -249,3 +249,27 @@ monograph rule 1.1.8) in the `recto_verso` field of their `manifest.json`; `run_
 `--set definition:page_number:core:postprocess:ndk:recto_verso true`. `prepare_batches.py` writes the field for new
 batches; `python -m metakat_checks.recto_verso --root <set directory>` adds or refreshes it for existing ones.
 
+
+## Luna chapter v1.7 bundle
+
+`build_luna_chapter_bundle.py` packages
+`chapter.openai.gpt-6-luna.medium.v1.7.0` beside the existing worker engine bundles.
+Run it with the MetaKat environment and `biblio-spans` checkout on `PYTHONPATH`.
+It combines the Luna monograph v1.7 page-number, context page-type and bibliography
+stages with the existing chapter destination-page analysis and fuzzy alignment,
+replacing only TOC extraction with `chapter_extraction_engine_vlm`. Both remote
+stages use Luna medium reasoning, schema output, ZDR and one explicit attempt.
+No credential is bundled; `OPENROUTER_API_KEY` is resolved only for actual runs.
+
+The builder copies only configured model resources, writes equivalent JSON/YAML,
+the engine descriptor and provenance, checks dependencies and VLM constructors,
+and creates a ZIP. It refuses to overwrite an existing bundle and never calls
+an API or registers the engine. Prompts and schemas are supplied by the current
+MetaKat package; the provenance records their hashes and required source commit.
+
+Prepared bundle:
+`/mnt/kolosus/data/metakat_worker/src_engines/chapter.openai.gpt-6-luna.medium.v1.7.0/`.
+Its `.zip`, `.engine.json`, and `.preparation.json` are siblings.
+The initial package uses MetaKat `884bc98`; 61 relevant chapter tests, actual
+chapter-stage construction and full archive CRC validation were run locally.
+It has not been tested against a real VLM endpoint or registered with the API.
