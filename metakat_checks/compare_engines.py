@@ -31,6 +31,8 @@ def engine_types(config_path):
 
 
 RESULT = 'metakat.json'
+# A column of its own, since a markdown table has no borders: a vertical line between the engines.
+SEPARATOR = '│'
 
 
 def load_pages(root, engines, files=None, start_files=None, ready=None):
@@ -177,14 +179,14 @@ def render_markdown(report, engines, sources=()):
                 f'**of other classes** that {first} wrongly labelled as this type and {second} no longer does, or '
                 f'the reverse (the change in precision). A class can have more broken than fixed pages and still '
                 f'improve in F1 when it loses many false alarms.', '',
-                f'| Page type | Support | {first} P | R | F1 | {second} P | R | F1 | Fixed | Broken | '
+                f'| Page type | Support | {first} P | R | F1 | | {second} P | R | F1 | | Fixed | Broken | '
                 'Alarms removed | Alarms added |',
-                '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|']
+                '|---|---:|---:|---:|---:|:---:|---:|---:|---:|:---:|---:|---:|---:|---:|']
         for label in section['per_type']['labels']:
             a, b, c = table[first][label], table[second][label], table[label]
             out.append(f'| {label} | {a["support"]} | {percent(a["precision"])} | {percent(a["recall"])} | '
-                       f'**{percent(a["f1"])}** | {percent(b["precision"])} | {percent(b["recall"])} | '
-                       f'**{percent(b["f1"])}** | {c["fixed"]} | {c["broken"]} | {c["alarms_removed"]} | '
+                       f'**{percent(a["f1"])}** | {SEPARATOR} | {percent(b["precision"])} | {percent(b["recall"])} | '
+                       f'**{percent(b["f1"])}** | {SEPARATOR} | {c["fixed"]} | {c["broken"]} | {c["alarms_removed"]} | '
                        f'{c["alarms_added"]} |')
         out += ['', '#### Most frequent page-type errors (reference → predicted)', '']
         for engine in engines:
@@ -210,8 +212,8 @@ def render_markdown(report, engines, sources=()):
                 'unrelated standalone books, `single` of one document (no true starts to find, so every predicted '
                 'start there is a false alarm).', '',
                 '| Batch kind | Batches | Pages scored | True starts | ' +
-                ' | '.join(f'{e}: found | predicted | P | R | F1' for e in engines) + ' |',
-                '|---|---:|---:|---:|' + '---:|---:|---:|---:|---:|' * len(engines)]
+                ' | | '.join(f'{e}: found | predicted | P | R | F1' for e in engines) + ' |',
+                '|---|---:|---:|---:|' + ':---:|'.join('---:|---:|---:|---:|---:|' for _ in engines)]
         for name, scores in section['boundary'].items():
             m1 = scores[first]
             batches = section['batches_by_group'].get(name, sum(section['batches_by_group'].values())
@@ -224,7 +226,7 @@ def render_markdown(report, engines, sources=()):
                              f'{percent(m["recall"])} | **{percent(m["f1"])}**')
             reference = m1 or scores[second]
             out.append(f'| {name} | {batches} | {reference["pages"]} | {reference["true_starts"]} | ' +
-                       ' | '.join(cells) + ' |')
+                       f' | {SEPARATOR} | '.join(cells) + ' |')
         out.append('')
     return '\n'.join(out) + '\n'
 

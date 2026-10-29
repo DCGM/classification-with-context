@@ -143,13 +143,13 @@ def render_page_number_section(root, variants, ready=None):
             continue
         held = 'evaluation (dev documents)' if set_name == 'evaluation' else 'consistency (fit documents)'
         out += [f'## {held.capitalize()}', '',
-                '| Situation | Pages | ' + ' | '.join(f'{n}: right | other convention | missed | wrong' for n in names) + ' |',
-                '|---|---:|' + '---:|---:|---:|---:|' * len(names)]
+                '| Situation | Pages | ' + ' | | '.join(f'{n}: right | other convention | missed | wrong' for n in names) + ' |',
+                '|---|---:|' + ':---:|'.join('---:|---:|---:|---:|' for _ in names)]
         for key, title in SITUATIONS:
             s = entry['situations'][key]
             cells = [f'{percent(s[v]["right"], s["n"])} | {percent(s[v]["convention"], s["n"])} | '
                      f'{percent(s[v]["missing"], s["n"])} | {percent(s[v]["wrong"], s["n"])}' for v in names]
-            out.append(f'| {title} | {s["n"]} | ' + ' | '.join(cells) + ' |')
+            out.append(f'| {title} | {s["n"]} | ' + ' | │ | '.join(cells) + ' |')
         out += ['', f'{entry["unlabelled"]} pages have no DB page number and are not scored. Pages where the '
                     'variant predicts a number anyway: ' +
                 ', '.join(f'{n} {entry["unlabelled_predicted"][n]}' for n in names) + '.', '']
