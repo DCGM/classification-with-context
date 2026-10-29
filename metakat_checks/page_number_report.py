@@ -85,7 +85,7 @@ def load_page_numbers(root, variants, ready=None):
 
 def score(rows, variants):
     """right: identical label; convention: the same number in another convention (12 for [12], 12r for [12a], ...);
-    missing: no number predicted; wrong: another number."""
+    missed: no number predicted; wrong: another number."""
     result = {}
     for v in variants:
         right = sum(r['predicted'][v] == r['reference'] for r in rows)
@@ -129,7 +129,7 @@ def render_page_number_section(root, variants, ready=None):
            '(`12`, `[3]` and `[12a]` are different labels). *Other convention* is a label with the right number written '
            'in another convention that the standard also allows or that the DB uses (`12` for `[12]`, `[12a]` for `12v`, '
            '`12r` for `12`); it is not counted as right, and shows how much of the error is the convention, not the '
-           'number. *None* is a page without a predicted number, *wrong* a different number. The numbers come from the same MetaKat runs as the page types. The engine versions '
+           'number. *Missed* is a page where the DB has a number and the engine output none, *wrong* a page where it output a different number. The numbers come from the same MetaKat runs as the page types. The engine versions '
            'differ in the page-number logic that lives in the code, not in the model, so the **old code** column '
            'is a run with the code from before the page-number changes (the filling of gaps, bracketed and '
            'suffixed labels from the document context) and the **new code** columns are the current code.', '',
@@ -143,7 +143,7 @@ def render_page_number_section(root, variants, ready=None):
             continue
         held = 'evaluation (dev documents)' if set_name == 'evaluation' else 'consistency (fit documents)'
         out += [f'## {held.capitalize()}', '',
-                '| Situation | Pages | ' + ' | '.join(f'{n}: right | other convention | none | wrong' for n in names) + ' |',
+                '| Situation | Pages | ' + ' | '.join(f'{n}: right | other convention | missed | wrong' for n in names) + ' |',
                 '|---|---:|' + '---:|---:|---:|---:|' * len(names)]
         for key, title in SITUATIONS:
             s = entry['situations'][key]
