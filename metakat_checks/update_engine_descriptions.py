@@ -44,6 +44,16 @@ def description(kind, luna):
                   'obsahu se stranami kapitol samostatně v každé rozpoznané knize či dílu. '
                   'Není určen pro obsahy článků a recenzí ani pro extrakci jejich metadat.')
     if luna:
+        en.insert(0, 'IMPORTANT — PRIVATE DATA: This engine sends selected page images and OCR text to an '
+                  'external model via OpenRouter. Do not process private/non-public data if you are unsure '
+                  'what this external processing means for its protection. Calls use the ZDR '
+                  '(Zero Data Retention) policy. Before submitting data, you must decide for yourself '
+                  'whether that policy provides sufficient protection for your data.')
+        cs.insert(0, 'DŮLEŽITÉ — NEVEŘEJNÁ DATA: Tento engine odesílá vybrané snímky stran a text OCR '
+                  'externímu modelu přes OpenRouter. Nezpracovávejte neveřejná data, pokud si nejste jisti, '
+                  'co toto externí zpracování znamená pro jejich ochranu. Volání používají politiku ZDR '
+                  '(Zero Data Retention). Před odesláním dat musíte sami rozhodnout, zda tato politika '
+                  'poskytuje vašim datům dostatečnou ochranu.')
         en.append('Title-page metadata is read by OpenAI GPT-6 Luna with medium reasoning via OpenRouter, '
                   'using Zero Data Retention (ZDR). ' +
                   ('TOCs use the same VLM; destination-page analysis remains local YOLO with fuzzy chapter alignment.'
@@ -118,7 +128,8 @@ def main():
         payload = WORK / f'{name}.patch.json'
         payload.write_text(json.dumps({'description': text}, ensure_ascii=False, indent=2) + '\n')
         changes.append({'name': name, 'old_description': remote['description'], 'description': text})
-        if args.apply:
+        changed = remote['description'] != text
+        if args.apply and changed:
             request(f'/v1/admin/engines/{name}/v1.7.0', WORK / f'{name}.response.json', patch=payload)
             local['description'] = text
             path.write_text(json.dumps(local, ensure_ascii=False, indent=2) + '\n')
@@ -127,7 +138,7 @@ def main():
                 report = json.loads(check.read_text())
                 report['descriptor_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
                 check.write_text(json.dumps(report, indent=2) + '\n')
-        print(('Updated' if args.apply else 'Prepared') + ': ' + name, flush=True)
+        print(('Updated' if args.apply and changed else 'Unchanged' if args.apply else 'Prepared') + ': ' + name, flush=True)
     (WORK / 'changes.json').write_text(json.dumps(changes, ensure_ascii=False, indent=2) + '\n')
     if args.apply:
         after = request('/v1/engines?active=true&show_definition=true', WORK / 'after.json')['data']
