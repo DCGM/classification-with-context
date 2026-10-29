@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--batch', action='append', required=True)
+    parser.add_argument('--engine', default='chapter-v1.7.0', help='<engine name>-<version> suffix of the <batch>.<engine>.results directories')
     args = parser.parse_args()
     torch.set_num_threads(2)
     args.output.mkdir(parents=True, exist_ok=True)
@@ -27,7 +28,7 @@ def main():
     engine = PageTypeCoreEngineContext(config['page_type']['core'])
     for name in args.batch:
         batch = args.root/name
-        meta = json.loads((batch.with_name(name+'.results')/'metakat.json').read_text())
+        meta = json.loads((batch.with_name(f'{name}.{args.engine}.results')/'metakat.json').read_text())
         pages = sorted((p for p in meta['elements'] if p['type']=='page'), key=lambda p:p['batch_index'])
         inputs = [PageTypeInput(image_path=str(batch/meta['page_to_image_mapping'][p['id']]),
                                 ocr_path=str(batch/meta['page_to_alto_mapping'][p['id']]),

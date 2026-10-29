@@ -21,7 +21,7 @@ def class_table(per_class, first_column):
     for name, m in per_class.items():
         if m['support'] or m['precision']:
             rows.append(f'| {name} | {m["support"]} | {percent(m["precision"])} | {percent(m["recall"])} | '
-                        f'{percent(m["f1"])} |')
+                        f'**{percent(m["f1"])}** |')
     return rows
 
 

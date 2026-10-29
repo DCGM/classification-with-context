@@ -183,8 +183,8 @@ def render_markdown(report, engines, sources=()):
         for label in section['per_type']['labels']:
             a, b, c = table[first][label], table[second][label], table[label]
             out.append(f'| {label} | {a["support"]} | {percent(a["precision"])} | {percent(a["recall"])} | '
-                       f'{percent(a["f1"])} | {percent(b["precision"])} | {percent(b["recall"])} | '
-                       f'{percent(b["f1"])} | {c["fixed"]} | {c["broken"]} | {c["alarms_removed"]} | '
+                       f'**{percent(a["f1"])}** | {percent(b["precision"])} | {percent(b["recall"])} | '
+                       f'**{percent(b["f1"])}** | {c["fixed"]} | {c["broken"]} | {c["alarms_removed"]} | '
                        f'{c["alarms_added"]} |')
         out += ['', '#### Most frequent page-type errors (reference → predicted)', '']
         for engine in engines:
@@ -199,7 +199,7 @@ def render_markdown(report, engines, sources=()):
         for label in side['labels']:
             m = side['table'][second][label]
             out.append(f'| {label} | {m["support"]} | {percent(m["precision"])} | {percent(m["recall"])} | '
-                       f'{percent(m["f1"])} |')
+                       f'**{percent(m["f1"])}** |')
         out += ['', f'Overall side accuracy of {second}: {percent(section["side"][second])}. '
                     'Confusion (reference → predicted): ' +
                 ', '.join(f'{pair}: {n}' for pair, n in sorted(side['confusion'][second].items())), '']

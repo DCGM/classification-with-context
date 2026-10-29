@@ -33,6 +33,7 @@ def main():
     parser.add_argument('--store', type=Path, required=True)
     parser.add_argument('--artifact', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--engine', default='chapter-v1.7.0', help='<engine name>-<version> suffix of the <batch>.<engine>.results directories')
     parser.add_argument('--wait', action='store_true')
     parser.add_argument('--limit', type=int)
     args = parser.parse_args()
@@ -64,7 +65,7 @@ def main():
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
         for batch in batches:
-            output = batch.with_name(batch.name+'.results')
+            output = batch.with_name(f'{batch.name}.{args.engine}.results')
             while not (output/'metakat.json').exists():
                 record = output/'cli-run.json'
                 if record.exists() and json.loads(record.read_text())['state'] == 'failed':

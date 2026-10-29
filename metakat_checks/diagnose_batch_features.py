@@ -17,6 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('root', 'fresh', 'checkpoint', 'store', 'output'):
         parser.add_argument('--'+name, type=Path, required=True)
+    parser.add_argument('--engine', default='chapter-v1.7.0', help='<engine name>-<version> suffix of the <batch>.<engine>.results directories')
     args = parser.parse_args()
     torch.set_num_threads(2)
     model, _ = load_checkpoint(args.checkpoint, 'cuda')
@@ -38,7 +39,7 @@ def main():
     for path in sorted(args.fresh.glob('*.features.npz')):
         name = path.name.removesuffix('.features.npz')
         manifest = json.loads((args.root/name/'manifest.json').read_text())
-        output = json.loads((args.root/(name+'.results')/'metakat.json').read_text())
+        output = json.loads((args.root/f'{name}.{args.engine}.results'/'metakat.json').read_text())
         by_id = {p['id']:p for p in output['elements'] if p['type']=='page'}
         native = store.features(store.read_rows([p['row_id'] for p in manifest['pages']]))
         records = np.array([candidate((by_id[p['page']].get('pageNumber') or {}).get('text',''))
