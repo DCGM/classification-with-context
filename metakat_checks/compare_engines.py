@@ -87,6 +87,9 @@ def per_class(truth, predictions, labels):
     """Support, precision, recall and F1 of each reference label, for each engine's predictions."""
     table = {}
     for engine, prediction in predictions.items():
+        if not len(truth):  # a partial run: none of the finished batches has such labels yet
+            table[engine] = {label: {'support': 0, 'precision': 0., 'recall': 0., 'f1': 0.} for label in labels}
+            continue
         precision, recall, f1, support = precision_recall_fscore_support(truth, prediction, labels=labels,
                                                                         zero_division=0)
         table[engine] = {label: {'support': int(support[i]), 'precision': float(precision[i]),
