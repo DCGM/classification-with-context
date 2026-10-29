@@ -102,17 +102,24 @@ def render_context_section(directory: Path):
                 ', '.join(f'{a} → {b} ({n})' for n, a, b in mistakes), '']
         b = r['starts']['all']
         negatives = b['n'] - b['positive']
+        tn = negatives - b['fp']
+
+        def scores(tp, fp, fn):
+            precision, recall = tp / max(tp + fp, 1), tp / max(tp + fn, 1)
+            return {'precision': precision, 'recall': recall, 'f1': 2 * precision * recall / max(precision + recall, 1e-12)}
+
+        per_class = {'not a start': {'support': negatives, **scores(tn, b['fn'], b['fp'])},
+                     'start': {'support': b['positive'], **scores(b['tp'], b['fp'], b['fn'])}}
+        matrix, mistakes = confusion_lines([[tn, b['fp']], [b['fn'], b['tp']]], list(per_class))
         out += ['### Document starts', '',
-                f'{b["n"]:,} page transitions, {b["positive"]} of them true document starts. Precision '
+                f'{b["n"]:,} page transitions, {b["positive"]} of them true document starts: precision '
                 f'{percent(b["precision"])}, recall {percent(b["recall"])}, F1 {percent(b["f1"])}, AP '
                 f'{percent(b["average_precision"])}, {b["false_splits_per_1000_negatives"]:.2f} false splits per '
                 f'1,000 non-starts. Documents recovered exactly: {r["exact_spans"]["tp"]} of '
                 f'{r["exact_spans"]["true"]} ({percent(r["exact_spans"]["recall"])}%), with '
-                f'{r["exact_spans"]["predicted"]} predicted.', '',
-                'Confusion matrix:', '',
-                '| Reference \\ predicted | not a start | start |', '|---|---:|---:|',
-                f'| not a start | **{negatives - b["fp"]}** | {b["fp"]} |',
-                f'| start | {b["fn"]} | **{b["tp"]}** |', '',
+                f'{r["exact_spans"]["predicted"]} predicted.', ''] + class_table(per_class, 'Document start')
+        out += ['', 'Confusion matrix:', ''] + matrix + ['', 'Most frequent mistakes (reference → predicted): ' +
+                ', '.join(f'{x} → {y} ({n})' for n, x, y in mistakes), '',
                 'Recall of the true starts by what the neighbouring documents are:', '',
                 '| Boundary between | True starts | Found | Recall |', '|---|---:|---:|---:|']
         for stratum, m in r['join_detection'].items():
