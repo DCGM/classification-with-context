@@ -69,10 +69,10 @@ def render_context_section(directory: Path):
     for name, title in CONDITIONS:
         r = reports[name]
         t, s, b = r['curated_type'], r['placement_db_agreement'], r['starts']['all']
-        out.append(f'| {title} | {t["n"]} | {percent(t["accuracy"])} | {percent(t["weighted_f1"])} | '
-                   f'{percent(t["macro_f1"])} | {s["n"]} | {percent(s["accuracy"])} | {percent(s["weighted_f1"])} '
-                   f'| {percent(b["precision"])} | {percent(b["recall"])} | {percent(b["f1"])} | '
-                   f'{percent(b["average_precision"])} |')
+        out.append(f'| {title} | {t["n"]} | {percent(t["accuracy"])} | **{percent(t["weighted_f1"])}** | '
+                   f'**{percent(t["macro_f1"])}** | {s["n"]} | {percent(s["accuracy"])} | '
+                   f'**{percent(s["weighted_f1"])}** | {percent(b["precision"])} | {percent(b["recall"])} | '
+                   f'**{percent(b["f1"])}** | {percent(b["average_precision"])} |')
     out += ['', f'Documents recovered exactly (start and end both right), of {base["exact_spans"]["true"]}: ' +
             ', '.join(f'{title.lower()} {percent(reports[name]["exact_spans"]["recall"])}%' for name, title in CONDITIONS) + '.', '']
     for name, title in CONDITIONS:
