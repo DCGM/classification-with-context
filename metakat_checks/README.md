@@ -268,6 +268,18 @@ The source-engine directory receives per-bundle `.upload-check.json` reports and
 MetaKat Python code or credentials. Workers must separately deploy the MetaKat
 and aligner revisions recorded in those reports and supply `OPENROUTER_API_KEY`.
 
+`update_engine_descriptions.py` prepares English/Czech descriptions for the six
+active v1.7.0 engines; `--apply` patches only their API descriptions and updates
+the local descriptors/checksums. It uses curl's file-backed header variable for
+the existing admin key, never loading the key value into Python. Read-back checks
+preserve definitions, activation/default flags and uploaded-file timestamps.
+Descriptions document the binder's allowed scan composition, distinguish book
+chapters from article extraction, and label Luna prices as rough trial-based USD
+budgets. Periodical title-page pricing is explicitly an extrapolation. Preview,
+before/after records and verification are saved under
+`/home/ikohut/tmp/metakat-engine-descriptions/`. ZIPs do not need rebuilding for
+description-only updates because the descriptions live in API/local descriptors.
+
 `run_luna_chapters.py` runs the bundle through the local MetaKat CLI on book
 batches whose previous chapter result predicts a TOC. It uses the existing
 images/ALTO-only input, leaving number recognition to MetaKat. Periodicals are
