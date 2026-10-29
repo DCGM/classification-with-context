@@ -46,7 +46,7 @@ def test_progress_resumes_after_last_complete_line(tmp_path):
 def test_meta_mismatch_refuses_resume(tmp_path):
     meta = {'model': 'm', 'model_commit_hash': 'x', 'pooling': 'mean', 'dtype': 'float16', 'dim': 768,
             'max_length': 8192, 'empty_text': 'e', 'source_lmdb': '/s', 'normalization': 'ocr_lines',
-            'max_chars': 4000, 'instruction': None}
+            'max_chars': 4000, 'key_list': None, 'instruction': None}
     check_or_write_meta(tmp_path / 'meta.json', meta, FIXED_META_FIELDS)
     check_or_write_meta(tmp_path / 'meta.json', dict(meta), FIXED_META_FIELDS)
     with pytest.raises(SystemExit, match='max_length'):
@@ -169,3 +169,20 @@ def test_normalization_reaches_the_tokenizer_and_is_part_of_the_resume_check(tmp
     assert seen == ['a b c', '']
     with pytest.raises(SystemExit, match='normalization'):
         run(spec, [*arguments, '--normalization', 'none'])
+
+
+def test_key_list_embeds_only_those_pages_in_key_order_and_resumes(source_lmdb, tmp_path, monkeypatch):
+    monkeypatch.setattr(inference, 'select_devices', lambda n_gpu: [torch.device('cpu')])
+    keys = tmp_path / 'keys.txt'
+    keys.write_text('lib_030\nlib_002\nlib_015\nlib_021\n', encoding='utf-8')
+    run_fake(source_lmdb, tmp_path / 'listed', '--key-list', str(keys), '--limit', '2')
+    run_fake(source_lmdb, tmp_path / 'listed', '--key-list', str(keys))
+    assert sorted(read_output(tmp_path / 'listed')) == [b'lib_002', b'lib_015', b'lib_021', b'lib_030']
+    everything = tmp_path / 'everything'
+    run_fake(source_lmdb, everything)
+    expected = read_output(everything)
+    assert all(read_output(tmp_path / 'listed')[key] == expected[key] for key in expected if key in
+               read_output(tmp_path / 'listed'))
+    keys.write_text('lib_030\nlib_999\n', encoding='utf-8')
+    with pytest.raises(KeyError, match='lib_999'):
+        run_fake(source_lmdb, tmp_path / 'missing', '--key-list', str(keys))

@@ -3,8 +3,8 @@
 Output layout, resume and progress are described in embeddings/text/inference.py.
 
 This is the computation of MetaKat's MmbertEncoder (metakat/page_type/engines/core/context/mmbert.py) on the
-text given to it: float32 weights under bfloat16 autocast, sdpa attention
-(also when flash-attn is installed, so the vectors match the engine's), the padding-NaN patch, the
+text given to it: float32 weights under bfloat16 autocast, flash attention
+(flash-attn when installed, else sdpa, as the engine chooses), the padding-NaN patch, the
 attention-masked mean of the last hidden state, stored as float16. The text is reduced to its words
 (--normalization ocr_words, the default; the first embeddings were computed with "none"), and the output
 directory is named after --model-name, which must differ from the earlier embeddings' directory.
@@ -14,9 +14,9 @@ an MLM encoder, not a trained sentence embedder; the mean is the conventional
 pooling for it.
 
 Requires transformers with ModernBERT support (>=4.48). The model repository ships only pytorch_model.bin,
-which transformers>=4.50 refuses to load on torch<2.6. --attn-implementation flash_attention_2 (unpadded
-varlen attention) is faster, but its vectors are not those of the engine's sdpa; the padded sdpa path needs
-patch_padding_nan.
+which transformers>=4.50 refuses to load on torch<2.6. With flash-attn installed ModernBERT unpads each batch and
+runs varlen attention, which is the fast path (about 1.6x the padded sdpa one here); --attn-implementation chooses
+another. The padded sdpa path needs patch_padding_nan.
 
 Example:
     python -m embeddings.text.mmbert.infer_mmbert \\
@@ -75,7 +75,6 @@ SPEC = EncoderSpec(
     pooling='mean_last_hidden_state',
     load=load,
     pool=mean_pool,
-    default_attn_implementation='sdpa',
     default_max_length=8192,
     max_length_help='The default is the model limit, which page texts capped at 4000 chars never reach '
                     '(~1300 tokens median, ~4600 max).',

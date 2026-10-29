@@ -35,6 +35,7 @@ before it, since it imports torch.
 """
 
 import argparse
+import bisect
 import collections
 import copy
 import functools
@@ -72,7 +73,7 @@ logger = logging.getLogger(__name__)
 PROGRESS_HEADER = ('timestamp', 'chunk_index', 'first_key', 'last_key', 'chunk_size',
                    'empty', 'truncated', 'total_done', 'docs_per_s')
 FIXED_META_FIELDS = ('model', 'model_commit_hash', 'pooling', 'dtype', 'dim', 'max_length', 'empty_text',
-                     'source_lmdb', 'normalization', 'max_chars')
+                     'source_lmdb', 'normalization', 'max_chars', 'key_list')
 
 
 @dataclass
@@ -112,6 +113,9 @@ def parse_arguments(spec: EncoderSpec, argv=None):
 
     parser.add_argument('--source-lmdb', type=Path, required=True,
                         help='Source LMDB directory of "{library}_{page_id}" -> page text.')
+    parser.add_argument('--key-list', type=Path, default=None,
+                        help='File of source keys, one per line: embed only these pages, read from the source LMDB '
+                             'by key (no copy of the text is made). Part of meta.json, so a resume must repeat it.')
     parser.add_argument('--output-root', type=Path, required=True,
                         help='Embeddings root; output goes to <output-root>/<model-name>/.')
     parser.add_argument('--model', default=spec.default_model, help='Hugging Face model id or local path.')
@@ -157,10 +161,20 @@ def parse_arguments(spec: EncoderSpec, argv=None):
 
 
 def iter_source(source_env: lmdb.Environment, after_key: Optional[bytes],
-                limit: Optional[int]) -> Iterator[Tuple[bytes, str]]:
-    """Yields (key, text) in key order, strictly after after_key."""
+                limit: Optional[int], keys: Optional[List[bytes]] = None) -> Iterator[Tuple[bytes, str]]:
+    """Yields (key, text) in key order, strictly after after_key; only the (sorted) keys when given."""
     produced = 0
     with source_env.begin(buffers=False) as txn:
+        if keys is not None:
+            for key in keys[bisect.bisect_right(keys, after_key) if after_key is not None else 0:]:
+                if limit is not None and produced >= limit:
+                    return
+                value = txn.get(key)
+                if value is None:
+                    raise KeyError(f'{key.decode()} from --key-list is not in the source LMDB')
+                yield key, value.decode('utf-8')
+                produced += 1
+            return
         cursor = txn.cursor()
         positioned = cursor.set_range(after_key) if after_key is not None else cursor.first()
         if not positioned:
@@ -178,7 +192,8 @@ def iter_source(source_env: lmdb.Environment, after_key: Optional[bytes],
 def iter_chunks(source_env: lmdb.Environment, tokenizer, after_key: Optional[bytes], limit: Optional[int],
                 chunk_size: int, max_length: int,
                 text_transform: Optional[Callable[[str], str]] = None,
-                normalize: Callable[[str], str] = lambda text: text) -> Iterator[Chunk]:
+                normalize: Callable[[str], str] = lambda text: text,
+                keys_wanted: Optional[List[bytes]] = None) -> Iterator[Chunk]:
     keys: List[bytes] = []
     texts: List[str] = []
     empty = 0
@@ -196,7 +211,7 @@ def iter_chunks(source_env: lmdb.Environment, tokenizer, after_key: Optional[byt
             input_ids.append(ids)
         return Chunk(list(keys), input_ids, empty, truncated)
 
-    for key, text in iter_source(source_env, after_key, limit):
+    for key, text in iter_source(source_env, after_key, limit, keys_wanted):
         keys.append(key)
         # Pages without text all get the same embedding, whatever whitespace their OCR left behind.
         text = normalize(text)
@@ -365,7 +380,11 @@ def run(spec: EncoderSpec, argv=None) -> None:
                          f'{model.config.max_position_embeddings}.')
 
     source_env = lmdb.open(str(args.source_lmdb), readonly=True, lock=False, readahead=True)
-    source_entries = source_env.stat()['entries']
+    keys_wanted = None
+    if args.key_list is not None:
+        keys_wanted = sorted({line.strip().encode() for line in args.key_list.read_text(encoding='utf-8').splitlines()
+                              if line.strip()})
+    source_entries = len(keys_wanted) if keys_wanted is not None else source_env.stat()['entries']
 
     meta = {
         'model': args.model,
@@ -384,6 +403,7 @@ def run(spec: EncoderSpec, argv=None) -> None:
         **spec.extra_meta(args),
         'source_lmdb': str(args.source_lmdb.resolve()),
         'source_entries': source_entries,
+        'key_list': str(args.key_list.resolve()) if args.key_list else None,
         'key_format': '{library}_{page_id}, same as the source LMDB',
         'value_format': f'raw {args.dtype} bytes, np.frombuffer(value, dtype="{args.dtype}")',
     }
@@ -443,7 +463,8 @@ def run(spec: EncoderSpec, argv=None) -> None:
         chunks = prefetch(iter_chunks(source_env, tokenizer, last_key, args.limit, args.chunk_size,
                                       args.max_length, spec.make_text_transform(args),
                                       functools.partial(NORMALIZATIONS[args.normalization],
-                                                        max_chars=args.max_chars)))
+                                                        max_chars=args.max_chars),
+                                      keys_wanted))
         pending: collections.deque = collections.deque()  # (chunk, future) in key order
         for chunk in chunks:
             pending.append((chunk, pool.submit(chunk)))

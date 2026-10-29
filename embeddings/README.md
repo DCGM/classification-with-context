@@ -30,7 +30,7 @@ The mode is part of `meta.json`, so a resume cannot mix modes. Write the new emb
 (`reading_order_text` joins lines with `\n` today, for the checkpoints trained on `none`), so change both
 together with the retraining.
 
-mmBERT runs as MetaKat's `MmbertEncoder` does: float32 weights under bfloat16 autocast, sdpa attention, the
+mmBERT runs as MetaKat's `MmbertEncoder` does: float32 weights under bfloat16 autocast, flash attention when flash-attn is installed (else sdpa; recorded in `meta.json`), the
 padding-NaN patch, float16 storage.
 
 ## Image
