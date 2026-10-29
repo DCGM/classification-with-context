@@ -14,6 +14,8 @@ from pathlib import Path
 
 import numpy as np
 from scipy.stats import binomtest
+
+from metakat_checks.batch_results import ready_batches
 from sklearn.metrics import precision_recall_fscore_support
 
 SIDES = {'left': 'left', 'right': 'right', 'single': 'singlePage'}
@@ -31,7 +33,7 @@ def engine_types(config_path):
 RESULT = 'metakat.json'
 
 
-def load_pages(root, engines, files=None, start_files=None):
+def load_pages(root, engines, files=None, start_files=None, ready=None):
     """One row per page: reference labels and, per engine, its page type, side and start-of-document.
 
     The page type and side of an engine come from files[engine] (default metakat.json) of its results folder, its
@@ -39,6 +41,8 @@ def load_pages(root, engines, files=None, start_files=None):
     files, start_files = files or {}, start_files or {}
     rows = []
     for batch in sorted(p for p in root.iterdir() if p.is_dir() and (p / 'READY.json').is_file()):
+        if ready is not None and batch.name not in ready:
+            continue
         manifest = json.loads((batch / 'manifest.json').read_text())
         predicted = {}
         starts = {}
@@ -241,11 +245,21 @@ def main():
     first, second = args.engines
     vocabulary = engine_types(args.engine_configs[0])
     vocabulary = None if vocabulary is None else {type_name(v) for v in vocabulary}
-    report = {'engines': args.engines, 'sets': {}}
+    report = {'engines': args.engines, 'sets': {}, 'coverage': {}}
     csv_rows = []
+    engine_files = dict(a.split('=', 1) for a in args.engine_file)
+    start_files = dict(a.split('=', 1) for a in args.start_file)
+    needed = sorted({(e, engine_files.get(e, RESULT)) for e in args.engines} |
+                    {(e, start_files[e]) for e in start_files} |
+                    ({(args.engines[0], 'metakat.old-page-number.json')} if args.page_numbers else set()))
+    ready_names = {}
     for set_name in ('evaluation', 'consistency'):
-        rows = load_pages(args.root / set_name, args.engines, dict(a.split('=', 1) for a in args.engine_file),
-                          dict(a.split('=', 1) for a in args.start_file))
+        ready, everything = ready_batches(args.root / set_name, needed)
+        ready_names[set_name] = set(ready)
+        report['coverage'][set_name] = [len(ready), len(everything)]
+        if not ready:
+            continue  # a run in progress: nothing of this set is finished yet
+        rows = load_pages(args.root / set_name, args.engines, engine_files, start_files, ready=set(ready))
         outside = Counter(r['type'] for r in rows if r['type'] is not None and vocabulary is not None
                           and r['type'] not in vocabulary)
         usable = [r for r in rows if r['type'] is not None and (vocabulary is None or r['type'] in vocabulary)]
@@ -306,7 +320,7 @@ def main():
                       **{f'{e}_{k}': r[e][k] for e in args.engines for k in ('type', 'side', 'start')}}
                      for r in rows]
     (args.output / 'engine-comparison.json').write_text(json.dumps(report, indent=2, default=str) + '\n')
-    old_files, start_files = dict(a.split('=', 1) for a in args.engine_file), dict(a.split('=', 1) for a in args.start_file)
+    old_files = engine_files
     sources = []
     if old_files or start_files:
         sources = [
@@ -317,11 +331,16 @@ def main():
             f'- **{second}**: the final run with the current MetaKat code: the page-number engine runs before and '
             'after the page-type stage, the interactive PDF has uniform pages. Results of earlier runs of this '
             'engine are kept for internal comparison only and are not in this report.']
+    coverage = report['coverage']
+    if any(ready < total for ready, total in coverage.values()):
+        sources = ['- **PARTIAL RESULTS: a run is still going.** Only batches finished by every engine are included: ' +
+                   ', '.join(f'{name} {ready} of {total} batches' for name, (ready, total) in coverage.items()) +
+                   '. The numbers change as more batches finish.', *sources]
     markdown = render_markdown(report, args.engines, sources)
     if args.page_numbers:
         from metakat_checks.page_number_report import render_page_number_section
         first_engine, second_engine = args.engines
-        markdown += '\n' + render_page_number_section(args.root, {
+        markdown += '\n' + render_page_number_section(args.root, ready=ready_names, variants={
             f'{first_engine}': (first_engine, 'metakat.old-page-number.json'),
             f'{second_engine}': (second_engine, 'metakat.json')})
     if args.conditions is not None:

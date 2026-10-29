@@ -59,11 +59,13 @@ def situations(labels):
     return result
 
 
-def load_page_numbers(root, variants):
+def load_page_numbers(root, variants, ready=None):
     """Rows (set, batch, reference label, situation, {variant: predicted label}) of every page."""
     rows = []
     for set_name in ('evaluation', 'consistency'):
         for batch in sorted(p for p in (root / set_name).iterdir() if p.is_dir() and (p / 'READY.json').is_file()):
+            if ready is not None and batch.name not in ready.get(set_name, ()):
+                continue
             pages = json.loads((batch / 'manifest.json').read_text())['pages']
             predicted = {}
             for variant, (engine, file_name) in variants.items():
@@ -117,8 +119,8 @@ def percent(count, total):
     return '-' if not total else f'{100 * count / total:.1f}'
 
 
-def render_page_number_section(root, variants):
-    rows = load_page_numbers(root, variants)
+def render_page_number_section(root, variants, ready=None):
+    rows = load_page_numbers(root, variants, ready)
     scores = report(rows, variants)
     names = list(variants)
     out = ['# The page-number engine against the DB page numbers', '',
@@ -137,6 +139,8 @@ def render_page_number_section(root, variants):
            'a letter suffix* (inserted leaves, unnumbered leaves before page 1). Other labels (roman numerals, '
            'signatures, recto/verso) are only in the total. Percentages.', '']
     for set_name, entry in scores.items():
+        if not any(r['set'] == set_name for r in rows):
+            continue
         held = 'evaluation (dev documents)' if set_name == 'evaluation' else 'consistency (fit documents)'
         out += [f'## {held.capitalize()}', '',
                 '| Situation | Pages | ' + ' | '.join(f'{n}: right | other convention | none | wrong' for n in names) + ' |',
