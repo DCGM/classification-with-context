@@ -62,18 +62,23 @@ def render_context_section(directory: Path):
            'slightly optimistic. The test split has no pagination, so it cannot be used for all four cases.',
            '- Percentages; confusion matrices have the reference in the rows and the prediction in the columns, '
            'with the correct cells in bold.', '']
-    out += ['## Summary', '',
-            '| Input | Page type: pages | accuracy | weighted F1 | macro F1 | Side: pages | accuracy | '
-            'weighted F1 | Starts: precision | recall | F1 | AP |',
-            '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|']
-    for name, title in CONDITIONS:
-        r = reports[name]
-        t, s, b = r['curated_type'], r['placement_db_agreement'], r['starts']['all']
-        out.append(f'| {title} | {t["n"]} | {percent(t["accuracy"])} | **{percent(t["weighted_f1"])}** | '
-                   f'**{percent(t["macro_f1"])}** | {s["n"]} | {percent(s["accuracy"])} | '
-                   f'**{percent(s["weighted_f1"])}** | {percent(b["precision"])} | {percent(b["recall"])} | '
-                   f'**{percent(b["f1"])}** | {percent(b["average_precision"])} |')
-    out += ['', f'Documents recovered exactly (start and end both right), of {base["exact_spans"]["true"]}: ' +
+    out += ['## Summary', '']
+    tables = (
+        ('Page type', 'curated_type', ['Pages', 'Accuracy', 'Weighted F1', 'Macro F1'],
+         lambda r: [r['n'], percent(r['accuracy']), f'**{percent(r["weighted_f1"])}**', f'**{percent(r["macro_f1"])}**']),
+        ('Side', 'placement_db_agreement', ['Pages', 'Accuracy', 'Weighted F1'],
+         lambda r: [r['n'], percent(r['accuracy']), f'**{percent(r["weighted_f1"])}**']),
+        ('Document starts', None, ['Precision', 'Recall', 'F1', 'AP'],
+         lambda r: [percent(r['precision']), percent(r['recall']), f'**{percent(r["f1"])}**',
+                    percent(r['average_precision'])]),
+    )
+    for title, key, columns, cells in tables:
+        out += [f'### {title}', '', '| Input | ' + ' | '.join(columns) + ' |', '|---|' + '---:|' * len(columns)]
+        for name, label in CONDITIONS:
+            r = reports[name]
+            out.append(f'| {label} | ' + ' | '.join(map(str, cells(r['starts']['all'] if key is None else r[key]))) + ' |')
+        out.append('')
+    out += [f'Documents recovered exactly (start and end both right), of {base["exact_spans"]["true"]}: ' +
             ', '.join(f'{title.lower()} {percent(reports[name]["exact_spans"]["recall"])}%' for name, title in CONDITIONS) + '.', '']
     for name, title in CONDITIONS:
         r = reports[name]
