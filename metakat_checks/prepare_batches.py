@@ -22,8 +22,12 @@ import psycopg2
 from PIL import Image
 
 from embedding_probe.fetch_ocr_xml import DEFAULT_DB_URL
+from metakat_checks.recto_verso import recto_verso_field
 from page_sequence.pagination import candidate
 
+SHORT_PAGES = 40  # boundaries batches: longest document
+BOOK_PAGES = (3, SHORT_PAGES)  # boundaries batches: shortest and longest book
+BOUNDARY_DOCS = (10, 40)  # boundaries batches: fewest and most documents
 KINDS = ('monograph','monographunit','periodicalitem','sheetmusic','graphic','map','manuscript')
 PUBLIC_ROOT = Path('/mnt/matylda0/ihradis/digiknihovna_public')
 
@@ -215,10 +219,10 @@ class Preparation:
         pages=[p['page'] for d in documents for p in d['pages']]
         return len(set(ids))==len(ids) and not self.used_docs.intersection(ids) and len(set(pages))==len(pages) and not self.used_pages.intersection(pages)
 
-    def add(self,set_name,group,documents,order_evidence=None):
+    def add(self,set_name,group,documents,order_evidence=None,suffix=None):
         if not self.available(documents):return False
         index=1+sum(p['set']==set_name and p['group']==group for p in self.plans)
-        suffix=(documents[0]['library']+'_'+documents[0]['doc'][:8]) if group!='monographs' else 'mixed'
+        suffix=suffix or ((documents[0]['library']+'_'+documents[0]['doc'][:8]) if group!='monographs' else 'mixed')
         name=f'{group}_{index:03d}_{suffix}'
         batch={'set':set_name,'group':group,'name':name,'seed':self.args.seed,
                'documents':[{k:v for k,v in d.items() if k!='pages'} for d in documents],
@@ -285,6 +289,53 @@ class Preparation:
             if len(pending)>=desired:
                 if self.add(set_name,group,pending):pending=[]
         if multi and len(pending)>=2:self.add(set_name,group,pending)
+
+    def boundary_batches(self,set_name,per_kind):
+        """Batches of many short complete documents, so that their document boundaries are close together.
+
+        Taken from the catalogue in a fixed seeded order, like page_sequence.manifests: documents of a volume
+        are grouped by (library, volume) and their order inside it does not matter. Documents with annotated
+        pages come first. A document that the public archive cannot supply is skipped, as in plan().
+        Kinds: issues (many short issues of one volume), books (unrelated short monographs) and mixed
+        (runs of 3 to 5 issues of a volume between unrelated books)."""
+        split='dev' if set_name=='evaluation' else 'fit';fewest,most=BOUNDARY_DOCS
+        used_copies={d.get('copy_group') for b in self.plans for d in b['documents']}-{None,''}
+        count=lambda kind:sum(p['set']==set_name and p['group']=='boundaries' and p['name'].split('_')[2]==kind for p in self.plans)
+        short=f"split=? AND length BETWEEN {BOOK_PAGES[0]} AND {SHORT_PAGES}"
+        order="ORDER BY (gold_count>0 AND ?='dev') DESC,sample_rank(library||doc,?)"
+        def volumes(salt):
+            rows=self.db.execute(f"""SELECT library,volume FROM candidates WHERE {short} AND kind='periodicalitem' AND volume!=''
+                GROUP BY library,volume HAVING COUNT(*)>=? ORDER BY (SUM(gold_count)>0 AND ?='dev') DESC,sample_rank(library||volume,?)""",
+                (split,fewest,split,self.args.seed+salt)).fetchall()
+            return (self.db.execute(f"SELECT * FROM candidates WHERE {short} AND kind='periodicalitem' AND library=? AND volume=? ORDER BY first",
+                                    (split,r['library'],r['volume'])) for r in rows)
+        def books(salt):
+            return self.db.execute(f"SELECT * FROM candidates WHERE {short} AND kind='monograph' {order}",(split,split,self.args.seed+salt))
+        def fill(rows,pending,max_docs,reserve=0):
+            for row in rows:
+                if len(pending)>=max_docs or sum(d['length'] for d in pending)>self.args.max_pages-reserve-BOOK_PAGES[0]:break
+                if row['doc'] in self.used_docs or row['copy_group'] in used_copies:continue
+                if sum(d['length'] for d in pending)+row['length']>self.args.max_pages-reserve:continue
+                d=self.document(row)
+                if d is not None and self.available(pending+[d]):pending.append(d)
+            return pending
+        for rows in volumes(30):
+            if count('issues')>=per_kind:break
+            docs=fill(rows,[],most)
+            if len(docs)>=fewest:self.add(set_name,'boundaries',docs,suffix=f"issues_{docs[0]['library']}_{docs[0]['doc'][:8]}")
+        pool=books(31)
+        while count('books')<per_kind:
+            docs=fill(pool,[],most)
+            if len(docs)<fewest or not self.add(set_name,'boundaries',docs,suffix='books'):break
+        pool,groups=books(32),volumes(33)
+        while count('mixed')<per_kind:
+            docs=[]
+            for rows in groups:
+                before=len(docs);fill(rows,docs,before+3+rank(str(before),self.args.seed)%3,reserve=SHORT_PAGES)
+                if len(docs)-before<3:del docs[before:];continue
+                fill(pool,docs,len(docs)+1+rank(docs[-1]['doc'],self.args.seed)%3)
+                if len(docs)>=most or sum(d['length'] for d in docs)>self.args.max_pages-SHORT_PAGES:break
+            if len(docs)<fewest or not self.add(set_name,'boundaries',docs,suffix='mixed'):break
 
     def plan(self):
         self.build_candidates()
@@ -357,7 +408,7 @@ class Preparation:
                 for z in archives.values():z.close()
             atomic_json(destination/'metakat.json',{'batch_id':str(batch_id),'elements':elements,
                 'page_to_image_mapping':image_map,'page_to_alto_mapping':alto_map})
-            manifest=dict(batch,pages=pages)
+            manifest=dict(batch,pages=pages,recto_verso=recto_verso_field(pages))
             atomic_json(destination/'manifest.json',manifest)
             atomic_json(destination/'READY.json',{'pages':len(pages),'documents':len(batch['documents']),
                 'group':batch['group'],'set':batch['set'],'public_verified':True,
@@ -395,12 +446,16 @@ def main():
     parser.add_argument('--max-pages',type=int,default=400);parser.add_argument('--seed',type=int,default=20261028)
     parser.add_argument('--copy-workers',type=int,default=4)
     parser.add_argument('--plan-only',action='store_true')
+    parser.add_argument('--boundaries-per-kind',type=int,default=0,
+                        help='only add this many boundaries batches of each kind (issues, books, mixed) to the evaluation set')
     args=parser.parse_args()
     if not 1<=args.copy_workers<=8:parser.error('copy-workers must be between 1 and 8')
     if args.max_pages<2:parser.error('max-pages must allow at least two pages')
     job=Preparation(args)
     try:
-        job.plan()
+        if args.boundaries_per_kind:
+            job.build_candidates();job.boundary_batches('evaluation',args.boundaries_per_kind)
+        else:job.plan()
         if not args.plan_only:job.materialize()
     except Exception as error:
         job.status('failed',error_type=type(error).__name__,error=str(error))

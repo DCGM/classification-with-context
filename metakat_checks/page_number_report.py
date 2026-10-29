@@ -27,6 +27,21 @@ def normalize(text):
     return re.sub(r'\s+', '', text or '')
 
 
+NUMBER = re.compile(r'\[?(\d+|[ivxlcdm]+)(?![a-z])', re.I)
+
+
+def base_number(label):
+    """The number of a label in any convention: `12`, `[12]`, `12r`, `[12v]` and `[12a]` are all 12.
+
+    Roman numerals compare by their letters, case aside. Codes (FC, G9, A 1r) and labels with two numbers
+    have no base."""
+    label = normalize(label)
+    if not label or ',' in label or re.search(r'.\[|\].', label):
+        return None
+    match = re.fullmatch(r'\[?(\d+|[ivxlcdm]+)(?:[rv]|[a-z]*)\]?', label, re.I)
+    return match[1].lower() if match else None
+
+
 def situations(labels):
     """The situation of each label of one document, in page order (None for the other kinds of label)."""
     result, plain_seen = [], False
@@ -67,10 +82,20 @@ def load_page_numbers(root, variants):
 
 
 def score(rows, variants):
-    return {v: {'right': sum(r['predicted'][v] == r['reference'] for r in rows),
-                'missing': sum(not r['predicted'][v] for r in rows),
-                'wrong': sum(bool(r['predicted'][v]) and r['predicted'][v] != r['reference'] for r in rows)}
-            for v in variants}
+    """right: identical label; convention: the same number in another convention (12 for [12], 12r for [12a], ...);
+    missing: no number predicted; wrong: another number."""
+    result = {}
+    for v in variants:
+        right = sum(r['predicted'][v] == r['reference'] for r in rows)
+        convention = sum(
+            r['predicted'][v] != r['reference'] and bool(r['predicted'][v])
+            and base_number(r['predicted'][v]) is not None
+            and base_number(r['predicted'][v]) == base_number(r['reference'])
+            for r in rows)
+        missing = sum(not r['predicted'][v] for r in rows)
+        result[v] = {'right': right, 'convention': convention, 'missing': missing,
+                     'wrong': len(rows) - right - convention - missing}
+    return result
 
 
 def report(rows, variants):
@@ -99,8 +124,10 @@ def render_page_number_section(root, variants):
     out = ['# Page numbers', '',
            'The page-number stage of MetaKat, scored against the DB page numbers, the cataloguing labels, with the '
            'DB label as the truth. A page is right only when the predicted label is identical to the DB label '
-           '(`12`, `[3]` and `[12a]` are different labels); *none* is a page without a predicted number, *wrong* a '
-           'different label. The numbers come from the same MetaKat runs as the page types. The engine versions '
+           '(`12`, `[3]` and `[12a]` are different labels). *Other convention* is a label with the right number written '
+           'in another convention that the standard also allows or that the DB uses (`12` for `[12]`, `[12a]` for `12v`, '
+           '`12r` for `12`); it is not counted as right, and shows how much of the error is the convention, not the '
+           'number. *None* is a page without a predicted number, *wrong* a different number. The numbers come from the same MetaKat runs as the page types. The engine versions '
            'differ in the page-number logic that lives in the code, not in the model, so the **old code** column '
            'is a run with the code from before the page-number changes (the filling of gaps, bracketed and '
            'suffixed labels from the document context) and the **new code** columns are the current code.', '',
@@ -112,12 +139,12 @@ def render_page_number_section(root, variants):
     for set_name, entry in scores.items():
         held = 'evaluation (dev documents)' if set_name == 'evaluation' else 'consistency (fit documents)'
         out += [f'## {held.capitalize()}', '',
-                '| Situation | Pages | ' + ' | '.join(f'{n}: right | none | wrong' for n in names) + ' |',
-                '|---|---:|' + '---:|---:|---:|' * len(names)]
+                '| Situation | Pages | ' + ' | '.join(f'{n}: right | other convention | none | wrong' for n in names) + ' |',
+                '|---|---:|' + '---:|---:|---:|---:|' * len(names)]
         for key, title in SITUATIONS:
             s = entry['situations'][key]
-            cells = [f'{percent(s[v]["right"], s["n"])} | {percent(s[v]["missing"], s["n"])} | '
-                     f'{percent(s[v]["wrong"], s["n"])}' for v in names]
+            cells = [f'{percent(s[v]["right"], s["n"])} | {percent(s[v]["convention"], s["n"])} | '
+                     f'{percent(s[v]["missing"], s["n"])} | {percent(s[v]["wrong"], s["n"])}' for v in names]
             out.append(f'| {title} | {s["n"]} | ' + ' | '.join(cells) + ' |')
         out += ['', f'{entry["unlabelled"]} pages have no DB page number and are not scored. Pages where the '
                     'variant predicts a number anyway: ' +

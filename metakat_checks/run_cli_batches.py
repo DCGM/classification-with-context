@@ -10,6 +10,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from metakat_checks.recto_verso import engine_settings
+
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -39,6 +41,8 @@ def main():
     parser.add_argument('--metakat-python', type=Path, required=True)
     parser.add_argument('--engine-config', type=Path, required=True)
     parser.add_argument('--work', type=Path, required=True)
+    parser.add_argument('--engine-name', default='chapter')
+    parser.add_argument('--engine-version', default='v1.7.0')
     parser.add_argument('--skip-batch', action='append', default=[])
     args = parser.parse_args()
     args.work.mkdir(parents=True, exist_ok=True)
@@ -53,7 +57,7 @@ def main():
     env = dict(os.environ, PYTHONPATH=str(args.metakat_root.resolve()), PYTHONUNBUFFERED='1')
     status_path = args.work / 'status.json'
     for batch in batches:
-        output = batch.with_name(batch.name + '.results')
+        output = batch.with_name(f'{batch.name}.{args.engine_name}-{args.engine_version}.results')
         if batch.name in args.skip_batch:
             if not all((output / name).exists() for name in ('metakat.json', 'metakat.pdf', 'mods-overview.txt')):
                 raise ValueError(f'Skipped batch has missing outputs: {batch.name}')
@@ -71,12 +75,16 @@ def main():
         write_json(output / 'input.images-alto.json', payload)
         command = [str(args.metakat_python), '-u', '-m', 'metakat.process_batch',
                    '--batch-dir', str(batch), '--metakat-json', str(output / 'input.images-alto.json'),
-                   '--engine-config', str(args.engine_config), '--engine-name', 'chapter',
-                   '--engine-version', 'v1.7.0', '--output-metakat-json', str(output / 'metakat.json'),
+                   '--engine-config', str(args.engine_config), '--engine-name', args.engine_name,
+                   '--engine-version', args.engine_version, '--output-metakat-json', str(output / 'metakat.json'),
                    '--output-metakat-pdf', str(output / 'metakat.pdf'), '--pdf-downscale',
                    '--output-mods-dir', str(output / 'mods'),
                    '--output-mods-overview', str(output / 'mods-overview.txt')]
-        record = {'state': 'running', 'started': now(), 'pages': len(payload['elements']), 'command': command}
+        settings = engine_settings(json.loads((batch / 'manifest.json').read_text()))
+        for path, value in settings:
+            command += ['--set', path, value]
+        record = {'state': 'running', 'started': now(), 'pages': len(payload['elements']), 'command': command,
+                  'engine_settings': dict(settings)}
         status['batches'][batch.name] = record
         status['current_batch'] = batch.name
         write_json(record_path, record)

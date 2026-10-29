@@ -144,7 +144,7 @@ The original prepared inputs remain unchanged. The configured local pipeline
 runs page-number detection before context page classification, bibliography and
 chapters. It never calls the worker or API.
 
-Each batch gets a sibling `<batch>.results/` containing `input.images-alto.json`,
+Each batch gets a sibling `<batch>.<engine>-<version>.results/` (e.g. `.chapter-v1.7.0.results`; `--engine-name`/`--engine-version`) containing `input.images-alto.json`,
 `metakat.json`, `metakat.pdf`, `mods/`, `mods-overview.txt`, `run.log` and
 `cli-run.json`. The runner writes aggregate `status.json` and takes an exclusive
 lock in `--work`. Completed batches are skipped on resume; failed batches are
@@ -241,3 +241,11 @@ vectors, and compares JPEG dimensions, quantization tables, chroma sampling and
 decoded pixels with the cached Q90 reconstructions. Run in MetaKat's environment
 and source checkout with `--originals`, `--reconstructed`, `--batches`, `--store`,
 `--checkpoint`, and `--output`. This comparison preserves original JPEG bytes.
+
+## Recto/verso batches
+
+`recto_verso.py` marks the prepared batches whose documents the DB describes with sheet labels (`1r`, `1v`, NDK
+monograph rule 1.1.8) in the `recto_verso` field of their `manifest.json`; `run_cli_batches.py` then runs those with
+`--set definition:page_number:core:postprocess:ndk:recto_verso true`. `prepare_batches.py` writes the field for new
+batches; `python -m metakat_checks.recto_verso --root <set directory>` adds or refreshes it for existing ones.
+

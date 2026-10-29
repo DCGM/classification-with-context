@@ -27,3 +27,10 @@ def test_a_batch_is_in_the_mode_when_any_document_is_and_the_settings_follow():
     assert engine_settings({'recto_verso': field}) == [(SETTING, 'true')]
     assert engine_settings({'recto_verso': recto_verso_field(pages('b', ['1', '2']))}) == []
     assert engine_settings({}) == []
+
+
+def test_base_number_reads_the_number_in_any_convention():
+    from metakat_checks.page_number_report import base_number
+    assert {base_number(x) for x in ['12', '[12]', '12r', '[12v]', '[12a]']} == {'12'}
+    assert base_number('iv') == base_number('[IV]') == 'iv'
+    assert [base_number(x) for x in ['FC', 'G9', 'A 1r', '5,6', '55 [58]', '[a]', '', None]] == [None] * 8
