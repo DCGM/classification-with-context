@@ -77,7 +77,7 @@ def description(kind, luna):
     else:
         en.append('Processing does not use an external AI service or incur external AI usage fees.')
         cs.append('Zpracování nevyužívá externí službu AI a není spojeno s poplatky za její použití.')
-    return 'EN\n' + '\n\n'.join(en) + '\n\nCS\n' + '\n\n'.join(cs)
+    return 'CS\n' + '\n\n'.join(cs) + '\n\nEN\n' + '\n\n'.join(en)
 
 
 def request(path, output, patch=None):
