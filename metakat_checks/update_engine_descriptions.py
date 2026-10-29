@@ -15,77 +15,68 @@ API = 'https://metakat.smart.lib.cas.cz'
 KEY_FILE = '/home/ikohut/Projects/MetaKat/metakat/worker/docapi/.docapi_admin_key'
 WORK = Path('/home/ikohut/tmp/metakat-engine-descriptions')
 
-BOOK_EN = ('Intended scan batches: one standalone monograph; several unrelated standalone monographs; '
-           'or one or more parts of a single multipart monograph. Keep pages in scan order. '
-           'Do not use for periodicals, two multipart works, or a mixture of multipart and standalone books.')
-BOOK_CS = ('Určené skenovací dávky: jedna samostatná monografie; několik vzájemně nesouvisejících samostatných '
-           'monografií; nebo jeden či více dílů jedné vícedílné monografie. Zachovejte pořadí snímků. '
-           'Nepoužívejte pro periodika, dvě vícedílná díla ani směs dílů vícedílného díla a samostatných knih.')
-PERIODICAL_EN = ('Intended scan batches: one or more consecutive issues/volumes of ONE periodical title, '
-                 'in scan order, with the issues of each volume together. Do not mix different periodical '
-                 'titles or include monographs. Creates issue, volume and periodical-title hierarchy.')
-PERIODICAL_CS = ('Určené skenovací dávky: jedno či více po sobě následujících čísel nebo ročníků JEDNOHO '
-                 'titulu periodika v pořadí snímků, s čísly každého ročníku pohromadě. Nekombinujte různé '
-                 'tituly periodik ani nepřidávejte monografie. Vytváří hierarchii čísel, ročníků a titulu periodika.')
-COMMON_EN = ('MetaKat v1.7.0: page-number detection, contextual page type, left/right/single placement and '
-             'document-boundary inference (512-page window, 64-page overlap), followed by bibliographic metadata extraction.')
-COMMON_CS = ('MetaKat v1.7.0: rozpoznávání čísel stran, kontextová klasifikace typů stran, určení levé/pravé/samostatné '
-             'strany a hranic dokumentů (okno 512 stran, překryv 64 stran), následované extrakcí bibliografických metadat.')
+BOOK_EN = ('Use for one standalone book, several unrelated standalone books, or parts of one multipart work. '
+           'Keep pages in scan order. Do not mix standalone books with multipart works, combine different '
+           'multipart works, or include journals or newspapers.')
+BOOK_CS = ('Použijte pro jednu samostatnou knihu, několik vzájemně nesouvisejících samostatných knih nebo '
+           'díly jednoho vícedílného díla. Zachovejte pořadí snímků. Nekombinujte samostatné knihy s díly '
+           'vícedílného díla, různá vícedílná díla ani knihy s časopisy či novinami.')
+PERIODICAL_EN = ('Use for consecutive issues or volumes of a single journal, newspaper or other periodical. '
+                 'Keep pages in scan order, with the issues of each volume together. '
+                 'Do not mix different periodical titles or include books.')
+PERIODICAL_CS = ('Použijte pro po sobě následující čísla nebo ročníky jednoho časopisu, novin či jiného '
+                 'periodika. Zachovejte pořadí snímků a čísla každého ročníku ponechte pohromadě. '
+                 'Nekombinujte různé tituly periodik ani nepřidávejte knihy.')
+SUMMARIES = {
+    'monograph': (
+        'Identifies page numbers and page types, separates books or parts within the scan, and extracts '
+        'bibliographic details such as titles, authors and publication information.',
+        'Rozpoznává čísla a typy stran, odděluje knihy či díly v dávce a získává bibliografické údaje, '
+        'například název, autory a údaje o vydání.'),
+    'periodical': (
+        'Identifies page numbers and page types, separates issues and extracts their bibliographic details. '
+        'Groups issues into volumes under their periodical title.',
+        'Rozpoznává čísla a typy stran, odděluje jednotlivá čísla periodika a získává jejich bibliografické '
+        'údaje. Seskupuje čísla do ročníků pod společný titul periodika.'),
+    'chapter': (
+        'Extracts book details and a table of contents linked to the chapter pages. Also identifies '
+        'page numbers, page types and separate books or parts within the scan.',
+        'Získává bibliografické údaje o knihách a obsah propojený se stranami kapitol. Zároveň rozpoznává '
+        'čísla a typy stran a odděluje jednotlivé knihy či díly v dávce.'),
+}
 
 
 def description(kind, luna):
-    en = [COMMON_EN, PERIODICAL_EN if kind == 'periodical' else BOOK_EN]
-    cs = [COMMON_CS, PERIODICAL_CS if kind == 'periodical' else BOOK_CS]
+    en = [SUMMARIES[kind][0], PERIODICAL_EN if kind == 'periodical' else BOOK_EN]
+    cs = [SUMMARIES[kind][1], PERIODICAL_CS if kind == 'periodical' else BOOK_CS]
     if kind == 'chapter':
-        en.append('Additionally reads book tables of contents (TOCs), locates chapter destination titles and '
-                  'aligns TOC entries to chapter pages separately within each detected book/part. '
-                  'Not intended for article/review TOCs or article metadata extraction.')
-        cs.append('Navíc čte knižní obsahy (TOC), vyhledává nadpisy kapitol na cílových stranách a propojuje položky '
-                  'obsahu se stranami kapitol samostatně v každé rozpoznané knize či dílu. '
-                  'Není určen pro obsahy článků a recenzí ani pro extrakci jejich metadat.')
-    if luna:
-        en.insert(0, 'IMPORTANT — PRIVATE DATA: This engine sends selected page images and OCR text to an '
-                  'external model via OpenRouter. Do not process private/non-public data if you are unsure '
-                  'what this external processing means for its protection. Calls use the ZDR '
-                  '(Zero Data Retention) policy. Before submitting data, you must decide for yourself '
-                  'whether that policy provides sufficient protection for your data.')
-        cs.insert(0, 'DŮLEŽITÉ — NEVEŘEJNÁ DATA: Tento engine odesílá vybrané snímky stran a text OCR '
-                  'externímu modelu přes OpenRouter. Nezpracovávejte neveřejná data, pokud si nejste jisti, '
-                  'co toto externí zpracování znamená pro jejich ochranu. Volání používají politiku ZDR '
-                  '(Zero Data Retention). Před odesláním dat musíte sami rozhodnout, zda tato politika '
-                  'poskytuje vašim datům dostatečnou ochranu.')
-        en.append('Title-page metadata is read by OpenAI GPT-6 Luna with medium reasoning via OpenRouter, '
-                  'using Zero Data Retention (ZDR). ' +
-                  ('TOCs use the same VLM; destination-page analysis remains local YOLO with fuzzy chapter alignment.'
-                   if kind == 'chapter' else 'This engine does not extract TOC entries or chapters.'))
-        cs.append('Metadata titulních stran čte OpenAI GPT-6 Luna s úrovní uvažování medium přes OpenRouter '
-                  'v režimu Zero Data Retention (ZDR). ' +
-                  ('Stejný VLM čte obsahy; analýza cílových stran zůstává lokální pomocí YOLO s fuzzy přiřazením kapitol.'
-                   if kind == 'chapter' else 'Tento engine neextrahuje položky obsahu ani kapitoly.'))
-        en.append('Estimated OpenRouter budget in USD: $0.003–$0.005 per title-page image' +
-                  ('; $0.002–$0.003 per TOC image.' if kind == 'chapter' else '; TOC extraction is not run.') +
-                  ' Estimates are based on the local Luna medium trial (2026-10-29)' +
-                  ('; title-page cost for periodicals is extrapolated from book title pages.' if kind == 'periodical' else '.') +
-                  ' Multipage spans are requested together. Actual cost varies with image size, OCR, output length, '
-                  'reasoning and retries.' + (' Long/dense TOCs may cost more.' if kind == 'chapter' else '') +
-                  ' Other scan pages use local models without VLM API charges.')
-        cs.append('Orientační rozpočet OpenRouter v USD: 0,003–0,005 USD za snímek titulní strany' +
-                  ('; 0,002–0,003 USD za snímek obsahu.' if kind == 'chapter' else '; extrakce obsahu se neprovádí.') +
-                  ' Odhady vycházejí z místního testu Luna medium ze dne 29. 10. 2026' +
-                  ('; cena titulních stran periodik je odvozena z knižních titulních stran.' if kind == 'periodical' else '.') +
-                  ' Vícestránkové celky se zpracovávají v jednom požadavku. Skutečná cena závisí na velikosti obrázků, '
-                  'OCR, délce výstupu, uvažování a opakováních.' +
-                  (' Dlouhé či husté obsahy mohou stát více.' if kind == 'chapter' else '') + ' '
-                  'Ostatní snímky zpracovávají lokální modely bez poplatků za VLM API.')
+        en.append('Processes the contents of each book or part separately. Not intended for article or '
+                  'review contents in journals, or for extracting article details.')
+        cs.append('Obsah zpracovává samostatně pro každou knihu či díl. Není určen pro časopisecké obsahy '
+                  'článků a recenzí ani pro získávání údajů o jednotlivých článcích.')
     else:
-        en.append('Bibliographic metadata' + (' and TOC extraction use' if kind == 'chapter' else ' uses') +
-                  ' local YOLO/ALTO models; no paid VLM requests. ' +
-                  ('Chapter destinations are resolved by fuzzy alignment.' if kind == 'chapter' else
-                   'This engine does not extract TOC entries or chapters.'))
-        cs.append('Extrakce bibliografických metadat' + (' a obsahu využívá' if kind == 'chapter' else ' využívá') +
-                  ' lokální modely YOLO/ALTO bez placených požadavků na VLM. ' +
-                  ('Cílové strany kapitol se určují pomocí fuzzy přiřazení.' if kind == 'chapter' else
-                   'Tento engine neextrahuje položky obsahu ani kapitoly.'))
+        en.append('Does not extract tables of contents or chapters.')
+        cs.append('Nezpracovává obsahy ani kapitoly.')
+    if luna:
+        en.insert(0, 'IMPORTANT — PRIVATE DATA: Selected page images and recognized text are sent to an '
+                  'external AI service via OpenRouter. Requests use Zero Data Retention (ZDR). '
+                  'Do not submit private data unless you understand this processing and have decided '
+                  'for yourself that ZDR is sufficient for your requirements.')
+        cs.insert(0, 'DŮLEŽITÉ — NEVEŘEJNÁ DATA: Vybrané snímky stran a rozpoznaný text se odesílají '
+                  'externí službě AI přes OpenRouter. Požadavky používají politiku Zero Data Retention (ZDR). '
+                  'Neveřejná data odesílejte pouze tehdy, pokud tomuto zpracování rozumíte a sami jste '
+                  'posoudili, že ZDR splňuje vaše požadavky na ochranu dat.')
+        en.append('Approximate external processing fees: USD 0.003–0.005 per title-page image' +
+                  (' and USD 0.002–0.003 per table-of-contents image.' if kind == 'chapter' else '.') +
+                  ' Only pages sent for external processing incur these fees. Actual costs may vary' +
+                  (', especially for long or dense tables of contents.' if kind == 'chapter' else '.'))
+        cs.append('Orientační poplatky za externí zpracování: 0,003–0,005 USD za snímek titulní strany' +
+                  (' a 0,002–0,003 USD za snímek obsahu.' if kind == 'chapter' else '.') +
+                  ' Tyto poplatky se vztahují pouze na snímky odeslané k externímu zpracování. Skutečná cena '
+                  'se může lišit' + (', zejména u dlouhých či hustě popsaných obsahů.' if kind == 'chapter' else '.'))
+    else:
+        en.append('Processing does not use an external AI service or incur external AI usage fees.')
+        cs.append('Zpracování nevyužívá externí službu AI a není spojeno s poplatky za její použití.')
     return 'EN\n' + '\n\n'.join(en) + '\n\nCS\n' + '\n\n'.join(cs)
 
 

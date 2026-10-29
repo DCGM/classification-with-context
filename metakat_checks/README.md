@@ -275,7 +275,9 @@ the existing admin key, never loading the key value into Python. Read-back check
 preserve definitions, activation/default flags and uploaded-file timestamps.
 Descriptions document the binder's allowed scan composition, distinguish book
 chapters from article extraction, and label Luna prices as rough trial-based USD
-budgets. Periodical title-page pricing is explicitly an extrapolation. Preview,
+budgets. The dropdown descriptions focus on user-visible results, suitable scans,
+privacy and fees. Price evidence, including the periodical extrapolation, remains
+in `pricing-evidence.json` alongside the API records. Preview,
 before/after records and verification are saved under
 `/home/ikohut/tmp/metakat-engine-descriptions/`. ZIPs do not need rebuilding for
 description-only updates because the descriptions live in API/local descriptors.
