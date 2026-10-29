@@ -213,6 +213,9 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--conditions', type=Path, help='Output directory of page_sequence.evaluate_conditions; its '
                                                          'evaluation is appended to the Markdown report.')
+    parser.add_argument('--page-numbers', action='store_true',
+                        help='Append the page-number section: chapter-v1.6.0 with the old page-number code '
+                             '(metakat.old-page-number.json) and both engines with the current code.')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     first, second = args.engines
@@ -286,6 +289,13 @@ def main():
     if args.conditions is not None:
         from metakat_checks.context_report import render_context_section
         markdown += '\n' + render_context_section(args.conditions)
+    if args.page_numbers:
+        from metakat_checks.page_number_report import render_page_number_section
+        first_engine, second_engine = args.engines
+        markdown += '\n' + render_page_number_section(args.root, {
+            f'{first_engine} old code': (first_engine, 'metakat.old-page-number.json'),
+            f'{first_engine} new code': (first_engine, 'metakat.json'),
+            f'{second_engine} new code': (second_engine, 'metakat.json')})
     (args.output / 'engine-comparison.md').write_text(markdown)
     with (args.output / 'engine-comparison-pages.csv').open('w', newline='') as stream:
         writer = csv.DictWriter(stream, fieldnames=list(csv_rows[0]))
