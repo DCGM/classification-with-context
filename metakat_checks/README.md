@@ -252,6 +252,22 @@ batches; `python -m metakat_checks.recto_verso --root <set directory>` adds or r
 
 ## Luna chapter v1.7 bundle
 
+`prepare_luna_uploads.py` audits the monograph, periodical and chapter Luna
+bundles and builds their missing upload ZIPs. It checks descriptor/JSON/YAML
+agreement, safe relative resource paths, configured files only, actual YOLO
+requirements, dependency preflight, DINO identity and the SHA256 of every archived
+file. It makes no API calls and leaves bundle configurations unchanged.
+
+```bash
+PYTHONPATH=/home/ikohut/Projects/MetaKat/.claude/worktrees/biblio-spans \
+  /home/ikohut/python_env/metakat/bin/python metakat_checks/prepare_luna_uploads.py
+```
+
+The source-engine directory receives per-bundle `.upload-check.json` reports and
+`luna-v1.7.0-upload-check.json`. ZIPs contain configs and model resources, not
+MetaKat Python code or credentials. Workers must separately deploy the MetaKat
+and aligner revisions recorded in those reports and supply `OPENROUTER_API_KEY`.
+
 `run_luna_chapters.py` runs the bundle through the local MetaKat CLI on book
 batches whose previous chapter result predicts a TOC. It uses the existing
 images/ALTO-only input, leaving number recognition to MetaKat. Periodicals are
