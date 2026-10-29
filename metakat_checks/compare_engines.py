@@ -28,15 +28,31 @@ def engine_types(config_path):
     return None if labels is None else set(labels)
 
 
-def load_pages(root, engines):
-    """One row per page: reference labels and, per engine, its page type, side and start-of-document."""
+RESULT = 'metakat.json'
+
+
+def load_pages(root, engines, files=None, start_files=None):
+    """One row per page: reference labels and, per engine, its page type, side and start-of-document.
+
+    The page type and side of an engine come from files[engine] (default metakat.json) of its results folder, its
+    document start from start_files[engine] (default: the same file)."""
+    files, start_files = files or {}, start_files or {}
     rows = []
     for batch in sorted(p for p in root.iterdir() if p.is_dir() and (p / 'READY.json').is_file()):
         manifest = json.loads((batch / 'manifest.json').read_text())
         predicted = {}
+        starts = {}
         for engine in engines:
-            result = json.loads((batch.with_name(f'{batch.name}.{engine}.results') / 'metakat.json').read_text())
+            folder = batch.with_name(f'{batch.name}.{engine}.results')
+            name = files.get(engine, RESULT)
+            result = json.loads((folder / name).read_text())
             predicted[engine] = {p['id']: p for p in result['elements'] if p['type'] == 'page'}
+            start_name = start_files.get(engine, name)
+            if start_name == name:
+                starts[engine] = predicted[engine]
+            else:
+                other = json.loads((folder / start_name).read_text())
+                starts[engine] = {p['id']: p for p in other['elements'] if p['type'] == 'page'}
         for position, page in enumerate(manifest['pages']):
             curated = page.get('annotated_type') or ''
             row = {'set': manifest['set'], 'group': manifest['group'], 'batch': batch.name, 'page': page['page'],
@@ -45,9 +61,9 @@ def load_pages(root, engines):
                    'side': SIDES.get(page.get('placement') or ''), 'start': bool(page['document_start'])}
             for engine in engines:
                 p = predicted[engine][page['page']]
-                starts = p.get('startsDocument')
+                start = starts[engine][page['page']].get('startsDocument')
                 row[engine] = {'type': p['pageType']['text'], 'side': (p.get('side') or {}).get('text'),
-                               'start': None if starts is None else bool(starts['val'])}
+                               'start': None if start is None else bool(start['val'])}
             rows.append(row)
     return rows
 
@@ -91,13 +107,13 @@ def percent(value):
     return '-' if value is None else f'{100 * value:.1f}'
 
 
-def render_markdown(report, engines):
+def render_markdown(report, engines, sources=()):
     first, second = engines
     out = [f'# MetaKat engine comparison: {first} vs {second}', '',
            f'**{first}** predicts the page type of each page alone and has no side or document-start model of its '
            f'own. **{second}** reads the whole batch as one scan (512-page windows) and predicts page type, side '
            'and document starts together. Both ran over the same prepared batches, with the same images and ALTO.',
-           '', '## Reference labels', '',
+           '', *(['## What was run', '', *sources, ''] if sources else []), '## Reference labels', '',
            '- **Page type:** the curated (annotated) label where the page has one, otherwise the DB page type. '
            'DB types are partly weak labels, so absolute scores understate both engines; the curated rows are the '
            'cleanest.',
@@ -214,8 +230,12 @@ def main():
     parser.add_argument('--conditions', type=Path, help='Output directory of page_sequence.evaluate_conditions; its '
                                                          'evaluation is appended to the Markdown report.')
     parser.add_argument('--page-numbers', action='store_true',
-                        help='Append the page-number section: chapter-v1.6.0 with the old page-number code '
-                             '(metakat.old-page-number.json) and both engines with the current code.')
+                        help='Append the page-number section: the first engine with the code from before the '
+                             'page-number changes (metakat.old-page-number.json) against the second engine.')
+    parser.add_argument('--engine-file', action='append', default=[], metavar='ENGINE=FILE',
+                        help='Results file of an engine for its page types and sides (default metakat.json)')
+    parser.add_argument('--start-file', action='append', default=[], metavar='ENGINE=FILE',
+                        help='Results file of an engine for its document starts (default: the page type file)')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     first, second = args.engines
@@ -224,7 +244,8 @@ def main():
     report = {'engines': args.engines, 'sets': {}}
     csv_rows = []
     for set_name in ('evaluation', 'consistency'):
-        rows = load_pages(args.root / set_name, args.engines)
+        rows = load_pages(args.root / set_name, args.engines, dict(a.split('=', 1) for a in args.engine_file),
+                          dict(a.split('=', 1) for a in args.start_file))
         outside = Counter(r['type'] for r in rows if r['type'] is not None and vocabulary is not None
                           and r['type'] not in vocabulary)
         usable = [r for r in rows if r['type'] is not None and (vocabulary is None or r['type'] in vocabulary)]
@@ -285,17 +306,27 @@ def main():
                       **{f'{e}_{k}': r[e][k] for e in args.engines for k in ('type', 'side', 'start')}}
                      for r in rows]
     (args.output / 'engine-comparison.json').write_text(json.dumps(report, indent=2, default=str) + '\n')
-    markdown = render_markdown(report, args.engines)
-    if args.conditions is not None:
-        from metakat_checks.context_report import render_context_section
-        markdown += '\n' + render_context_section(args.conditions)
+    old_files, start_files = dict(a.split('=', 1) for a in args.engine_file), dict(a.split('=', 1) for a in args.start_file)
+    sources = []
+    if old_files or start_files:
+        sources = [
+            f'- **{first}** page types and sides: `{old_files.get(first, RESULT)}` of its results, the run with the '
+            'MetaKat code from before the page-number changes. ' + (
+                f'Its document starts: `{start_files[first]}`, the run with the newer code (the boundary logic did not '
+                'change).' if first in start_files else ''),
+            f'- **{second}**: the final run with the current MetaKat code: the page-number engine runs before and '
+            'after the page-type stage, the interactive PDF has uniform pages. Results of earlier runs of this '
+            'engine are kept for internal comparison only and are not in this report.']
+    markdown = render_markdown(report, args.engines, sources)
     if args.page_numbers:
         from metakat_checks.page_number_report import render_page_number_section
         first_engine, second_engine = args.engines
         markdown += '\n' + render_page_number_section(args.root, {
-            f'{first_engine} old code': (first_engine, 'metakat.old-page-number.json'),
-            f'{first_engine} new code': (first_engine, 'metakat.json'),
-            f'{second_engine} new code': (second_engine, 'metakat.json')})
+            f'{first_engine}': (first_engine, 'metakat.old-page-number.json'),
+            f'{second_engine}': (second_engine, 'metakat.json')})
+    if args.conditions is not None:
+        from metakat_checks.context_report import render_context_section
+        markdown += '\n' + render_context_section(args.conditions)
     (args.output / 'engine-comparison.md').write_text(markdown)
     with (args.output / 'engine-comparison-pages.csv').open('w', newline='') as stream:
         writer = csv.DictWriter(stream, fieldnames=list(csv_rows[0]))

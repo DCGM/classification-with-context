@@ -121,7 +121,7 @@ def render_page_number_section(root, variants):
     rows = load_page_numbers(root, variants)
     scores = report(rows, variants)
     names = list(variants)
-    out = ['# Page numbers', '',
+    out = ['# The page-number engine against the DB page numbers', '',
            'The page-number stage of MetaKat, scored against the DB page numbers, the cataloguing labels, with the '
            'DB label as the truth. A page is right only when the predicted label is identical to the DB label '
            '(`12`, `[3]` and `[12a]` are different labels). *Other convention* is a label with the right number written '
