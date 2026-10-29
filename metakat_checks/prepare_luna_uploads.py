@@ -1,6 +1,6 @@
 """Build missing Luna upload ZIPs and audit all three resource-only bundles.
 
-Run with MetaKat's Python and biblio-spans on PYTHONPATH. No API calls or model
+Run with MetaKat's Python and the worker checkout on PYTHONPATH. No API calls or model
 inference. Configurations and source bundle directories are left unchanged.
 """
 import hashlib

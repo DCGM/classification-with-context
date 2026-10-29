@@ -158,7 +158,7 @@ reviewed and is explicitly skipped:
 ```bash
 /home/ikohut/python_env/metakat/bin/python -u -m metakat_checks.run_cli_batches \
   --root /mnt/kolosus/data/metakat_worker/test_batches/page_types/evaluation \
-  --metakat-root /home/ikohut/Projects/MetaKat.worker/.claude/worktrees/schema-shared-base \
+  --metakat-root /home/ikohut/Projects/MetaKat.worker \
   --metakat-python /home/ikohut/python_env/metakat/bin/python \
   --engine-config /home/ikohut/tmp/metakat-evaluation-cli-images-alto/engine_config.resolved.json \
   --work /home/ikohut/tmp/metakat-evaluation-cli-images-alto \
@@ -259,7 +259,7 @@ requirements, dependency preflight, DINO identity and the SHA256 of every archiv
 file. It makes no API calls and leaves bundle configurations unchanged.
 
 ```bash
-PYTHONPATH=/home/ikohut/Projects/MetaKat.worker/.claude/worktrees/biblio-spans \
+PYTHONPATH=/home/ikohut/Projects/MetaKat.worker \
   /home/ikohut/python_env/metakat/bin/python metakat_checks/prepare_luna_uploads.py
 ```
 
@@ -310,7 +310,7 @@ the guard or retry incomplete batches. Completed batches are skipped.
 
 `build_luna_chapter_bundle.py` packages
 `chapter.openai.gpt-6-luna.medium.v1.7.0` beside the existing worker engine bundles.
-Run it with the MetaKat environment and `biblio-spans` checkout on `PYTHONPATH`.
+Run it with the MetaKat environment and `MetaKat.worker` checkout on `PYTHONPATH`.
 It combines the Luna monograph v1.7 page-number, context page-type and bibliography
 stages with the existing chapter destination-page analysis and fuzzy alignment,
 replacing only TOC extraction with `chapter_extraction_engine_vlm`. Both remote

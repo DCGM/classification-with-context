@@ -1,6 +1,6 @@
 """Package the current chapter pipeline with Luna title-page and TOC reading.
 
-Run with MetaKat's Python and its biblio-spans source checkout on PYTHONPATH.
+Run with MetaKat's Python and its worker checkout on PYTHONPATH.
 Only bundle files are written; no API, worker or model inference is invoked.
 """
 import argparse

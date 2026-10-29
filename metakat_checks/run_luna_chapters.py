@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 ROOT = Path('/mnt/kolosus/data/metakat_worker/test_batches/page_types')
-SOURCE = Path('/home/ikohut/Projects/MetaKat.worker/.claude/worktrees/biblio-spans')
+SOURCE = Path('/home/ikohut/Projects/MetaKat.worker')
 ENGINE = 'chapter.openai.gpt-6-luna.medium'
 VERSION = 'v1.7.0'
 CONFIG = Path('/mnt/kolosus/data/metakat_worker/src_engines') / f'{ENGINE}.{VERSION}/engine_config.json'
