@@ -252,6 +252,32 @@ batches; `python -m metakat_checks.recto_verso --root <set directory>` adds or r
 
 ## Luna chapter v1.7 bundle
 
+`run_luna_chapters.py` runs the bundle through the local MetaKat CLI on book
+batches whose previous chapter result predicts a TOC. It uses the existing
+images/ALTO-only input, leaving number recognition to MetaKat. Periodicals are
+excluded because this bundle extracts book chapters rather than articles.
+
+```bash
+/home/ikohut/python_env/metakat/bin/python metakat_checks/run_luna_chapters.py --list
+/home/ikohut/python_env/metakat/bin/python metakat_checks/run_luna_chapters.py --only multipart_006_nkp_52868b20
+# After checking the first multipage TOC's coverage:
+/home/ikohut/python_env/metakat/bin/python metakat_checks/run_luna_chapters.py --all
+```
+
+Results are siblings of their source batches, named
+`<batch>.chapter.openai.gpt-6-luna.medium-v1.7.0.results`. Alongside the normal
+JSON, PDF and MODS outputs, each contains CLI provenance, a log and validated
+VLM replies for coverage checks. The existing project key is read from its key
+file into the child process environment; it is never copied into the results.
+
+The persistent request ledger and failure guard live in
+`/home/ikohut/tmp/luna-chapter-v1.7.0/guard.json`. Requests have one attempt and
+SDK retries disabled. The guard stops immediately on deterministic failures,
+or after two other failures, and is shared through a file lock. The batch runner
+also stops on any failed batch and refuses continuation after a recorded paid
+failure until its cause has been diagnosed. It does not automatically reset
+the guard or retry incomplete batches. Completed batches are skipped.
+
 `build_luna_chapter_bundle.py` packages
 `chapter.openai.gpt-6-luna.medium.v1.7.0` beside the existing worker engine bundles.
 Run it with the MetaKat environment and `biblio-spans` checkout on `PYTHONPATH`.
