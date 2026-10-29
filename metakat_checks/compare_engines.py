@@ -221,7 +221,7 @@ def render_markdown(report, engines, sources=()):
                 m = scores[engine]
                 cells.append('- | - | - | - | -' if m is None else
                              f'{m["hits"]} | {m["predicted_starts"]} | {percent(m["precision"])} | '
-                             f'{percent(m["recall"])} | {percent(m["f1"])}')
+                             f'{percent(m["recall"])} | **{percent(m["f1"])}**')
             reference = m1 or scores[second]
             out.append(f'| {name} | {batches} | {reference["pages"]} | {reference["true_starts"]} | ' +
                        ' | '.join(cells) + ' |')
