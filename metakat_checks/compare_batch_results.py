@@ -114,7 +114,9 @@ def main():
             for i, page in enumerate(pages):
                 value = by_id[page.page].get('startsDocument')
                 if i == 0:
-                    if value is not None:
+                    # The page-type bind sets the first page's start by
+                    # definition; older runs leave it unset.
+                    if value is not None and (value['val'], value['confidence']) != (True, 1.):
                         raise ValueError('Unexpected first-page boundary prediction')
                     continue
                 if value is None:
