@@ -29,9 +29,15 @@ class StoreDataset(Dataset):
         self.plan = json.loads(plan_path.read_text())
         p = self.plan
         record_dtype(p)
+        matching_view = canonical(p['feature_state']) == canonical(features.state_dict())
+        if not matching_view and p['version'] == SPARSE_VERSION and features.stats.extra_groups:
+            # The raw schema is immutable; additive views need no physical store rebuild.
+            from page_sequence.features import FeaturePipeline
+            base_view = FeaturePipeline(features.sources, features.normalization).state_dict()
+            matching_view = canonical(p['feature_state']) == canonical(base_view)
         if (p['pilot']
                 or tuple(p['page_types']) != PAGE_TYPES or tuple(p['placements']) != PLACEMENTS
-                or canonical(p['feature_state']) != canonical(features.state_dict())):
+                or not matching_view):
             raise ValueError('store layout, labels or preprocessing do not match training')
         if not allow_building and not p.get('complete'):
             raise ValueError('incomplete training store')
@@ -46,6 +52,7 @@ class StoreDataset(Dataset):
                 raise ValueError('fallback vector stores differ from audited store sources')
         self.reader = TrainingStore.__new__(TrainingStore)
         self.reader.path, self.reader.manifest = self.path, p
+        self.reader.feature_state = features.state_dict()
         self.reader.documents = np.load(self.path / 'documents.npy', mmap_mode='r', allow_pickle=False)
         if self.reader.documents.dtype != DOCUMENT:
             raise ValueError('incompatible document table')

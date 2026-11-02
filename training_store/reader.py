@@ -25,10 +25,12 @@ class TrainingStore:
         self._pid, self._fds = None, {}
 
     def __getstate__(self):
-        return {'path': str(self.path)}
+        return {'path': str(self.path), 'feature_state': getattr(self, 'feature_state', None)}
 
     def __setstate__(self, state):
         self.__init__(state['path'])
+        if state.get('feature_state') is not None:
+            self.feature_state = state['feature_state']
 
     def close(self):
         for fd in self._fds.values():
@@ -120,12 +122,13 @@ class TrainingStore:
         if self.manifest['version'] == SPARSE_VERSION:
             from embeddings.text.page_stats import PageStats, PageStatsNormalization
             if not hasattr(self, '_stats_preprocessing'):
-                normalization = self.manifest['feature_state']['normalization']
+                feature_state = getattr(self, 'feature_state', self.manifest['feature_state'])
+                normalization = feature_state['normalization']
                 normalization = (PageStatsNormalization.from_dict(normalization)
                                  if isinstance(normalization, dict) else True)
-                self._stats_preprocessing = PageStats(), normalization
+                self._stats_preprocessing = PageStats(extra_groups=feature_state.get('stats_extra_groups')), normalization
             stats, normalization = self._stats_preprocessing
-            names = self.manifest['feature_state']['stats_names']
+            names = getattr(self, 'feature_state', self.manifest['feature_state'])['stats_names']
             values = np.empty((len(records), len(names)), np.float16)
             # Bound the temporary full 3,324-dimensional decoded array.
             for start in range(0, len(records), 512):

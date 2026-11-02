@@ -91,11 +91,11 @@ class FeaturePipeline:
     Dense L2 normalization and all-grouped bounded stats are independent of window composition.
     Saved schema includes every normalization choice; model sees only these arrays/presence flags.
     """
-    def __init__(self, sources, normalization=None):
+    def __init__(self, sources, normalization=None, stats_extra_groups=None):
         if set(sources) != {'image', 'text', 'stats'}:
             raise ValueError('initial experiment requires image, text, stats sources')
         self.sources = sources
-        self.stats = PageStats()
+        self.stats = PageStats(extra_groups=stats_extra_groups)
         self.normalization = normalization
         self.stats_names = tuple(self.stats.view(np.zeros((0, len(self.stats.features)), np.float32),
                                                 grouped=True, normalize=True)[1])
@@ -106,7 +106,7 @@ class FeaturePipeline:
         normalization = config.get('normalization')
         if normalization is not None:
             normalization = PageStatsNormalization.from_dict(normalization)
-        return cls(sources, normalization)
+        return cls(sources, normalization, config.get('stats_extra_groups'))
 
     @property
     def dims(self):
@@ -114,11 +114,14 @@ class FeaturePipeline:
                 'stats': len(self.stats_names)}
 
     def state_dict(self):
-        return {'stats_names': self.stats_names, 'stats_metadata': self.stats.metadata(),
+        state = {'stats_names': self.stats_names, 'stats_metadata': self.stats.metadata(),
                 'normalization': self.normalization.to_dict() if self.normalization else 'fixed_v1',
                 'dense_normalization': 'l2_float32_eps_1e-12', 'stats_block_scale': '1/sqrt(dim)',
                 'coordinate_normalization': 'clip_page_fractions_0_1',
                 'modality_order': ['image', 'text', 'stats'], 'dims': self.dims}
+        if self.stats.extra_groups:
+            state['stats_extra_groups'] = {g: list(s) for g, s in self.stats.extra_groups.items()}
+        return state
 
     def source_provenance(self):
         """Cheap immutable-run signature; no scan/hash of large vector LMDB contents."""

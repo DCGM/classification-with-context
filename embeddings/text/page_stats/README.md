@@ -599,3 +599,20 @@ vectors of private pages.
 | ita | `fine ` |
 | spa | `fin ` |
 | dan | `slut` |
+
+## Additive finer groups
+
+`PageStats(extra_groups=FINE_KEYWORD_GROUPS)` appends 33 features to the existing
+147-feature grouped view. The eleven groups are `volume`, `instalment`, `place`,
+`byline`, `translation`, `printer`, `rights`, `toc_heading`, `toc_column`,
+`index_kind` and `end_word`; their exact existing stems are listed in
+[`fine_groups.py`](fine_groups.py). Each has whole-page log counts and binary
+header/footer presence. Groups intentionally overlap the original coarse groups.
+No language-profile features are added.
+
+The original 147 names and normalized values remain an exact prefix. Raw extraction
+metadata and sparse vectors are unchanged. Fixed normalization uses the existing
+count/flag rules; no fitting is needed. `FeaturePipeline` accepts the same mapping
+as `stats_extra_groups` in its configuration and scales the complete model input
+by `1/sqrt(180)`. The raw-sparse native store can supply this view without rebuilding;
+legacy stores containing only the precomputed 147 values cannot.

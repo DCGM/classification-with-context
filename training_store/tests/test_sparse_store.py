@@ -7,7 +7,7 @@ import lmdb
 import numpy as np
 import pytest
 
-from embeddings.text.page_stats import PageStats, to_sparse
+from embeddings.text.page_stats import FINE_KEYWORD_GROUPS, PageStats, to_sparse
 from page_sequence.features import FeaturePipeline
 from page_sequence.index import PageIndex
 from page_sequence.schema import Window
@@ -23,6 +23,7 @@ def test_refresh_preserves_raw_stats_and_metadata_and_uses_new_text(tmp_path, ex
     config, pages = example
     vector = np.zeros(len(PageStats.features), np.float32)
     vector[[0, 4, 1000]] = [2, .125, 500]
+    vector[PageStats.features.index('kw:band ')] = 3
     raw = to_sparse(vector)
     env = lmdb.open(config['features']['sources']['stats']['stores']['public'])
     with env.begin(write=True) as txn:
@@ -98,6 +99,27 @@ def test_refresh_preserves_raw_stats_and_metadata_and_uses_new_text(tmp_path, ex
     expected = FeaturePipeline.from_config(sources)([pages[i-1] for i in (6, 2, 3, 2, 1)])
     for name in result['features']:
         np.testing.assert_array_equal(result['features'][name], expected[name].astype(np.float16))
+    # The same immutable store can expose the additive view, including through
+    # worker serialization, without changing labels or any other modality.
+    import pickle
+    fine_sources = copy.deepcopy(sources)
+    fine_sources['stats_extra_groups'] = FINE_KEYWORD_GROUPS
+    fine_features = FeaturePipeline.from_config(fine_sources)
+    fine_dataset = StoreDataset(PageIndex(output / 'catalogue.sqlite'), fine_features, output)
+    fine_dataset = pickle.loads(pickle.dumps(fine_dataset))
+    fine_result = fine_dataset[Window((6, 2, 3, 2, 1))]
+    fine_expected = fine_features([pages[i-1] for i in (6, 2, 3, 2, 1)])
+    assert fine_result['features']['stats'].shape == (5, 180)
+    assert fine_result['features']['stats'][1, 147] == np.float16((2 / 3) / np.sqrt(180))
+    assert fine_features.state_dict()['dims']['stats'] == 180
+    for name in fine_expected:
+        np.testing.assert_array_equal(fine_result['features'][name], fine_expected[name].astype(np.float16))
+    for name in ('image', 'text', 'presence'):
+        np.testing.assert_array_equal(fine_result['features'][name], result['features'][name])
+    assert json.loads((output / 'manifest.json').read_text())['feature_state']['dims']['stats'] == 147
+    with pytest.raises(ValueError, match='preprocessing'):
+        StoreDataset(PageIndex(base / 'catalogue.sqlite'), fine_features, base)
+    fine_dataset.reader.close()
     with pytest.raises(ValueError, match='published'):
         StoreDataset(PageIndex(output / 'catalogue.sqlite'),
                      FeaturePipeline.from_config(sources), output, allow_building=True)

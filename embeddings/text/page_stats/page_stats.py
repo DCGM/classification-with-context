@@ -809,12 +809,22 @@ class PageStats:
     features = FEATURES
     grouped_features = GROUPED_FEATURES
 
-    def __init__(self, groups: Optional[Dict[str, Sequence[str]]] = None):
-        """groups: keyword group -> stems for the grouped view (default KEYWORD_GROUPS); stems must be in STEMS."""
+    def __init__(self, groups: Optional[Dict[str, Sequence[str]]] = None,
+                 extra_groups: Optional[Dict[str, Sequence[str]]] = None):
+        """Group existing stems; extra_groups append features after the complete original view."""
         self.groups = {g: tuple(dict.fromkeys(s)) for g, s in (groups or KEYWORD_GROUPS).items()}
-        unknown = {s for stems in self.groups.values() for s in stems} - set(STEMS)
+        self.extra_groups = {g: tuple(dict.fromkeys(s)) for g, s in (extra_groups or {}).items()}
+        if set(self.groups) & set(self.extra_groups):
+            raise ValueError('extra group names must differ from existing groups')
+        if any(not stems for stems in self.extra_groups.values()):
+            raise ValueError('extra groups must contain existing stems')
+        unknown = {s for stems in (*self.groups.values(), *self.extra_groups.values()) for s in stems} - set(STEMS)
         if unknown:
             raise ValueError(f'stems not in STEMS (new stems need re-extraction): {sorted(unknown)}')
+
+    @property
+    def normalization_groups(self):
+        return dict(self.groups, **self.extra_groups)
 
     def embed_alto(self, alto: Union[bytes, str]) -> np.ndarray:
         return embed_alto(alto)
@@ -850,13 +860,20 @@ class PageStats:
         head_patterns = full[:, [col[n] for n in BLOCKS['head_patterns']]]
         foot_patterns = full[:, [col[n] for n in BLOCKS['foot_patterns']]]
         rest = full[:, [col[n] for n in TEXT_LINE_FEATURES + ALTO_FEATURES]]
-        return np.hstack(parts + [np.log1p(patterns), (head_patterns > 0).astype(np.float32),
-                                  (foot_patterns > 0).astype(np.float32), rest])
+        parts += [np.log1p(patterns), (head_patterns > 0).astype(np.float32),
+                  (foot_patterns > 0).astype(np.float32), rest]
+        if self.extra_groups:
+            for prefix in ('kw:', 'head_kw:', 'foot_kw:'):
+                hits = np.stack([full[:, [col[prefix + s] for s in stems]].sum(1)
+                                 for stems in self.extra_groups.values()], 1)
+                parts.append(np.log1p(hits) if prefix == 'kw:' else (hits > 0).astype(np.float32))
+        return np.hstack(parts)
 
     def grouped_names(self) -> Tuple[str, ...]:
         groups = tuple(self.groups)
         return (tuple(f'kw_{g}' for g in groups) + tuple(f'head_{g}' for g in groups)
-                + tuple(f'foot_{g}' for g in groups) + GROUPED_FEATURES[3 * len(KEYWORD_GROUPS):])
+                + tuple(f'foot_{g}' for g in groups) + GROUPED_FEATURES[3 * len(KEYWORD_GROUPS):]
+                + tuple(f'{prefix}{g}' for prefix in ('kw_', 'head_', 'foot_') for g in self.extra_groups))
 
     def view(self, full: np.ndarray, grouped: bool = False, log_counts: bool = True,
              include: Optional[Iterable[str]] = None,
@@ -881,9 +898,9 @@ class PageStats:
             raise ValueError(f'{full.shape[1]} columns, page stats version {VERSION} has {len(FEATURES)}')
         if grouped:
             x, names = self.grouped(full), self.grouped_names()
-            blocks = dict(GROUPED_BLOCKS, keywords=names[:len(self.groups)],
-                          head_keywords=names[len(self.groups):2 * len(self.groups)],
-                          foot_keywords=names[2 * len(self.groups):3 * len(self.groups)])
+            blocks = dict(GROUPED_BLOCKS, **{
+                block: tuple(f'{prefix}{g}' for g in self.normalization_groups)
+                for block, prefix in (('keywords', 'kw_'), ('head_keywords', 'head_'), ('foot_keywords', 'foot_'))})
         else:
             x, names, blocks = full.copy(), FEATURES, BLOCKS
             if log_counts:
@@ -894,7 +911,7 @@ class PageStats:
         columns_kept = [i for i, n in enumerate(names) if n in keep]
         x, names = x[:, columns_kept], tuple(names[i] for i in columns_kept)
         if normalize is not False:
-            groups = self.groups if grouped else None
+            groups = self.normalization_groups if grouped else None
             if normalize is True:
                 features = {}
                 for name in names:
@@ -926,7 +943,7 @@ class PageStats:
                 if positive.size:
                     scale = max(float(np.median(positive)), floor)
             features[name] = {'transform': transform, 'scale': scale}
-        return PageStatsNormalization(features, self.groups if grouped else None)
+        return PageStatsNormalization(features, self.normalization_groups if grouped else None)
 
     def metadata(self) -> dict:
         """What to store next to the vectors (e.g. an LMDB '__metadata__' entry)."""
