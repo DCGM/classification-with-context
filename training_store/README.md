@@ -1,5 +1,54 @@
 # Document training store
 
+## Raw sparse statistics and refreshed text embeddings (V2)
+
+V2 stores the **original sparse statistics bytes**, before grouping or
+normalization. A fixed 3,104-byte record retains the original DINO and text
+FP16 vectors, labels, row/document IDs, ordering and presence bits, plus a
+64-bit statistics offset and 32-bit byte count. Each shard has a companion
+`000000.stats.bin`: sparse uint16 indices followed by FP16 values, with pages
+in the same document order as the fixed records. Empty-but-present vectors
+remain distinguishable from missing statistics through the presence bit.
+
+`TrainingStore` reads both V1 and V2. V2 reads each page span with one dense
+read and one contiguous sparse-payload read. `records['stats']` contains the
+raw byte strings; `reader.features(records)` decodes and applies the model's
+grouping/normalization in batches of at most 512 pages, then returns FP16
+features. The full 3,324-dimensional vector is never materialized for the
+whole corpus. To experiment with another view, use `PageStats.decode` and
+`PageStats.view` on these raw byte strings; no data rebuild is needed.
+
+The refresh command reuses verified V1 DINO bytes and the exact catalogue,
+document mapping and pagination sidecars. It reads new text embeddings and
+raw statistics with sequential LMDB cursors, using a temporary disk-backed
+key index to route them to the output. Source precedence remains public
+then private, including keys shared by several documents. Raw statistics
+are finally repacked into document order. The full build uses bounded
+buffers, one conversion process, resumable phase checkpoints and shard
+checksums. A manifest is published only after source consistency and
+random-reference validation, including exact sparse-byte comparison.
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m training_store.refresh \
+  --base /path/to/old-published-store \
+  --sources /path/to/new-vector-sources.json \
+  --output /path/to/document-store-ocr-lines-sparse-v2
+```
+
+Source configuration has the same `sources` layout as `FeaturePipeline`.
+Image source signatures are retained for provenance/validation; images are
+copied from the old binary shards. The published new dataset is immutable.
+Old experiment checkpoints must continue using their original store identity.
+
+`training_store.relocate` verifies complete copies before replacing source
+directories with links. Its journals allow interrupted transfers to resume
+and prevent overwriting a different existing archive. The deployment
+supervisor `training_store.refresh_pipeline` waits for these relocations,
+builds on NVMe, then verifies an SSD copy before publishing its final path.
+See [the 2026-11-02 migration](../docs/native-store-refresh-2026-11-02.md).
+
+## Original grouped-statistics format (V1)
+
 This package converts the existing audited page index and vector LMDBs into an
 immutable directory of document-contiguous packed records. It never reads source
 text or OCR. The `page_sequence` runner can train and evaluate directly from this store.

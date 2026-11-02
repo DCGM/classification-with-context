@@ -20,7 +20,7 @@ import numpy as np
 
 from page_sequence.features import FeaturePipeline
 from page_sequence.schema import IGNORE, LABEL2ID, PAGE_TYPES, PLACEMENTS, Page
-from .format import DOCUMENT, RECORD, VERSION, atomic_json, digest
+from .format import DOCUMENT, RECORD, VERSION, SPARSE_VERSION, atomic_json, digest
 from .reader import TrainingStore
 
 
@@ -270,10 +270,25 @@ def validate(output, plan, sample_pages=4096):
             raw, _ = reference.sources[name].read(pages)
             if not np.array_equal(records[name], raw.astype(np.float16)):
                 raise ValueError('original dense embedding bytes changed')
+        if plan['version'] == SPARSE_VERSION:
+            # View equivalence alone cannot prove that every original statistic
+            # survived: several raw values can contribute to the same group.
+            for rec, page in zip(records, pages):
+                expected_raw = None
+                for env in reference.sources['stats']._envs.values():
+                    with env.begin() as txn:
+                        expected_raw = txn.get(page.key.encode())
+                    if expected_raw is not None:
+                        break
+                if rec['stats'] != (expected_raw if expected_raw is not None else b''):
+                    raise ValueError('original sparse statistics bytes changed')
     reader.close()
     db.close()
-    return {'sample_pages': sample_pages, 'seed': 23, 'present': counts,
-            'fp16_rounded_reference_exact': True, 'max_abs_rounding_error': max_error}
+    result = {'sample_pages': sample_pages, 'seed': 23, 'present': counts,
+              'fp16_rounded_reference_exact': True, 'max_abs_rounding_error': max_error}
+    if plan['version'] == SPARSE_VERSION:
+        result['raw_sparse_bytes_exact'] = True
+    return result
 
 
 def run(args):

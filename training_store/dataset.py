@@ -12,7 +12,7 @@ from torch.utils.data import Dataset
 
 from page_sequence.data import make_example, page_edge_targets
 from page_sequence.schema import IGNORE, PAGE_TYPES, PLACEMENTS
-from .format import DOCUMENT, RECORD, VERSION, digest
+from .format import DOCUMENT, SPARSE_VERSION, record_dtype, digest
 from .reader import TrainingStore
 
 
@@ -28,12 +28,15 @@ class StoreDataset(Dataset):
         plan_path = self.path / ('plan.json' if allow_building else 'manifest.json')
         self.plan = json.loads(plan_path.read_text())
         p = self.plan
-        if (p['version'] != VERSION or p['record_bytes'] != RECORD.itemsize or p['pilot']
+        record_dtype(p)
+        if (p['pilot']
                 or tuple(p['page_types']) != PAGE_TYPES or tuple(p['placements']) != PLACEMENTS
                 or canonical(p['feature_state']) != canonical(features.state_dict())):
             raise ValueError('store layout, labels or preprocessing do not match training')
         if not allow_building and not p.get('complete'):
             raise ValueError('incomplete training store')
+        if allow_building and p['version'] == SPARSE_VERSION:
+            raise ValueError('sparse stores must be published before training')
         if Path(index.path).resolve() != (self.path / 'catalogue.sqlite').resolve():
             raise ValueError('store training must use its own catalogue')
         if digest(self.path / 'documents.npy') != p['documents_sha256']:
@@ -79,7 +82,9 @@ class StoreDataset(Dataset):
         final = marker.with_suffix('').with_suffix('.bin')
         expected = self.plan['shard_pages'][shard]
         if (report['build_id'] != self.plan['build_id'] or report['pages'] != expected
-                or final.stat().st_size != expected * RECORD.itemsize):
+                or final.stat().st_size != expected * record_dtype(self.plan).itemsize
+                or (self.plan['version'] == SPARSE_VERSION and
+                    (self.path / 'shards' / f'{shard:06d}.stats.bin').stat().st_size != report['stats_bytes'])):
             raise ValueError('completed shard does not match store plan')
         self._ready.add(shard)
         return True

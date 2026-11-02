@@ -15,6 +15,27 @@ RECORD = np.dtype([
 DOCUMENT = np.dtype([('first', '<u8'), ('length', '<u4'), ('shard', '<u4'), ('offset', '<u8')])
 assert RECORD.itemsize == 3386
 
+# V2 keeps raw sparse statistics in a document-ordered companion file.
+SPARSE_VERSION = 2
+SPARSE_RECORD = np.dtype([
+    ('image', '<f2', (768,)), ('text', '<f2', (768,)),
+    ('stats_offset', '<u8'), ('stats_bytes', '<u4'),
+    *RECORD.descr[3:],
+], align=False)
+# In-memory reads hold only the requested sparse byte strings, never a corpus array.
+SPARSE_READ_RECORD = np.dtype([
+    ('image', '<f2', (768,)), ('text', '<f2', (768,)), ('stats', object),
+    *RECORD.descr[3:],
+])
+
+
+def record_dtype(manifest):
+    version = manifest['version']
+    dtype = {VERSION: RECORD, SPARSE_VERSION: SPARSE_RECORD}.get(version)
+    if dtype is None or manifest['record_bytes'] != dtype.itemsize:
+        raise ValueError('incompatible training store layout')
+    return dtype
+
 
 def digest(path):
     h = hashlib.sha256()
