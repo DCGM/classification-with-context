@@ -90,3 +90,23 @@ def test_completed_parent_reconstruction_preserves_best_pretrained_weights(tmp_p
     assert torch.equal(result['model']['weight'],source['model']['weight'])
     assert torch.equal(result['optimizer']['momentum'],source['optimizer']['momentum'])
     assert not json.loads((target/'transition-reconstruction.json').read_text())['exact_parent_transition']
+
+
+def test_launch_waits_for_configured_memory_headroom(tmp_path, monkeypatch):
+    monitor = module('training_monitor')
+    root = tmp_path / 'runtime'; root.mkdir()
+    (root / 'config.json').write_text(json.dumps({'run_dir': str(tmp_path / 'run')}))
+    job = {'id': 'a', 'kind': 'parent', 'root': str(root), 'unit': 'a.service'}
+    (tmp_path / 'monitor-config.json').write_text(json.dumps({
+        'max_trainings': 2, 'min_launch_available_gib': 9, 'jobs': [job]}))
+    m = monitor.Monitor(tmp_path)
+    monkeypatch.setattr(m, 'active', lambda job: False)
+    monkeypatch.setattr(monitor, 'training_processes', lambda: {})
+    monkeypatch.setattr(monitor, 'available_gib', lambda: 8)
+    launches = []
+    monkeypatch.setattr(m, 'launch', lambda job: launches.append(job))
+    m.tick()
+    assert not launches
+    monkeypatch.setattr(monitor, 'available_gib', lambda: 10)
+    m.tick()
+    assert len(launches) == 1

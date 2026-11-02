@@ -38,7 +38,8 @@ def run(root):
     if not passed.exists():
         from training_monitor import available_gib, training_processes
         limit = json.loads((root / 'monitor-config.json').read_text())['max_trainings']
-        while available_gib() < 6 or len(training_processes()) >= limit:
+        required = json.loads((root / 'monitor-config.json').read_text()).get('min_launch_available_gib', 6)
+        while available_gib() < required or len(training_processes()) >= limit:
             write(status, dict(phase='waiting_for_smoke_slot', updated=time.time()))
             time.sleep(15)
         write(status, dict(phase='smoke_testing', updated=time.time()))

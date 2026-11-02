@@ -287,7 +287,9 @@ class Monitor:
         helper_preparing = self.helper is not None and self.helper[2] == 'prepare'
         for job in self.config['jobs']:
             state = self.state['jobs'][job['id']]
-            if occupancy >= self.config['max_trainings'] or available_gib() < 6 or helper_preparing: break
+            if (occupancy >= self.config['max_trainings']
+                    or available_gib() < self.config.get('min_launch_available_gib', 6)
+                    or helper_preparing): break
             if state['phase'] not in ('queued','ready','retry_wait'): continue
             if job['kind'] == 'tail' and any(
                     self.state['jobs'][p['id']]['phase'] == 'retry_wait'
