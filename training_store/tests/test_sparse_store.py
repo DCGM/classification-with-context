@@ -60,7 +60,21 @@ def test_refresh_preserves_raw_stats_and_metadata_and_uses_new_text(tmp_path, ex
             run(base, output, sources, sample_pages=32)
         assert not (output / 'manifest.json').exists()
         monkeypatch.setattr(refresh, 'ingest', original)
-    run(base, output, sources, sample_pages=32)
+    if interrupted:
+        run(base, output, sources, sample_pages=32)
+    else:
+        from training_store.refresh_pipeline import run as run_pipeline
+        work, prepared, ssd = tmp_path / 'workflow', tmp_path / 'relocation', tmp_path / 'ssd-store'
+        prepared.mkdir()
+        (prepared / 'status.json').write_text(json.dumps({'phase': 'complete'}))
+        source_config = tmp_path / 'sources.json'
+        source_config.write_text(json.dumps(sources))
+        run_pipeline(dict(work=str(work), relocation_journal=str(prepared), base=str(base),
+                          nvme=str(output), ssd=str(ssd), sources=str(source_config), validation_pages=32))
+        assert (ssd / 'manifest.json').read_bytes() == (output / 'manifest.json').read_bytes()
+        assert output.is_dir() and not output.is_symlink()
+        assert ssd.is_dir() and not ssd.is_symlink()
+        assert json.loads((work / 'pipeline-status.json').read_text())['phase'] == 'complete'
     manifest = json.loads((output / 'manifest.json').read_text())
     assert manifest['version'] == SPARSE_VERSION
     assert manifest['complete']
