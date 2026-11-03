@@ -3,6 +3,7 @@ import torch
 from torch import nn
 
 from .schema import PAGE_TYPES, PLACEMENTS
+from .modalities import MODALITIES, enabled_modalities as canonical_modalities
 
 
 class BertBackbone(nn.Module):
@@ -99,9 +100,10 @@ class Fusion(nn.Module):
 
 class PageTagger(nn.Module):
     def __init__(self, backbone, dims, fusion='linear', num_types=len(PAGE_TYPES), auxiliary_edges=False,
-                 scan_borders=False):
+                 scan_borders=False, enabled_modalities=None):
         super().__init__()
         self.backbone, self.dims, self.fusion_kind, self.num_types = backbone, dims, fusion, num_types
+        self.enabled_modalities = canonical_modalities(enabled_modalities)
         h = backbone.hidden_size
         self.fusion = Fusion(dims, h, backbone.initial_scale, fusion)
         self.type_head = nn.Linear(h, num_types)
@@ -122,6 +124,10 @@ class PageTagger(nn.Module):
     def forward(self, features, attention_mask, return_embeddings=False):
         if not attention_mask.any(dim=-1).all():
             raise ValueError('empty sequence in batch')
+        if self.enabled_modalities != MODALITIES:
+            flags = features['presence']
+            keep = flags.new_tensor([name in self.enabled_modalities for name in MODALITIES])
+            features = dict(features, presence=flags * keep)
         x = self.fusion(features)
         if self.scan_borders:
             # Metadata is page-aligned only for batching. The learned tokens are
@@ -170,6 +176,8 @@ class PageTagger(nn.Module):
             spec['auxiliary_edges'] = True
         if self.scan_borders:
             spec['scan_borders'] = True
+        if self.enabled_modalities != MODALITIES:
+            spec['enabled_modalities'] = list(self.enabled_modalities)
         return spec
 
 
@@ -182,4 +190,4 @@ def from_specification(spec):
     if 'initial_scale' in b:
         backbone.initial_scale = b['initial_scale']
     return PageTagger(backbone, spec['dims'], spec['fusion'], spec['num_types'], spec.get('auxiliary_edges', False),
-                      spec.get('scan_borders', False))
+                      spec.get('scan_borders', False), spec.get('enabled_modalities'))

@@ -29,6 +29,7 @@ from .sampling import WindowSampler
 from .schema import PAGE_TYPES, PLACEMENTS, Page
 from .precision import autocast
 from .augmentation import modality_dropout, pagination_dropout, scattered_dropout
+from .modalities import ModalitySubsetDataset
 
 
 def make_dataset(index, features, config):
@@ -48,6 +49,8 @@ def make_dataset(index, features, config):
     if config.get('boundary_features'):
         from .scan_borders import BoundaryFeatureDataset
         dataset = BoundaryFeatureDataset(dataset)
+    if 'enabled_modalities' in config:
+        dataset = ModalitySubsetDataset(dataset, config['enabled_modalities'])
     return dataset
 
 
@@ -258,7 +261,8 @@ def train(config, resume=None, stop_after=None):
             raise ValueError('unknown backbone kind')
         model = PageTagger(backbone, getattr(dataset, 'model_dims', features.dims), config.get('fusion', 'linear'),
                            auxiliary_edges=config.get('auxiliary_edges', False),
-                           scan_borders=config.get('scan_borders', False)).to(device)
+                           scan_borders=config.get('scan_borders', False),
+                           enabled_modalities=config.get('enabled_modalities')).to(device)
         step, best = 0, -1.
     model.compute_precision = precision
     scaler = torch.amp.GradScaler('cuda', enabled=precision == 'float16', init_scale=1024.)
