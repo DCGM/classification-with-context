@@ -51,6 +51,26 @@ def point_at(curve, threshold):
     return result
 
 
+def high_threshold_analysis(curve):
+    thresholds = [.5, .55, .6, .65, .7, .75, .8, .85, .9, .925, .95,
+                  .97, .975, .98, .99, .995, .999, .9995, .9999, 1.]
+    default = point_at(curve, .5)
+    eligible = np.flatnonzero((curve['threshold'] >= .5) & (curve['threshold'] <= 1))
+    costs = {}
+    for ratio in [1., 1.25, 1.5, 2., 3., 5.]:
+        best = default
+        best_cost = default['fn'] + ratio * default['fp']
+        if len(eligible):
+            loss = curve['fn'][eligible] + ratio * curve['fp'][eligible]
+            i = int(np.argmin(loss))
+            if loss[i] <= best_cost:
+                best, best_cost = point(curve, int(eligible[i])), float(loss[i])
+        costs[str(ratio)] = dict(best, weighted_errors=best_cost)
+    return dict(points=[point_at(curve, t) for t in thresholds],
+                cost_optima_above_half=costs,
+                cost_definition='FN + ratio * FP; illustrative relative error costs')
+
+
 def summarize(truth, probabilities):
     curve = threshold_curve(truth, probabilities)
     default = point_at(curve, .5)
@@ -69,6 +89,7 @@ def summarize(truth, probabilities):
         selected[name] = point(curve, int(np.flatnonzero(eligible & (curve['tp'] == best_tp))[0]))
     return dict(n=curve['n'], positives=curve['positive'], negatives=curve['negative'],
                 operating_points=selected,
+                high_thresholds=high_threshold_analysis(curve),
                 fixed_thresholds=[point_at(curve, t) for t in
                                   [.01, .05, .1, .2, .3, .4, .5, .6, .7, .8, .9, .95, .99]])
 

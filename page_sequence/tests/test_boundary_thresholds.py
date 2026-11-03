@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from sklearn.metrics import precision_recall_curve
 
-from page_sequence.boundary_thresholds import point_at, summarize, threshold_curve
+from page_sequence.boundary_thresholds import high_threshold_analysis, point_at, summarize, threshold_curve
 
 
 def test_tied_scores_cannot_be_split_to_remove_false_positives():
@@ -34,3 +34,13 @@ def test_curve_matches_sklearn_and_inclusive_threshold_decisions():
         pred = probs >= threshold
         assert point['fp'] == int((~truth & pred).sum())
         assert point['fn'] == int((truth & ~pred).sum())
+
+
+def test_higher_false_positive_cost_selects_conservative_operating_point():
+    result = high_threshold_analysis(threshold_curve([1, 1, 0, 1], [.9, .8, .85, .4]))
+    optimum = result['cost_optima_above_half']['2.0']
+    assert optimum['threshold'] == .9
+    assert (optimum['fp'], optimum['fn'], optimum['weighted_errors']) == (0, 2, 2.)
+    # If every score is below 0.5, the allowed range still includes the default.
+    result = high_threshold_analysis(threshold_curve([1], [.3]))
+    assert result['cost_optima_above_half']['2.0']['threshold'] == .5
