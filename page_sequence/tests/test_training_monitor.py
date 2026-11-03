@@ -110,3 +110,24 @@ def test_launch_waits_for_configured_memory_headroom(tmp_path, monkeypatch):
     monkeypatch.setattr(monitor, 'available_gib', lambda: 10)
     m.tick()
     assert len(launches) == 1
+
+
+def test_queue_reserves_one_job_per_storage_slot(tmp_path, monkeypatch):
+    monitor = module('training_monitor')
+    jobs = []
+    for name, slot in [('S', 'nvme'), ('I', 'nvme'), ('T', 'ssd')]:
+        root = tmp_path / name; root.mkdir()
+        (root / 'config.json').write_text(json.dumps({'run_dir': str(root / 'run')}))
+        jobs.append(dict(id=name, kind='parent', root=str(root), unit=name + '.service', slot=slot))
+    (tmp_path / 'monitor-config.json').write_text(json.dumps({'max_trainings': 2, 'jobs': jobs}))
+    m = monitor.Monitor(tmp_path)
+    monkeypatch.setattr(m, 'active', lambda job: False)
+    monkeypatch.setattr(monitor, 'available_gib', lambda: 20)
+    monkeypatch.setattr(monitor, 'training_processes', lambda: {})
+    launched = []
+    def launch(job):
+        launched.append(job['id'])
+        m.state['jobs'][job['id']].update(phase='running', launched=monitor.time.time())
+    monkeypatch.setattr(m, 'launch', launch)
+    m.tick()
+    assert launched == ['S', 'T']

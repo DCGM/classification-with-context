@@ -284,13 +284,17 @@ class Monitor:
         # Existing trainers, including unregistered ones, count toward the cap.
         configs = set(processes.values()) | {str(Path(j['root']) / 'config.json') for j in active_jobs}
         occupancy = len(configs) + len(processes) - len(set(processes.values()))
+        occupied_slots = {j.get('slot') for j in active_jobs if j.get('slot')}
+        last_launch = max((s.get('launched', 0) for s in self.state['jobs'].values()), default=0)
         helper_preparing = self.helper is not None and self.helper[2] == 'prepare'
         for job in self.config['jobs']:
             state = self.state['jobs'][job['id']]
             if (occupancy >= self.config['max_trainings']
                     or available_gib() < self.config.get('min_launch_available_gib', 6)
                     or helper_preparing): break
+            if time.time() - last_launch < self.config.get('launch_spacing_seconds', 0): break
             if state['phase'] not in ('queued','ready','retry_wait'): continue
+            if job.get('slot') and job['slot'] in occupied_slots: continue
             if job['kind'] == 'tail' and any(
                     self.state['jobs'][p['id']]['phase'] == 'retry_wait'
                     for p in self.config['jobs'] if p['kind'] == 'parent'):
@@ -298,7 +302,10 @@ class Monitor:
             if job['kind']=='tail' and not (Path(load_json(Path(job['root'])/'config.json')['run_dir'])/'fork.json').exists(): continue
             if state.get('next_attempt',0)>time.time(): continue
             self.launch(job)
-            if state['phase']=='running': occupancy+=1
+            if state['phase']=='running':
+                occupancy+=1
+                last_launch = state.get('launched', time.time())
+                if job.get('slot'): occupied_slots.add(job['slot'])
         self.state['all_finished'] = all(s['phase'] == 'finished' for s in self.state['jobs'].values())
         self.state.update(updated=datetime.datetime.now().astimezone().isoformat(),
                           active_trainings=occupancy, memory_available_gib=available_gib(),
@@ -315,6 +322,8 @@ def main():
     monitor=Monitor(args.root)
     while True:
         monitor.tick()
+        if monitor.config.get('exit_when_complete') and monitor.state['all_finished']:
+            return
         time.sleep(5)
 
 
