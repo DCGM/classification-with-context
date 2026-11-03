@@ -103,3 +103,8 @@ group-level flat table is `ambiguity-threshold05.csv` beside it. Every model and
 both metadata modes exactly reconcile with the original validation TP/FP/FN.
 Two tests cover direction-specific/unknown labels and assignment of negative
 pairs to the same categories used for true boundaries.
+
+## Nearby-boundary recall
+
+The [recall-only ±1..±5 extension](boundary-tolerance-threshold05.md) retains
+the exact precision/FP metrics and checks for nearby predictions within each scan.
