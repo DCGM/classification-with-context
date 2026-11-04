@@ -77,6 +77,7 @@ def failure_policy(text):
                      'ModuleNotFoundError', 'SyntaxError', 'PermissionError',
                      'nonfinite training loss', 'repeated FP16 gradient overflow',
                      'invalid device ordinal')
+    deterministic += ('preflight verification failed',)
     if any(token in text for token in deterministic):
         return 'needs_diagnosis'
     return 'retry'
