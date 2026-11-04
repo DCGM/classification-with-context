@@ -295,6 +295,8 @@ class Monitor:
                     or helper_preparing): break
             if time.time() - last_launch < self.config.get('launch_spacing_seconds', 0): break
             if state['phase'] not in ('queued','ready','retry_wait'): continue
+            if any(self.state['jobs'][jid]['phase'] != 'finished' for jid in job.get('depends_on', [])):
+                continue
             if job.get('slot') and job['slot'] in occupied_slots: continue
             if job['kind'] == 'tail' and any(
                     self.state['jobs'][p['id']]['phase'] == 'retry_wait'

@@ -131,3 +131,27 @@ def test_queue_reserves_one_job_per_storage_slot(tmp_path, monkeypatch):
     monkeypatch.setattr(m, 'launch', launch)
     m.tick()
     assert launched == ['S', 'T']
+
+
+def test_queue_waits_for_completed_dependency(tmp_path, monkeypatch):
+    monitor = module('training_monitor')
+    jobs = []
+    for name in ['parent', 'next']:
+        root = tmp_path / name; root.mkdir()
+        (root / 'config.json').write_text(json.dumps({'run_dir': str(root / 'run')}))
+        jobs.append(dict(id=name, kind='parent', root=str(root), unit=name + '.service'))
+    jobs[1]['depends_on'] = ['parent']
+    (tmp_path / 'monitor-config.json').write_text(json.dumps({'max_trainings': 2, 'jobs': jobs}))
+    m = monitor.Monitor(tmp_path)
+    m.state['jobs']['parent']['phase'] = 'retry_wait'
+    m.state['jobs']['parent']['next_attempt'] = monitor.time.time() + 10000
+    monkeypatch.setattr(m, 'active', lambda job: False)
+    monkeypatch.setattr(monitor, 'available_gib', lambda: 20)
+    monkeypatch.setattr(monitor, 'training_processes', lambda: {})
+    launches = []
+    monkeypatch.setattr(m, 'launch', lambda job: launches.append(job['id']))
+    m.tick()
+    assert not launches
+    m.state['jobs']['parent']['phase'] = 'finished'
+    m.tick()
+    assert launches == ['next']

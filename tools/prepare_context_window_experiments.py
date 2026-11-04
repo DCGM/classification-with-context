@@ -60,7 +60,8 @@ def prepare(reference, output, repository):
         shutil.copy2(repository / 'tools/context_window_job.py', root / 'launch.py')
         shutil.copy2(repository / 'tools/context_window_smoke.py', root / 'smoke.py')
         jobs.append(dict(id='r21-w1-' + tag, kind='parent', root=str(root), slot=slot,
-                         unit='page-sequence-r21-w1-' + tag.lower() + '.service'))
+                         unit='page-sequence-r21-w1-' + tag.lower() + '.service',
+                         depends_on=[{'S': 'r20-SI', 'T': 'r20-TI', 'I': 'r21-w1-S'}[tag]]))
     write(output / 'jobs.json', jobs)
     write(output / 'design.json', dict(reference=str(reference), parent_window_size=512,
           parent_batch_size=64, context_size=1, max_effective_page_slots=32768,
