@@ -75,7 +75,7 @@ def boundary_consistency(output, batch):
     return loss, denom.detach(), conflicts
 
 
-def task_losses(output, batch, weights=LossWeights()):
+def task_losses(output, batch, weights=LossWeights(), normalization_denominators=None):
     valid = batch['attention_mask']
     type_mask = valid & (batch['type'] != IGNORE)
     gold = type_mask & batch['gold']
@@ -96,11 +96,15 @@ def task_losses(output, batch, weights=LossWeights()):
         weight = batch['pair_weight' if task == 'starts' else 'weight'][mask]
         denom = weight.sum()
         denominators[task] = denom.detach()
-        if mask.any():
+        if getattr(weights, task) == 0:
+            # Keep disabled heads out of autograd (and AdamW weight decay).
+            result[task] = logits.new_zeros((), dtype=torch.float32)
+        elif mask.any():
             raw = (F.binary_cross_entropy_with_logits(logits[mask].float(), target[mask].float(), reduction='none')
                    if task in ('starts', 'page_start', 'page_end') else
                    F.cross_entropy(logits[mask].float(), target[mask], reduction='none'))
-            result[task] = (raw * weight).sum() / denom.clamp_min(1e-12)
+            normalizer = denom if normalization_denominators is None else normalization_denominators[task]
+            result[task] = (raw * weight).sum() / normalizer.clamp_min(1e-12)
         else:
             result[task] = logits.float().sum() * 0
     if weights.boundary_consistency:

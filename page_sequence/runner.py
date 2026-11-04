@@ -30,6 +30,7 @@ from .schema import PAGE_TYPES, PLACEMENTS, Page
 from .precision import autocast
 from .augmentation import modality_dropout, pagination_dropout, scattered_dropout
 from .modalities import ModalitySubsetDataset
+from .context_training import backward_chunks
 
 
 def make_dataset(index, features, config):
@@ -186,6 +187,15 @@ def provenance(index, manifest):
 
 def train(config, resume=None, stop_after=None):
     weights_by_stage = {stage: stage_loss_weights(config, stage) for stage in ('pretrain', 'finetune')}
+    parent_size = config.get('sampling_window_size', config['window_size'])
+    chunked = 'sampling_window_size' in config
+    if chunked and (not 1 <= config['window_size'] <= parent_size or config.get('scan_borders')
+                    or config.get('context_microbatch_size', 0) < 1):
+        raise ValueError('invalid fixed-parent context experiment')
+    if chunked and any(w.boundary_consistency for w in weights_by_stage.values()):
+        raise ValueError('chunked training does not support boundary consistency')
+    if config['window_size'] == 1 and (not chunked or any(w.starts for w in weights_by_stage.values())):
+        raise ValueError('W1 requires fixed-parent chunks and disabled pairwise boundary loss')
     if any(w.boundary_consistency for w in weights_by_stage.values()) and not config.get('auxiliary_edges', False):
         raise ValueError('boundary consistency requires auxiliary_edges configuration')
     dropout = config.get('pagination_dropout', {})
@@ -228,7 +238,7 @@ def train(config, resume=None, stop_after=None):
         scan_settings['border_tokens'] = bool(config.get('scan_borders'))
     if scan_settings.get('metadata_probability', 0) and not config.get('boundary_features'):
         raise ValueError('document metadata requires five-bit boundary features')
-    sampler = sampler_class(index, config['window_size'], config['seed'],
+    sampler = sampler_class(index, parent_size, config['seed'],
                             variable_lengths=config.get('variable_lengths', False),
                             edge_crops=config.get('edge_crops'),
                             **({'scan_batches': scan_settings} if complete_scans else {}))
@@ -297,6 +307,12 @@ def train(config, resume=None, stop_after=None):
     if resume and saved_training is None:
         progress['stage'] = 'pretrain' if step < config['pretrain_steps'] else 'finetune'
         progress['stage_step'] = step if progress['stage'] == 'pretrain' else step - config['pretrain_steps']
+    if chunked and not resume:
+        # A memory interruption before the first validation must still be resumable.
+        save_checkpoint(run_dir / 'initial.pt', model, optimizer, sampler, step, best,
+                        config, prov, features.state_dict(), progress)
+        save_checkpoint(run_dir / 'latest.pt', model, optimizer, sampler, step, best,
+                        config, prov, features.state_dict(), progress)
     loader, batches = training_loader(dataset, sampler, config)
     model.train()
 
@@ -365,12 +381,18 @@ def train(config, resume=None, stop_after=None):
                     augmented = pagination_dropout(batch['features'], **dropout)
                     augmented = modality_dropout(augmented, **modality_config)
                     augmented = scattered_dropout(augmented, **scattered_config)
-                    with autocast(model, device):
-                        output = model(augmented, batch['attention_mask'])
-                    losses, denominators = task_losses(output, batch, loss_weights)
-                    if not torch.isfinite(losses['total']):
-                        raise FloatingPointError('nonfinite training loss')
-                    scaler.scale(losses['total']).backward()
+                    if chunked:
+                        output = None
+                        losses, denominators = backward_chunks(
+                            model, batch, augmented, config['window_size'],
+                            config['context_microbatch_size'], loss_weights, scaler, device)
+                    else:
+                        with autocast(model, device):
+                            output = model(augmented, batch['attention_mask'])
+                        losses, denominators = task_losses(output, batch, loss_weights)
+                        if not torch.isfinite(losses['total']):
+                            raise FloatingPointError('nonfinite training loss')
+                        scaler.scale(losses['total']).backward()
                     scaler.unscale_(optimizer)
                     norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config['optimizer']['clip_grad'],
                                                           error_if_nonfinite=precision == 'float32')
@@ -398,6 +420,9 @@ def train(config, resume=None, stop_after=None):
                               'loss_scale': scaler.get_scale(),
                               'pages_per_second': int(raw_batch['attention_mask'].sum()) / elapsed,
                               'sampler': dict(sampler.counters), 'coverage_epochs': sampler.epoch}
+                    if chunked:
+                        record['context_partition'] = dict(parent_size=parent_size,
+                            context_size=config['window_size'], microbatch=config['context_microbatch_size'])
                     # The device copy and scalar logging are complete. Do not retain
                     # the consumer's pinned batch (or last training graph) in validation.
                     del raw_batch, batch, augmented, output, losses, denominators, norm

@@ -131,6 +131,7 @@ def side_sequence_report(counts):
 class Evaluator:
     def __init__(self, threshold=.5):
         self.threshold = threshold
+        self.boundary_enabled = None
         self.confusions = {name: np.zeros((n, n), np.int64) for name, n in (
             ('curated_type', len(PAGE_TYPES)), ('weak_type_agreement', len(PAGE_TYPES)),
             ('placement_db_agreement', len(PLACEMENTS)))}
@@ -163,12 +164,20 @@ class Evaluator:
             self.confusions[name] += confusion_matrix(y[mask], pred[mask], labels=np.arange(len(self.confusions[name])))
         y = np.array([False] + [a.doc_key != b.doc_key for a, b in zip(pages, pages[1:])])
         valid = np.asarray(result['pair_mask'], bool)
-        if valid[0] or not valid[1:].all():
+        enabled = result.get('boundary_enabled', True)
+        if self.boundary_enabled is not None and self.boundary_enabled != enabled:
+            raise ValueError('cannot mix evaluated and disabled pairwise boundary outputs')
+        self.boundary_enabled = enabled
+        invalid_pairs = (valid[0] or not valid[1:].all()) if enabled else valid.any()
+        if invalid_pairs:
             raise ValueError('evaluation requires all internal pairs exactly once')
+        if not enabled:
+            self.boundaries['all']
+            self.boundaries['within_document']
         p = result['starts_document_probs']
         if not np.isfinite(p[valid]).all():
             raise ValueError('nonfinite merged boundary probabilities')
-        for i in range(1, len(pages)):
+        for i in range(1, len(pages)) if enabled else ():
             stratum = (join_stratum(documents[pages[i - 1].doc_key], documents[pages[i].doc_key])
                        if y[i] else 'within_document')
             for group in ('all', stratum):
@@ -199,17 +208,18 @@ class Evaluator:
                 elif page_type in BACK_TYPES:
                     self.position_counts['back_predictions'] += 1
                     self.position_counts['back_at_start'] += int(position < .25)
-        self.span_tp += len(gt_spans & pred_spans)
-        self.span_true += len(gt_spans)
-        self.span_pred += len(pred_spans)
+        if enabled:
+            self.span_tp += len(gt_spans & pred_spans)
+            self.span_true += len(gt_spans)
+            self.span_pred += len(pred_spans)
         self.streams.append({'id': stream_id, 'pages': len(pages),
                              'processed_pages': result['processed_pages'],
-                             'exact_segmentation': bool(np.array_equal(y[1:], predicted[1:])),
+                             'exact_segmentation': bool(np.array_equal(y[1:], predicted[1:])) if enabled else None,
                              'side_sequence': side_sequence_report(side_counts),
-                             'starts': binary_metrics(y[1:], p[1:], self.threshold)})
+                             'starts': binary_metrics(y[1:], p[1:], self.threshold) if enabled else None})
 
     def report(self):
-        return {name: classification_metrics(cm, PLACEMENTS if name.startswith('placement') else PAGE_TYPES)
+        report = {name: classification_metrics(cm, PLACEMENTS if name.startswith('placement') else PAGE_TYPES)
                 for name, cm in self.confusions.items()} | {
             'starts': {group: binary_metrics(*data, self.threshold) for group, data in self.boundaries.items()
                        if group in ('all', 'within_document')},
@@ -234,5 +244,14 @@ class Evaluator:
             'exact_spans': {'tp': self.span_tp, 'predicted': self.span_pred, 'true': self.span_true,
                             'precision': self.span_tp / self.span_pred if self.span_pred else None,
                             'recall': self.span_tp / self.span_true if self.span_true else None},
-            'exact_stream_fraction': (sum(s['exact_segmentation'] for s in self.streams) / len(self.streams)
-                                      if self.streams else None), 'streams': self.streams}
+            'exact_stream_fraction': (np.mean([s['exact_segmentation'] for s in self.streams
+                                              if s['exact_segmentation'] is not None]).item()
+                                      if any(s['exact_segmentation'] is not None for s in self.streams)
+                                      else None), 'streams': self.streams}
+        if self.boundary_enabled is False:
+            report['boundary_enabled'] = False
+            report['starts'] = {'all': {k: (0 if k == 'n' else None)
+                                        for k in binary_metrics([], [], self.threshold)}}
+            report['join_detection'] = {}
+            report['exact_spans'] = {}
+        return report

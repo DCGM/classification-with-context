@@ -17,7 +17,7 @@ def document_edge_blocks(index, window_size, sample_pages=8192, seed=7193):
 
     No neighbouring document is included. Catalogue metadata only, no feature scan.
     """
-    if window_size < 2 or sample_pages < 1:
+    if window_size < 1 or sample_pages < 1:
         raise ValueError('positive panel size and window size >=2 required')
     rng = np.random.default_rng(seed)
     reservoir = []

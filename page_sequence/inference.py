@@ -22,7 +22,8 @@ class InferenceConfig:
     edge_power: int = 2
 
     def __post_init__(self):
-        if not (self.window_size >= 2 and 1 <= self.stride < self.window_size):
+        if not ((self.window_size == 1 and self.stride == 1) or
+                (self.window_size >= 2 and 1 <= self.stride < self.window_size)):
             raise ValueError('stride must be 1..window_size-1 to cover every adjacent pair')
         if self.merge not in ('center_logits', 'uniform_logits', 'uniform_probs', 'center_probs', 'central'):
             raise ValueError('unknown merge strategy')
@@ -39,6 +40,8 @@ class InferenceConfig:
 
 
 def window_spans(n, size, stride, tail='anchored'):
+    if size == 1 and stride == 1 and n >= 1:
+        return [(i, i + 1) for i in range(n)]
     if n < 1 or size < 2 or not 1 <= stride < size:
         raise ValueError('nonempty stream and pair-covering window/stride required')
     if tail not in ('anchored', 'regular'):
@@ -108,8 +111,11 @@ class StreamMerger:
             seam = (w[:-1] == 0) != (w[1:] == 0)
             pair_w[1:][seam] = np.maximum(w[:-1], w[1:])[seam]
         p = np.asarray(output['pair_mask'], bool)
-        if p.shape != (end - start,) or p[0] or not p[1:].all():
+        singleton = c.window_size == 1
+        if p.shape != (end - start,) or (p.any() if singleton else p[0] or not p[1:].all()):
             raise ValueError('invalid pair coverage in an unpadded inference window')
+        if singleton:
+            pair_w[:] = 0
         optional = tuple(k for k in ('page_start', 'page_end') if k + '_logits' in output)
         if self.optional_outputs is None:
             self.optional_outputs = optional
@@ -161,7 +167,8 @@ class StreamMerger:
             self.pair_weight[start:end] += pair_w
 
     def finalize(self):
-        if not (self.page_weight > 0).all() or not (self.pair_weight[1:] > 0).all():
+        enabled = self.config.window_size != 1
+        if not (self.page_weight > 0).all() or (enabled and not (self.pair_weight[1:] > 0).all()):
             raise ValueError('missing page or adjacent-pair predictions')
         scores = {}
         for task, values in self.sums.items():
@@ -170,8 +177,8 @@ class StreamMerger:
                             values / np.maximum(weights if values.ndim == 1 else weights[:, None], 1e-12))
         probs = scores if self.config.merge.endswith('probs') else {
             task: sigmoid(x) if x.ndim == 1 else softmax(x) for task, x in scores.items()}
-        probs['starts'][0] = np.nan
-        pair_mask = np.ones(self.n, bool)
+        probs['starts'][0 if enabled else slice(None)] = np.nan
+        pair_mask = np.full(self.n, enabled, bool)
         pair_mask[0] = False
         starts = pair_mask & (probs['starts'] >= self.config.start_threshold)
         result = {'type_probs': probs['type'], 'placement_probs': probs['placement'],
@@ -179,6 +186,8 @@ class StreamMerger:
                 'type': probs['type'].argmax(-1), 'placement': probs['placement'].argmax(-1),
                 'starts': starts, 'segment_ids': np.cumsum(starts),
                 'page_weight': self.page_weight, 'pair_weight': self.pair_weight}
+        if not enabled:
+            result['boundary_enabled'] = False
         for task in self.optional_outputs or ():
             result[task + '_probs'] = probs[task]
         if self.collect_embeddings:
@@ -197,6 +206,9 @@ class StreamMerger:
 def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu',
                    document_starts=None, document_ends=None,
                    collect_embeddings=False, collect_window_stats=False):
+    if config.window_size == 1:
+        return predict_singletons(model, dataset, rows, config, device,
+                                  document_starts, document_ends, collect_embeddings, collect_window_stats)
     borders = getattr(model, 'scan_borders', False)
     boundary_features = getattr(model, 'boundary_features', False)
     if borders or boundary_features:
@@ -249,6 +261,43 @@ def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu',
         model.train(was_training)
     result = merger.finalize()
     result['processed_pages'] = sum(e - s for s, e in spans)
+    return result
+
+
+@torch.inference_mode()
+def predict_singletons(model, dataset, rows, config, device, document_starts=None,
+                       document_ends=None, collect_embeddings=False, collect_window_stats=False):
+    """Read contiguous storage blocks, encode each page alone; no invented scan edges."""
+    from .context_training import split_context
+    from .scan_borders import encode_boundary_features
+    if getattr(model, 'scan_borders', False):
+        raise ValueError('singleton inference requires page-aligned boundary features')
+    supplied = (encode_boundary_features(len(rows), document_starts=document_starts,
+                                        document_ends=document_ends)
+                if document_starts is not None or document_ends is not None else None)
+    merger = StreamMerger(len(rows), model.num_types, config, collect_embeddings, collect_window_stats)
+    was_training = model.training
+    model.eval()
+    try:
+        for lo in range(0, len(rows), config.batch_size):
+            hi = min(len(rows), lo + config.batch_size)
+            example = dataset[Window(tuple(rows[lo:hi]), scan_start=lo == 0, scan_end=hi == len(rows))]
+            if getattr(model, 'boundary_features', False):
+                values = (supplied[lo:hi].copy() if supplied is not None else
+                          encode_boundary_features(hi - lo))
+                values[0, 0], values[-1, 1] = lo == 0, hi == len(rows)
+                example['features'] = dict(example['features'], boundaries=values)
+            batch = to_device(split_context(collate_windows([example]), 1), device,
+                              feature_dtype=torch.float32 if getattr(model, 'compute_precision', 'float32')
+                              == 'float32' else None)
+            with autocast(model, device):
+                kwargs = {'return_embeddings': True} if collect_embeddings else {}
+                output = model(batch['features'], batch['attention_mask'], **kwargs)
+            merger.add(lo, hi, {k: v[:, 0].detach().float().cpu().numpy() for k, v in output.items()})
+    finally:
+        model.train(was_training)
+    result = merger.finalize()
+    result['processed_pages'] = len(rows)
     return result
 
 
