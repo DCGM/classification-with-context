@@ -72,6 +72,15 @@ sampler, optimizer, scaler, RNG and ClearML task.
 
 ## Queue and artifacts
 
+On 2026-11-05 the four mixed combinations were added so that W1 covers all seven signal
+subsets, like the W512 ablations. `tools/prepare_context_window_experiments.py
+--add-combinations` creates ST, SI and TI from the r20 recipes of the same name, and STI from
+r20 SI with all three signals enabled explicitly: r20 has no STI recipe, and its STI reference,
+r19, is the same config without `enabled_modalities`. Each recipe reads the native store on its
+own disk, shares the frozen r21 code, and gets the same W1 changes, smoke test and expected
+initial parameters as S/T/I. They are listed in `jobs-combinations.json`. W1 results join the
+[modality overview](modality-overview.md) once all seven runs are finished.
+
 Recipes and frozen source: `/home/ikohut/tmp/context-windows-r21/`.
 
 | Experiment | Slot | Scheduled after |
@@ -79,6 +88,10 @@ Recipes and frozen source: `/home/ikohut/tmp/context-windows-r21/`.
 | r21-w1-S | NVMe | r20 SI |
 | r21-w1-T | ~~SSD~~ NVMe | r20 TI |
 | r21-w1-I | ~~NVMe~~ SSD | ~~r21 W1 S~~ r20 TI |
+| r21-w1-ST | NVMe | r21 W1 T |
+| r21-w1-SI | SSD | r21 W1 I |
+| r21-w1-TI | NVMe | r21 W1 ST |
+| r21-w1-STI | SSD | r21 W1 SI |
 
 On 2026-11-05, r21-w1-T was paused at its step-6,000 checkpoint (a copy is retained in
 `T/pause-20261105/`) so that r21-w1-I could take the SSD slot. Before I started, its
