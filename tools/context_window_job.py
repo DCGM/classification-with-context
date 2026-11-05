@@ -18,7 +18,10 @@ def main():
         if passed.get('context_microbatch_size') != config['context_microbatch_size']:
             raise RuntimeError('preflight verification failed: physical batch changed; refresh smoke artifacts')
     env = os.environ | {'PYTHONPATH': str(root / 'code'), 'HF_HOME': '/home/ikohut/tmp/huggingface',
-                        'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1'}
+                        'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1',
+                        'PYTORCH_ALLOC_CONF': 'expandable_segments:True,garbage_collection_threshold:0.3'}
+    env.pop('PYTORCH_CUDA_ALLOC_CONF', None)
+    print(json.dumps({'cuda_allocator': env['PYTORCH_ALLOC_CONF']}), flush=True)
     if not (root / 'smoke-passed.json').exists():
         if (root / 'smoke-failed.json').exists():
             raise RuntimeError('preflight verification failed; diagnose before retrying')

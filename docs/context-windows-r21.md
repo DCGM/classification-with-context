@@ -43,6 +43,13 @@ physical-batch configuration; the original checkpoint is preserved and all
 other checkpoint fields are verified unchanged. T and I start with the larger
 physical batch. Fresh CUDA preflight verifies the new setting before full training.
 
+The launcher configures CUDA expandable segments and a 0.3 cache collection
+threshold. Variable real-page counts otherwise let the default CUDA allocator
+retain far more memory than a single full batch needs, preventing the second
+W1 process from fitting. This is a runtime allocation policy; sampling, weights,
+optimizer and checkpoint configuration are unchanged. Smoke reports record the
+allocator policy and peak allocated/reserved GPU memory.
+
 ## W1 outputs and evaluation
 
 The architecture and parameter count are retained. Page-type, side, auxiliary

@@ -71,6 +71,9 @@ def main():
     assert audit['max_physical_batch'] <= config['context_microbatch_size']
     expected = json.loads((root / 'expected-initialization.json').read_text())
     assert audit['initial_parameter_sha256'] == expected['sha256']
+    audit.update(peak_gpu_allocated_gib=torch.cuda.max_memory_allocated() / 2**30,
+                 peak_gpu_reserved_gib=torch.cuda.max_memory_reserved() / 2**30,
+                 allocator_config=__import__('os').environ.get('PYTORCH_ALLOC_CONF'))
     (root / 'smoke-passed.json').write_text(json.dumps(dict(passed=True,
         context_microbatch_size=config['context_microbatch_size'], **audit), indent=2) + '\n')
 
