@@ -128,6 +128,7 @@ def test_failed_preflight_stops_full_training_and_unchanged_retry(tmp_path):
     source = Path(__file__).resolve().parents[2] / 'tools/context_window_job.py'
     shutil.copy2(source, tmp_path / 'launch.py')
     (tmp_path / 'code').mkdir()
+    (tmp_path / 'config.json').write_text(json.dumps({'context_microbatch_size': 1024}))
     (tmp_path / 'smoke.py').write_text('raise RuntimeError("test failure")\n')
     for _ in range(2):
         result = subprocess.run([sys.executable, str(tmp_path / 'launch.py')], capture_output=True)
@@ -135,3 +136,16 @@ def test_failed_preflight_stops_full_training_and_unchanged_retry(tmp_path):
         assert b'preflight verification failed' in result.stderr
     assert json.loads((tmp_path / 'smoke-failed.json').read_text())['exit_code'] != 0
     assert not (tmp_path / 'smoke-passed.json').exists()
+
+
+def test_preflight_does_not_reuse_a_smaller_physical_batch_check(tmp_path):
+    import subprocess
+    import sys
+    from pathlib import Path
+    import shutil
+    shutil.copy2(Path(__file__).resolve().parents[2] / 'tools/context_window_job.py', tmp_path / 'launch.py')
+    (tmp_path / 'config.json').write_text(json.dumps({'context_microbatch_size': 32768}))
+    (tmp_path / 'smoke-passed.json').write_text(json.dumps({'context_microbatch_size': 1024}))
+    result = subprocess.run([sys.executable, str(tmp_path / 'launch.py')], capture_output=True)
+    assert result.returncode != 0
+    assert b'physical batch changed' in result.stderr

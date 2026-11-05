@@ -20,9 +20,9 @@ The sampler, synthetic scans, source quotas, stage policies, scan tiling and
 3. Split each parent into consecutive context chunks and keep every real page.
    Carry the original targets, duplicate weights and boundary feature vectors.
    Discard fully padded chunks. Do not invent scan/document edges at cuts.
-4. Accumulate gradients over physical batches of at most 1,024 singleton chunks.
-   Normalize each task's loss by its valid weighted target count across the
-   entire parent batch, not independently per physical batch.
+4. Process all singleton chunks together, with a maximum physical batch of
+   32,768 pages. Normalize each task's loss by its valid weighted target count
+   across the entire parent batch.
 5. Clip gradients and perform one optimizer/scaler update.
 
 There are at most 32,768 page positions per optimizer update. Padding is excluded;
@@ -35,6 +35,13 @@ stop at different stages/steps and have different dropout randomness.
 The partitioning code also supports larger contexts such as 64/128/256. Pairwise
 supervision at new chunk seams is excluded; no representation attends across cuts.
 The current implementation rejects boundary-consistency loss for chunked runs.
+
+The initial W1 S run used 1,024-page physical chunks. Following the isolated
+benchmark on 2026-11-05, all three W1 recipes use a maximum physical batch of
+32,768. S resumes from an audited checkpoint migration that changes only the
+physical-batch configuration; the original checkpoint is preserved and all
+other checkpoint fields are verified unchanged. T and I start with the larger
+physical batch. Fresh CUDA preflight verifies the new setting before full training.
 
 ## W1 outputs and evaluation
 

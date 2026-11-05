@@ -31,7 +31,7 @@ def prepare(reference, output, repository):
         (root / 'code').symlink_to(output / 'code', target_is_directory=True)
         source = json.loads((reference / tag / 'config.json').read_text())
         config = json.loads(json.dumps(source))
-        config.update(window_size=1, sampling_window_size=512, context_microbatch_size=1024)
+        config.update(window_size=1, sampling_window_size=512, context_microbatch_size=32768)
         name = f'bert-mini-fp16-{slot}-b64parent512-w1-boundary5-metadata50-scattered-mmbert-ocr-lines-stats180-abl{tag}-ftweak005-seed17-r21'
         config['run_dir'] = str(Path(source['run_dir']).parent / name)
         config['inference'] = dict(window_size=1, stride=1, merge='uniform_logits', edge_ramp=1,
@@ -65,7 +65,7 @@ def prepare(reference, output, repository):
     write(output / 'jobs.json', jobs)
     write(output / 'design.json', dict(reference=str(reference), parent_window_size=512,
           parent_batch_size=64, context_size=1, max_effective_page_slots=32768,
-          physical_microbatch=1024, disabled_loss='starts',
+          physical_microbatch=32768, disabled_loss='starts',
           sampling='unchanged parent sampler; augment before splitting; retain all real pages',
           validation='same dev streams, independent pages; pairwise metrics disabled',
           preflight='six real CUDA updates, both phases, audit before each full run'))

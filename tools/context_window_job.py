@@ -12,6 +12,11 @@ def main():
     parser.add_argument('--resume', action='store_true')
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
+    config = json.loads((root / 'config.json').read_text())
+    if (root / 'smoke-passed.json').exists():
+        passed = json.loads((root / 'smoke-passed.json').read_text())
+        if passed.get('context_microbatch_size') != config['context_microbatch_size']:
+            raise RuntimeError('preflight verification failed: physical batch changed; refresh smoke artifacts')
     env = os.environ | {'PYTHONPATH': str(root / 'code'), 'HF_HOME': '/home/ikohut/tmp/huggingface',
                         'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1'}
     if not (root / 'smoke-passed.json').exists():
@@ -25,7 +30,6 @@ def main():
             raise RuntimeError('preflight verification failed; inspect smoke.log')
     command = [sys.executable, '-u', '-m', 'page_sequence.runner', 'train',
                '--config', str(root / 'config.json')]
-    config = json.loads((root / 'config.json').read_text())
     if args.resume:
         command += ['--resume', str(Path(config['run_dir']) / 'latest.pt')]
         env['CLEARML_SET_ITERATION_OFFSET'] = '0'

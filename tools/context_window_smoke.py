@@ -65,11 +65,14 @@ def main():
         assert dev['metadata_provided']['starts']['all']['n'] == 0
         assert dev['exact_stream_fraction'] is None
         assert dev['curated_type']['n'] > 0
-    assert audit['train_forwards'] > len(records)
+    assert audit['train_forwards'] >= len(records)
+    if config['context_microbatch_size'] >= config['batch_size'] * config['sampling_window_size']:
+        assert audit['train_forwards'] == len(records)
     assert audit['max_physical_batch'] <= config['context_microbatch_size']
     expected = json.loads((root / 'expected-initialization.json').read_text())
     assert audit['initial_parameter_sha256'] == expected['sha256']
-    (root / 'smoke-passed.json').write_text(json.dumps(dict(passed=True, **audit), indent=2) + '\n')
+    (root / 'smoke-passed.json').write_text(json.dumps(dict(passed=True,
+        context_microbatch_size=config['context_microbatch_size'], **audit), indent=2) + '\n')
 
 
 if __name__ == '__main__':
