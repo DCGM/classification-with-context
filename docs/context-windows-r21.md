@@ -77,7 +77,7 @@ Recipes and frozen source: `/home/ikohut/tmp/context-windows-r21/`.
 | Experiment | Slot | Scheduled after |
 |---|---|---|
 | r21-w1-S | NVMe | r20 SI |
-| r21-w1-T | SSD | r20 TI |
+| r21-w1-T | ~~SSD~~ NVMe | r20 TI |
 | r21-w1-I | ~~NVMe~~ SSD | ~~r21 W1 S~~ r20 TI |
 
 On 2026-11-05, r21-w1-T was paused at its step-6,000 checkpoint (a copy is retained in
@@ -88,6 +88,14 @@ backup and before/after record in `I/storage-relocation-*`. Both store copies
 have identical manifests, checksums, plans and shard listings, and the relocated I
 recipe now differs from T only in its modality and names. T stays in the queue with
 phase `paused` and resumes from its checkpoint once it is set back to `retry_wait`.
+
+After r21-w1-S finished (19:07), T resumed from step 6,000 in the free NVMe slot, in its existing run
+directory and ClearML task. `tools/relocate_training_store.py` moved it to the NVMe copy of the store:
+it checks that both copies have byte-identical metadata files and the same shard names and sizes, then
+changes only the config's `index` and `training_store.path` (also in the smoke config) and the
+checkpoint's recorded store path, verifying every other checkpoint field unchanged. The originals are in
+`T/store-relocation-20261105T195420/`; the runner rehashes the catalogue at resume. The run directory and
+ClearML name still say `ssd`.
 
 W512 modality experiments retain priority within their disk slots. W1 can use
 the other disk's free slot while a W512 modality run finishes. The global limit
