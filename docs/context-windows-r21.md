@@ -78,7 +78,16 @@ Recipes and frozen source: `/home/ikohut/tmp/context-windows-r21/`.
 |---|---|---|
 | r21-w1-S | NVMe | r20 SI |
 | r21-w1-T | SSD | r20 TI |
-| r21-w1-I | NVMe | r21 W1 S |
+| r21-w1-I | ~~NVMe~~ SSD | ~~r21 W1 S~~ r20 TI |
+
+On 2026-11-05, r21-w1-T was paused at its step-6,000 checkpoint (a copy is retained in
+`T/pause-20261105/`) so that r21-w1-I could take the SSD slot. Before I started, its
+recipe was relocated to the SSD copy of the native store: `index`,
+`training_store.path`, `run_dir` and the ClearML name changed only, with the
+backup and before/after record in `I/storage-relocation-*`. Both store copies
+have identical manifests, checksums, plans and shard listings, and the relocated I
+recipe now differs from T only in its modality and names. T stays in the queue with
+phase `paused` and resumes from its checkpoint once it is set back to `retry_wait`.
 
 W512 modality experiments retain priority within their disk slots. W1 can use
 the other disk's free slot while a W512 modality run finishes. The global limit
