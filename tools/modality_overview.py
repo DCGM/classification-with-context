@@ -23,6 +23,7 @@ import json
 import os
 from pathlib import Path
 import re
+import resource
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -51,8 +52,16 @@ def cache_fingerprints():
     PageIndex.fingerprint = fingerprint
 
 
+def raise_open_file_limit():
+    """Each checkpoint's store reader keeps its shard files open (three per shard), and they add up."""
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+    return soft, hard
+
+
 def evaluate(args):
     import torch
+    raise_open_file_limit()
     from page_sequence.evaluate_conditions import evaluate_checkpoint
     cache_fingerprints()
     for run in map(Path, args.runs):
