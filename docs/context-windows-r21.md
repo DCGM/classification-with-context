@@ -69,14 +69,13 @@ Recipes and frozen source: `/home/ikohut/tmp/context-windows-r21/`.
 
 | Experiment | Slot | Scheduled after |
 |---|---|---|
-| r21-w1-S | NVMe | All six r20 W512 modality experiments |
-| r21-w1-T | SSD | All six r20 W512 modality experiments |
-| r21-w1-I | NVMe | All six r20 W512 experiments and r21 W1 S |
+| r21-w1-S | NVMe | r20 SI |
+| r21-w1-T | SSD | r20 TI |
+| r21-w1-I | NVMe | r21 W1 S |
 
-All W512 modality experiments must finish before any W1 job runs. W1 S initially
-started while W512 TI was still running under the earlier per-disk queue policy;
-it was interrupted on 2026-11-05 and will resume from its retained checkpoint
-after TI completes.
+W512 modality experiments retain priority within their disk slots. W1 can use
+the other disk's free slot while a W512 modality run finishes. The global limit
+remains two simultaneous trainings; pending W512 work must not be displaced.
 
 Jobs are registered in the existing
 `page-sequence-modality-ablations-r20.service` queue. The global limit remains two
