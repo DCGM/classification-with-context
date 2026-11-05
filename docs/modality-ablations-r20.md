@@ -80,11 +80,47 @@ Per-variant full logs: `<variant>/managed-training.log`; failures:
 `/home/ikohut/tmp/page-sequence-runs/`, with names containing
 `stats180-ablS`, `stats180-ablT`, etc., and suffix `seed17-r20`.
 
-After completion, `tools/summarize_modality_ablations.py` automatically produces
+After completion of the whole queue, `tools/summarize_modality_ablations.py` automatically produces
 `results.json` and `results.csv`, selecting each run by fine-tuning development
 curated page-type weighted F1, as before. The JSON retains all per-class and
 boundary metrics plus supplied-metadata scores and ClearML links. The summary
 requires every queue job and retained phase checkpoint to be complete.
+
+## Results
+
+All six runs finished with every retained phase checkpoint. Each run's checkpoint is selected
+by fine-tuning dev curated page-type weighted F1 (3,758 curated pages, 111,193 pages with a DB side,
+1,786 document starts over all 193 dev streams). Page numbers are supplied; document metadata is
+not, unless stated otherwise ("+ metadata"). Values in %.
+
+| Main signals | Run | Selected step | Type F1 | Type macro F1 | Side F1 | Border F1 | Border FP / FN | Type F1 + metadata | Border F1 + metadata |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| T | r20-T | 17,677 | 83.8 | 60.6 | 93.9 | 76.2 | 393 / 445 | 87.4 | 99.7 |
+| S | r20-S | 16,427 | 85.4 | 65.9 | 94.0 | 79.8 | 186 / 478 | 88.8 | 99.8 |
+| ST | r20-ST | 18,927 | 87.6 | 67.9 | 94.4 | 84.2 | 148 / 380 | 90.2 | 99.6 |
+| I | r20-I | 12,750 | 89.7 | 69.1 | 95.0 | 87.6 | 128 / 295 | 90.7 | 99.7 |
+| TI | r20-TI | 15,750 | 91.1 | 69.7 | 95.0 | 91.7 | 97 / 192 | 91.8 | 99.4 |
+| SI | r20-SI | 14,000 | 91.2 | **75.1** | 94.8 | 90.0 | 114 / 232 | 92.0 | 99.5 |
+| STI | [r19](stats-fine-groups-r19.md) (reference) | 16,177 | **91.8** | 73.0 | **95.1** | 90.8 | 76 / 237 | **92.4** | 99.7 |
+
+Type and side F1 are support-weighted averages over the classes, as in the README's page type
+evaluation. With one seed per configuration, differences of about one point or less should not be
+over-read.
+
+- Image is the strongest single signal (type F1 89.7), ahead of statistics (85.4) and text (83.8).
+- Image plus either other signal comes close to all three: TI 91.1 and SI 91.2 versus 91.8 for STI.
+  Text adds little once image and statistics are present.
+- SI has the highest macro F1 (75.1, STI 73.0), so it may do better on the rare classes.
+- Supplied document metadata makes the border nearly solved for every variant (99.4–99.8) and lifts
+  page type most where the main signals are weakest (T +3.6, S +3.4, STI +0.6).
+
+`results-r20.json` and `results-r20.csv` in the root hold these six runs. They were produced on
+2026-11-05 by `tools/summarize_modality_ablations.py` on a copy of the queue configuration that
+lists only the r20 jobs, because the r21 W1 runs were later registered in the same queue: the
+queue's own `results.json` follows only when all its jobs, r21 included, are finished.
+
+An evaluation of every model on every combination of signals it can handle, without page numbers and
+document boundaries, is in [the modality overview](modality-overview.md).
 
 ## Validation before full training
 

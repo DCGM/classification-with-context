@@ -7,12 +7,18 @@ inputs in every condition. The report of each condition is the Evaluator's: conf
 page types, of the DB-agreement of the weak page types and of the DB placements, per-class scores, document
 starts and joins, exact spans.
 
+`--modalities` additionally evaluates the checkpoint with only some of its main signals (image/text/stats):
+the others are masked as in a modality ablation, before inference (vectors and presence bits zero). Each subset
+must be part of the checkpoint's own enabled modalities; `all` expands to every nonempty subset of them. The
+reports are then written to `<output>/<subset>/<condition>.json`, the subset named like `image+text`.
+
 Example:
     python -m page_sequence.evaluate_conditions --checkpoint finetune_best.pt \\
         --manifest /home/ikohut/tmp/page-sequence-data/dev.jsonl --output /home/ikohut/tmp/conditions --device cuda
 """
 import argparse
 from dataclasses import asdict
+from itertools import combinations
 import json
 from pathlib import Path
 
@@ -20,6 +26,7 @@ import numpy as np
 
 from .inference import InferenceConfig
 from .manifests import file_sha256, load_streams
+from .modalities import ModalitySubsetDataset, enabled_modalities
 from .runner import evaluate_streams, evaluation_dataset, load_checkpoint
 
 CONDITIONS = {'none': (False, False), 'page_numbers': (True, False), 'boundaries': (False, True),
@@ -43,6 +50,54 @@ class WithoutPagination:
         return getattr(self._dataset, name)
 
 
+def modality_subsets(requested, enabled):
+    """The requested subsets of the checkpoint's enabled modalities, in canonical order."""
+    if requested == ['all']:
+        return [subset for k in range(len(enabled), 0, -1) for subset in combinations(enabled, k)]
+    subsets = [enabled_modalities(name.split('+')) for name in requested]
+    for subset in subsets:
+        if set(subset) - set(enabled):
+            raise ValueError(f'checkpoint handles only {"+".join(enabled)}, not {"+".join(subset)}')
+    return subsets
+
+
+def evaluate_checkpoint(checkpoint, manifest, output, conditions=tuple(CONDITIONS), modalities=None, split='dev',
+                        training_store=None, device='cpu', limit_streams=None):
+    """Write one report per (modality subset, condition) that is not there yet; return the written paths."""
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    model, state = load_checkpoint(checkpoint, device)
+    config, dataset = evaluation_dataset(state, training_store)
+    inference = InferenceConfig(**config['inference'])
+    streams = load_streams(manifest, dataset.index, split)
+    if limit_streams:
+        streams = streams[:limit_streams]
+    enabled = enabled_modalities(config.get('enabled_modalities'))
+    subsets = modality_subsets(list(modalities), enabled) if modalities else [None]
+    written = []
+    for subset, name in [(subset, name) for subset in subsets for name in conditions]:
+        pagination, boundaries = CONDITIONS[name]
+        directory = output if subset is None else output / '+'.join(subset)
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f'{name}.json'
+        if path.exists():
+            continue
+        data = dataset if subset is None else ModalitySubsetDataset(dataset, subset)
+        report = evaluate_streams(model, data if pagination else WithoutPagination(data), streams, inference,
+                                  device, provide_document_metadata=boundaries)
+        report.update(condition=name, page_numbers=pagination, document_boundaries=boundaries,
+                      checkpoint_modalities=list(enabled),
+                      modalities=list(enabled if subset is None else subset),
+                      inference=asdict(inference), checkpoint=str(checkpoint),
+                      checkpoint_sha256=file_sha256(checkpoint), manifest=str(manifest),
+                      manifest_sha256=file_sha256(manifest), checkpoint_step=state['step'],
+                      streams_evaluated=len(streams))
+        path.write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
+        written.append(path)
+        print(name if subset is None else '+'.join(subset) + ' ' + name, f'{report["seconds"]:.0f} s', flush=True)
+    return written
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--checkpoint', required=True)
@@ -51,29 +106,13 @@ def main():
     parser.add_argument('--training-store')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--conditions', nargs='+', choices=list(CONDITIONS), default=list(CONDITIONS))
+    parser.add_argument('--modalities', nargs='+', metavar='SUBSET',
+                        help='Main-signal subsets such as image+text, or all; default: the checkpoint\'s own set')
     parser.add_argument('--limit-streams', type=int, help='Only the first streams, for testing')
     parser.add_argument('--device', default='cpu')
     args = parser.parse_args()
-    args.output.mkdir(parents=True, exist_ok=True)
-    model, state = load_checkpoint(args.checkpoint, args.device)
-    config, dataset = evaluation_dataset(state, args.training_store)
-    inference = InferenceConfig(**config['inference'])
-    streams = load_streams(args.manifest, dataset.index, args.split)
-    if args.limit_streams:
-        streams = streams[:args.limit_streams]
-    for name in args.conditions:
-        pagination, boundaries = CONDITIONS[name]
-        path = args.output / f'{name}.json'
-        if path.exists():
-            continue
-        report = evaluate_streams(model, dataset if pagination else WithoutPagination(dataset), streams, inference,
-                                  args.device, provide_document_metadata=boundaries)
-        report.update(condition=name, page_numbers=pagination, document_boundaries=boundaries,
-                      inference=asdict(inference), checkpoint=str(args.checkpoint),
-                      checkpoint_sha256=file_sha256(args.checkpoint), manifest=str(args.manifest),
-                      manifest_sha256=file_sha256(args.manifest), checkpoint_step=state['step'])
-        path.write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
-        print(name, f'{report["seconds"]:.0f} s', flush=True)
+    evaluate_checkpoint(args.checkpoint, args.manifest, args.output, args.conditions, args.modalities,
+                        args.split, args.training_store, args.device, args.limit_streams)
 
 
 if __name__ == '__main__':

@@ -68,3 +68,13 @@ def test_model_enforces_subset_even_on_unmasked_inference_and_roundtrip(subset):
 def test_invalid_subsets_are_rejected():
     for value in [[], ['stats', 'stats'], ['unknown'], 'stats']:
         with pytest.raises(ValueError): enabled_modalities(value)
+
+
+def test_evaluation_modality_subsets():
+    import pytest
+    from page_sequence.evaluate_conditions import modality_subsets
+    assert modality_subsets(['all'], ('image', 'stats')) == [('image', 'stats'), ('image',), ('stats',)]
+    assert len(modality_subsets(['all'], ('image', 'text', 'stats'))) == 7
+    assert modality_subsets(['stats+image'], ('image', 'text', 'stats')) == [('image', 'stats')]
+    with pytest.raises(ValueError):
+        modality_subsets(['text'], ('image', 'stats'))
