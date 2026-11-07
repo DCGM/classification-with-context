@@ -49,13 +49,17 @@ def write(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
+# Everything training imports from the repository (as in the r21 freeze).
+FROZEN = ['page_sequence', 'training_store', 'embeddings', 'pyproject.toml']
+
+
 def freeze_code(repository, output):
-    if subprocess.run(['git', 'status', '--porcelain', '--', 'page_sequence'], cwd=repository,
+    if subprocess.run(['git', 'status', '--porcelain', '--', *FROZEN], cwd=repository,
                       capture_output=True, text=True, check=True).stdout.strip():
-        raise RuntimeError('page_sequence has uncommitted changes; commit before freezing')
+        raise RuntimeError('frozen sources have uncommitted changes; commit before freezing')
     commit = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=repository, capture_output=True, text=True,
                             check=True).stdout.strip()
-    archive = subprocess.run(['git', 'archive', commit, 'page_sequence'], cwd=repository,
+    archive = subprocess.run(['git', 'archive', commit, *FROZEN], cwd=repository,
                              capture_output=True, check=True).stdout
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
         tar.extractall(output / 'code', filter='data')
