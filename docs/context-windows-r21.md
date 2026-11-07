@@ -91,7 +91,7 @@ Recipes and frozen source: `/home/ikohut/tmp/context-windows-r21/`.
 | r21-w1-ST | NVMe | r21 W1 T |
 | r21-w1-SI | SSD | r21 W1 I |
 | r21-w1-TI | NVMe | r21 W1 ST |
-| r21-w1-STI | SSD | r21 W1 SI |
+| r21-w1-STI | ~~SSD~~ NVMe | ~~r21 W1 SI~~ r21 W1 TI |
 
 On 2026-11-05, r21-w1-T was paused at its step-6,000 checkpoint (a copy is retained in
 `T/pause-20261105/`) so that r21-w1-I could take the SSD slot. Before I started, its
@@ -109,6 +109,13 @@ changes only the config's `index` and `training_store.path` (also in the smoke c
 checkpoint's recorded store path, verifying every other checkpoint field unchanged. The originals are in
 `T/store-relocation-20261105T195420/`; the runner rehashes the catalogue at resume. The run directory and
 ClearML name still say `ssd`.
+
+On 2026-11-06 the memory guard stopped r21-w1-SI five times while it ran beside r21-w1-ST; the monitor set it
+to `needs_diagnosis` at step 8,000, which also blocked STI. Two W1 trainings use about 21 GiB, leaving 2-3 GiB with the
+desktop open. On 2026-11-07 SI was set back to `retry_wait` and resumed from its checkpoint. STI, not yet started,
+moved to the free NVMe slot: `tools/relocate_training_store.py` pointed it at the NVMe store copy, and its run
+directory and ClearML name changed from `ssd` to `nvme` (`STI/store-relocation-20261107T123439/`). Its recipe now
+differs from TI only in the stats modality and the names. Desktop applications were closed to free memory.
 
 W512 modality experiments retain priority within their disk slots. W1 can use
 the other disk's free slot while a W512 modality run finishes. The global limit
