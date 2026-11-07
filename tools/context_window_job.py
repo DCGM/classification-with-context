@@ -15,7 +15,7 @@ def main():
     config = json.loads((root / 'config.json').read_text())
     if (root / 'smoke-passed.json').exists():
         passed = json.loads((root / 'smoke-passed.json').read_text())
-        if passed.get('context_microbatch_size') != config['context_microbatch_size']:
+        if passed.get('context_microbatch_size') != config.get('context_microbatch_size'):
             raise RuntimeError('preflight verification failed: physical batch changed; refresh smoke artifacts')
     env = os.environ | {'PYTHONPATH': str(root / 'code'), 'HF_HOME': '/home/ikohut/tmp/huggingface',
                         'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1',
