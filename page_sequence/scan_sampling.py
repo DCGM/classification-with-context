@@ -23,7 +23,7 @@ class ScanBatchSampler(WindowSampler):
         if (not isinstance(self.scan_batches['full_scan_multiplier'], int)
                 or self.scan_batches['full_scan_multiplier'] < 1
                 or not isinstance(self.scan_batches['border_tokens'], bool)
-                or not 1 <= self.scan_batches['stride'] < self.window_size):
+                or not 1 <= self.scan_batches['stride'] <= self.window_size):
             raise ValueError('invalid scan batch multiplier/stride')
         probability = settings.get('metadata_probability', 0.)
         if not np.isfinite(probability) or not 0 <= probability <= 1:

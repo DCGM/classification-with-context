@@ -1,14 +1,17 @@
 """Freeze the r22 context-window series: full-modality STI at W512, 256, 128, 64, 32, 16 and 8.
 
 Every run starts from the r19 STI W512 recipe and keeps its 512-page sampler, 64 sampled windows per update,
-losses, stages and stopping. Changes for all W:
-- complete scans are tiled by the sampler with the regular tail (`scan_batches.tail`), as at inference;
+losses and stages. Every W trains on the same sampled data; only the context differs:
+- the sampler tiles complete (coverage) scans into 512-page windows without overlap (stride 512, regular tail);
+  anchor windows are sampled as before;
+- every sampled window, coverage or anchor, is cut into consecutive pieces of at most W, never between a
+  document start and its previous page (`context_boundary_aware_cuts`); at W512 the windows stay whole. All
+  pieces of an update are trained together in physical batches of at most 32,768 positions with one optimizer
+  step;
+- fixed phase lengths without early stopping (15,427 pretraining and 4,000 fine-tuning updates), and input
+  dropout seeded per update (`augmentation_seed_per_step`), so the dropout is the same for every W;
 - validation and final evaluation merge windows with the deployed MetaKat policy scaled to W
   (`inference.deployment_inference`: overlap W/8, cubic ramp 3/4 and ignored edge 3/16 of the overlap).
-For every W, 512 included (`context_coverage_stride`): each sampled anchor window is cut into consecutive W pieces,
-each coverage scan is scanned with W at stride W/2 (regular tail), and all pieces of the update are trained
-together in physical batches of at most 32,768 positions with one optimizer step. At W512 the cut reproduces the
-sampled windows.
 
 The source is frozen from a committed revision (`git archive`), the store copy follows the job's disk slot.
 Registration in the queue monitor is a separate step.
@@ -33,6 +36,9 @@ from page_sequence.inference import deployment_inference  # noqa: E402
 STORES = {'nvme': '/home/ikohut/tmp/document-store-ocr-lines-sparse-v2',
           'ssd': '/run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/document-store-ocr-lines-sparse-v2'}
 PARENT, PHYSICAL = 512, 32768
+# Pretraining keeps the r19 budget as a fixed length (most runs selected 14,000-15,427). Fine-tuning runs stopped
+# at about 2,250 updates with their best at 250-3,500; it gets a fixed, slightly longer 4,000.
+PRETRAIN_STEPS, FINETUNE_STEPS = 15427, 4000
 # (window, slot, dependency): larger windows first, the two disks alternating after the running W1 jobs.
 JOBS = [(512, 'nvme', 'r21-w1-STI'), (256, 'ssd', 'r21-w1-SI'), (128, 'nvme', 'r22-w512'),
         (64, 'ssd', 'r22-w256'), (32, 'nvme', 'r22-w128'), (16, 'ssd', 'r22-w64'), (8, 'nvme', 'r22-w32')]
@@ -61,12 +67,20 @@ def recipe(reference, window, slot):
     config['enabled_modalities'] = ['image', 'text', 'stats']
     config['index'] = STORES[slot] + '/catalogue.sqlite'
     config['training_store'] = dict(config['training_store'], path=STORES[slot])
-    config['scan_batches'] = dict(config['scan_batches'], tail='regular')
+    # Complete scans are tiled without overlap (stride 512, regular tail): every scan page once per scan.
+    config['scan_batches'] = dict(config['scan_batches'], stride=PARENT, tail='regular')
     config['inference'] = asdict(deployment_inference(window, batch_size=PHYSICAL // window,
                                                       start_threshold=config['inference']['start_threshold']))
-    # The same path for every W, 512 included: sampled windows are cut with W (coverage scans at W/2).
+    # The same path for every W, 512 included: every sampled window, coverage or anchor, is cut into
+    # consecutive pieces of at most W, never separating a document start from its previous page.
     config.update(window_size=window, sampling_window_size=PARENT, context_microbatch_size=PHYSICAL,
-                  context_coverage_stride=window // 2)
+                  context_boundary_aware_cuts=True, augmentation_seed_per_step=True)
+    # Fixed phase lengths, no early stopping: every W trains on the same data. The best checkpoint of each
+    # phase is still selected by validation (pretraining only after the first coverage epoch, as in r19).
+    if config['stopping'] != {'pretrain': {'min_coverage_epochs': 1, 'patience': 5}, 'finetune': {'patience': 5}}:
+        raise ValueError('unexpected reference stopping policy')
+    config.update(pretrain_steps=PRETRAIN_STEPS, finetune_steps=FINETUNE_STEPS,
+                  stopping={'pretrain': {'min_coverage_epochs': 1}})
     name = (f'bert-mini-fp16-{slot}-b64parent512-w{window}-boundary5-metadata50-scattered-mmbert-ocr-lines-stats180-'
             f'tailregular-ftweak005-seed17-r22')
     config['run_dir'] = str(Path(config['run_dir']).parent / name)
@@ -111,9 +125,11 @@ def prepare(reference, output, repository):
     write(output / 'design.json', dict(
         reference=str(reference), parent_window_size=PARENT, parent_batch_size=64,
         windows=[w for w, _, _ in JOBS], max_physical_positions=PHYSICAL,
-        sampler='unchanged r19 sampler; complete scans tiled at stride 256 with the regular tail',
-        anchor_windows='cut into consecutive W pieces, each page once',
-        coverage_scans='scanned with W at stride W/2 (regular tail); repeated pages weighted 1/occurrences',
+        sampler='r19 sampler; complete scans tiled into 512-page windows without overlap, regular tail',
+        cutting='every sampled window cut into consecutive pieces of at most W, never separating a document '
+                'start from its previous page; each page once',
+        phases=dict(pretrain_steps=PRETRAIN_STEPS, finetune_steps=FINETUNE_STEPS, early_stopping=False),
+        augmentation_randomness='seeded per update, independent of the model and W',
         augmentation='drawn per sampled window before cutting',
         evaluation='deployed MetaKat merging scaled to W: overlap W/8, cubic ramp 3/4, ignored edge 3/16',
         preflight='six real CUDA updates, both phases and final evaluations, audited before each full run'))

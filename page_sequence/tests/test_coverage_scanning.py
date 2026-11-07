@@ -87,6 +87,7 @@ def test_regular_tail_draws_and_coverage_training_resume(tmp_path):
         windows = [sampler.draw() for _ in range(300)]
     assert any(w.source == 'coverage' and len(w.rows) < 12 and not w.scan_start for w in windows)
     config.update(window_size=4, sampling_window_size=12, context_microbatch_size=16, context_coverage_stride=2,
+                  context_boundary_aware_cuts=True, augmentation_seed_per_step=True,
                   auxiliary_edges=True, scan_batches=scan, pretrain_steps=2, finetune_steps=2,
                   validate_every=2, document_metadata_evaluation=True)
     config['inference'] = dict(window_size=4, stride=3, edge_ramp=1, batch_size=16, edge_power=3, tail='regular')
@@ -99,7 +100,7 @@ def test_regular_tail_draws_and_coverage_training_resume(tmp_path):
     assert state['sampler']['window_size'] == 12 and state['sampler']['scan_batches']['tail'] == 'regular'
     records = [json.loads(line) for line in (run / 'metrics.jsonl').read_text().splitlines()]
     assert records[-1]['context_partition'] == dict(parent_size=12, context_size=4, microbatch=16,
-                                                    parent_stride=6, coverage_stride=2)
+                                                    parent_stride=6, coverage_stride=2, boundary_aware=True)
     assert all(r['loss']['starts'] > 0 for r in records)
 
 
@@ -112,3 +113,84 @@ def test_coverage_scanning_rejects_misaligned_settings(tmp_path):
     config.update(context_coverage_stride=2, scan_batches={'stride': 6, 'border_tokens': False})
     with pytest.raises(ValueError, match='coverage scanning'):
         train(config)
+
+
+@pytest.mark.parametrize('size', [512, 64, 8, 3, 2])
+def test_boundary_aware_cuts_keep_every_document_start_with_its_previous_page(size):
+    generator = torch.Generator().manual_seed(size)
+    for length in [1, 2, 9, 100, 512]:
+        for density in [0., .05, .3, .9]:
+            boundaries = [False] + (torch.rand(length - 1, generator=generator) < density).tolist()
+            spans = piece_spans(length, size, False, False, 256, max(1, size // 2), boundaries)
+            assert [p for a, b in spans for p in range(a, b)] == list(range(length))
+            assert all(0 < b - a <= size for a, b in spans)
+            for a, b in spans[1:]:
+                # A cut may hit a document start only when no earlier end of the piece was possible.
+                previous = next(lo for lo, hi in spans if hi == a)
+                assert not boundaries[a] or all(boundaries[previous + 1:a + 1])
+    assert piece_spans(10, 4, False, False, 256, 2, [False, False, False, False, True, False, False, False,
+                                                   True, False]) == [(0, 3), (3, 7), (7, 10)]
+
+
+def test_scan_context_boundary_aware_keeps_all_boundary_pairs(tmp_path):
+    _, index, ds = setup_data(tmp_path)
+    docs = index.documents('fit')[:4]
+    rows = tuple(r for d in docs for r in range(d.first, d.first + min(d.length, 3)))
+    batch = collate_windows([ds[Window(rows, 'interesting')]])
+    positive = int((batch['starts'][0] * batch['pair_mask'][0]).sum())
+    assert positive > 0
+    for size in (2, 3, 4):
+        pieces = scan_context(batch, size, parent_stride=4, coverage_stride=1, boundary_aware=True)
+        assert int((pieces['starts'] * pieces['pair_mask']).sum()) == positive
+
+
+def test_seeded_augmentation_ignores_how_much_randomness_the_model_used():
+    from page_sequence.runner import augmentation_randomness
+    config = {'augmentation_seed_per_step': True, 'seed': 17}
+    draws = []
+    for consumed in (0, 5, 1000):
+        torch.rand(consumed)
+        with augmentation_randomness(config, 42, 'cpu'):
+            draws.append(torch.rand(8))
+    assert all(torch.equal(draws[0], d) for d in draws)
+    with augmentation_randomness(config, 43, 'cpu'):
+        assert not torch.equal(torch.rand(8), draws[0])
+    before = torch.random.get_rng_state()
+    with augmentation_randomness(config, 42, 'cpu'):
+        torch.rand(3)
+    assert torch.equal(before, torch.random.get_rng_state())
+
+
+def test_non_overlapping_coverage_tiles_each_scan_page_once(tmp_path):
+    _, index, ds = setup_data(tmp_path)
+    scan = {'stride': 12, 'border_tokens': False, 'metadata_probability': .5, 'tail': 'regular'}
+    sampler = ScanBatchSampler(index, 12, seed=3, variable_lengths=True, scan_batches=scan)
+    docs = sorted(sampler.docs, key=lambda d: -d.length)[:3]
+    rows = tuple(r for d in docs for r in range(d.first, d.first + d.length))
+    tiles = sampler._tiles(docs, 'coverage')
+    assert [r for t in tiles for r in t.rows] == list(rows)
+    assert [(t.scan_start, t.scan_end) for t in tiles][0][0] and tiles[-1].scan_end
+    windows = [sampler.draw() for _ in range(300)]
+    assert any(w.source == 'coverage' for w in windows)
+    # Without a coverage stride, coverage windows are cut exactly like anchor windows.
+    batch = collate_windows([ds[t] for t in tiles])
+    pieces = scan_context(batch, 4, parent_stride=12, coverage_stride=None, boundary_aware=True)
+    assert [r for p in pieces['rows'] for r in p] == list(rows)
+    assert all(abs(w - 1) < 1e-6 for p, w in zip(pieces['rows'], pieces['weight']) for w in w[:len(p)].tolist())
+
+
+def test_non_overlapping_cut_training_resumes(tmp_path):
+    config, _, _ = setup_data(tmp_path)
+    scan = {'stride': 12, 'border_tokens': False, 'metadata_probability': .5, 'tail': 'regular'}
+    config.update(window_size=4, sampling_window_size=12, context_microbatch_size=16,
+                  context_boundary_aware_cuts=True, augmentation_seed_per_step=True,
+                  auxiliary_edges=True, scan_batches=scan, pretrain_steps=2, finetune_steps=2,
+                  validate_every=2, document_metadata_evaluation=True)
+    config['inference'] = dict(window_size=4, stride=3, edge_ramp=1, batch_size=16, edge_power=3, tail='regular')
+    train(config, stop_after=2)
+    run = Path(config['run_dir'])
+    train(config, resume=run / 'latest.pt')
+    records = [json.loads(line) for line in (run / 'metrics.jsonl').read_text().splitlines()]
+    assert records[-1]['context_partition'] == dict(parent_size=12, context_size=4, microbatch=16, parent_stride=12,
+                                                    coverage_stride=None, boundary_aware=True)
+    assert (run / 'finetune_final.pt').exists()

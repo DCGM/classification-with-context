@@ -55,8 +55,9 @@ def deployment_inference(window_size, batch_size=8, start_threshold=.5):
 def window_spans(n, size, stride, tail='anchored'):
     if size == 1 and stride == 1 and n >= 1:
         return [(i, i + 1) for i in range(n)]
-    if n < 1 or size < 2 or not 1 <= stride < size:
-        raise ValueError('nonempty stream and pair-covering window/stride required')
+    # stride == size tiles without overlap (training scans); inference configurations require stride < size.
+    if n < 1 or size < 2 or not 1 <= stride <= size:
+        raise ValueError('nonempty stream and a stride of at most the window required')
     if tail not in ('anchored', 'regular'):
         raise ValueError('tail must be anchored or regular')
     if n <= size:

@@ -1,5 +1,6 @@
 """Small PyTorch runner; data, models, losses and full-stream evaluation remain reusable."""
 import argparse
+import contextlib
 from dataclasses import asdict
 import importlib.metadata
 import json
@@ -185,6 +186,25 @@ def provenance(index, manifest):
             'versions': {name: importlib.metadata.version(name) for name in ('torch', 'transformers', 'numpy')}}
 
 
+def augmentation_randomness(config, step, device):
+    """With `augmentation_seed_per_step`, input dropout draws from its own stream, seeded by the update number.
+
+    The model's internal dropout consumes the global stream in amounts that depend on the batch shape; with this
+    setting every update's input dropout is the same whatever the model or context window, and on resume.
+    """
+    if not config.get('augmentation_seed_per_step'):
+        return contextlib.nullcontext()
+
+    @contextlib.contextmanager
+    def seeded():
+        cuda = torch.device(device).type == 'cuda'
+        index = torch.device(device).index
+        with torch.random.fork_rng(devices=[torch.cuda.current_device() if index is None else index] if cuda else []):
+            torch.manual_seed(config['seed'] * 1_000_003 + step)
+            yield
+    return seeded()
+
+
 def train(config, resume=None, stop_after=None):
     weights_by_stage = {stage: stage_loss_weights(config, stage) for stage in ('pretrain', 'finetune')}
     parent_size = config.get('sampling_window_size', config['window_size'])
@@ -195,17 +215,21 @@ def train(config, resume=None, stop_after=None):
     if chunked and any(w.boundary_consistency for w in weights_by_stage.values()):
         raise ValueError('chunked training does not support boundary consistency')
     coverage_scan = None
-    if 'context_coverage_stride' in config:
-        # Coverage scans are cut with the context window at this stride; anchor windows consecutively.
+    if 'context_coverage_stride' in config or config.get('context_boundary_aware_cuts'):
+        # Sampled windows are cut by scan_context: anchor windows consecutively (optionally never separating a
+        # document start from its previous page); coverage scans at `context_coverage_stride` if given,
+        # otherwise like anchor windows.
         scan_settings = config.get('scan_batches', {})
         coverage_scan = dict(parent_stride=scan_settings.get('stride', parent_size // 2),
-                             coverage_stride=config['context_coverage_stride'])
+                             coverage_stride=config.get('context_coverage_stride'),
+                             boundary_aware=bool(config.get('context_boundary_aware_cuts')))
         size, stride, parent_stride = config['window_size'], coverage_scan['coverage_stride'], coverage_scan['parent_stride']
-        if (not chunked or not config.get('boundary_features') or config.get('scan_borders')
-                or scan_settings.get('tail') != 'regular' or not 1 <= stride < size
-                or parent_stride % stride or size > parent_size - parent_stride + stride):
-            raise ValueError('coverage scanning needs fixed parents, five-bit features, regular parent tails and '
-                             'a context stride that tiles the parent stride')
+        if not chunked or not config.get('boundary_features') or config.get('scan_borders'):
+            raise ValueError('cutting sampled windows needs fixed parents and five-bit features')
+        if stride is not None and (scan_settings.get('tail') != 'regular' or not 1 <= stride < size
+                                   or parent_stride % stride or size > parent_size - parent_stride + stride):
+            raise ValueError('coverage scanning needs regular parent tails and a context stride that tiles '
+                             'the parent stride')
     if config['window_size'] == 1 and (not chunked or any(w.starts for w in weights_by_stage.values())):
         raise ValueError('W1 requires fixed-parent chunks and disabled pairwise boundary loss')
     if any(w.boundary_consistency for w in weights_by_stage.values()) and not config.get('auxiliary_edges', False):
@@ -390,9 +414,10 @@ def train(config, resume=None, stop_after=None):
                     for group, lr in zip(optimizer.param_groups, base_lrs):
                         group['lr'] = lr * min((step + 1) / warmup, 1.)
                     optimizer.zero_grad(set_to_none=True)
-                    augmented = pagination_dropout(batch['features'], **dropout)
-                    augmented = modality_dropout(augmented, **modality_config)
-                    augmented = scattered_dropout(augmented, **scattered_config)
+                    with augmentation_randomness(config, step, device):
+                        augmented = pagination_dropout(batch['features'], **dropout)
+                        augmented = modality_dropout(augmented, **modality_config)
+                        augmented = scattered_dropout(augmented, **scattered_config)
                     if chunked:
                         output = None
                         losses, denominators = backward_chunks(

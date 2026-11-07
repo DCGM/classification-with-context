@@ -1,7 +1,7 @@
 """Real-store preflight for one r22 window-series run: six CUDA updates over both phases and all final evaluations.
 
 Audits the training forwards (window length, physical positions, all three signals), the cutting of the sampled
-512-page windows (coverage scans with overlap, anchors consecutive, every page weighted once per update), finite
+512-page windows (consecutive, every page once, document starts kept with their previous page), finite
 losses with an active boundary loss, the unchanged 512 sampler with the regular tail, the deployed evaluation
 policy, the phase checkpoints and the initial parameters.
 """
@@ -26,13 +26,17 @@ def main():
     config = json.loads((root / 'smoke-config.json').read_text())
     window = config['window_size']
     chunked = True
-    assert config['sampling_window_size'] == 512 and config['context_coverage_stride'] == window // 2
+    assert config['sampling_window_size'] == 512 and 'context_coverage_stride' not in config
+    assert config['scan_batches']['stride'] == 512
     run = Path(config['run_dir'])
     assert config['inference'] == asdict(deployment_inference(window, config['inference']['batch_size'],
                                                               config['inference']['start_threshold']))
     assert config['scan_batches']['tail'] == 'regular'
+    assert config['augmentation_seed_per_step'] and config['context_boundary_aware_cuts']
     audit = {'train_forwards': 0, 'eval_forwards': 0, 'max_physical_positions': 0, 'updates_cut': 0,
-             'pieces': 0, 'parents': 0, 'coverage_parents': 0}
+             'pieces': 0, 'parents': 0, 'coverage_parents': 0,
+             'boundary_pairs_sampled': 0, 'boundary_pairs_trained': 0, 'positions_sampled': 0,
+             'positions_after_cut': 0}
     original_forward = PageTagger.forward
 
     def checked_forward(self, features, mask, **kwargs):
@@ -53,16 +57,23 @@ def main():
 
     original_cut = context_training.scan_context
 
-    def checked_cut(batch, size, parent_stride, coverage_stride):
-        pieces = original_cut(batch, size, parent_stride, coverage_stride)
-        assert (size, parent_stride, coverage_stride) == (window, 256, window // 2)
+    def checked_cut(batch, size, parent_stride, coverage_stride, boundary_aware=False):
+        pieces = original_cut(batch, size, parent_stride, coverage_stride, boundary_aware)
+        assert (size, parent_stride, coverage_stride, boundary_aware) == (window, 512, None, True)
+        # Every document start the sampled windows train is still trained after cutting (single-page runs
+        # longer than the window aside, which the cut cannot keep).
+        before = int((batch['starts'] * batch['pair_mask']).sum())
+        after = int((pieces['starts'] * pieces['pair_mask']).sum())
+        audit['boundary_pairs_sampled'] += before
+        audit['boundary_pairs_trained'] += after
+        audit['positions_sampled'] += int(batch['attention_mask'].sum())
+        audit['positions_after_cut'] += int(pieces['attention_mask'].sum())
         totals = Counter()
         for rows, weights in zip(pieces['rows'], pieces['weight'].tolist()):
             for row, weight in zip(rows, weights):
                 totals[row] += weight
         assert all(abs(total - 1) < 1e-5 for total in totals.values())
         assert set(totals) == {row for rows in batch['rows'] for row in rows}
-        assert pieces['attention_mask'].sum() >= batch['attention_mask'].sum()
         audit['updates_cut'] += 1
         audit['pieces'] += len(pieces['rows'])
         audit['coverage_parents'] += sum(source == 'coverage' for source in batch['sources'])
@@ -82,12 +93,16 @@ def main():
         assert record['loss_weights']['weak_type'] == (.2 if record['stage'] == 'pretrain' else .05)
         if chunked:
             assert record['context_partition'] == dict(parent_size=512, context_size=window, microbatch=32768,
-                                                       parent_stride=256, coverage_stride=window // 2)
+                                                       parent_stride=512, coverage_stride=None,
+                                                       boundary_aware=True)
         else:
             assert 'context_partition' not in record
     assert audit['updates_cut'] == (len(records) if chunked else 0)
     if chunked:
-        assert audit['coverage_parents'] > 0 and audit['pieces'] > audit['parents']
+        assert audit['coverage_parents'] > 0 and audit['pieces'] >= audit['parents']
+        assert audit['pieces'] > audit['parents'] or window == 512
+        assert audit['boundary_pairs_trained'] >= .99 * audit['boundary_pairs_sampled'] > 0
+        assert audit['positions_after_cut'] == audit['positions_sampled']
     assert audit['max_physical_positions'] <= 32768
     for name in ('initial.pt', 'pretrain_final.pt', 'finetune_init.pt', 'finetune_final.pt', 'latest.pt'):
         if name == 'initial.pt' and not chunked:

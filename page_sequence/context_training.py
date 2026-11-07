@@ -39,31 +39,48 @@ def split_context(batch, size):
     return result
 
 
-def piece_spans(length, size, coverage, scan_end, parent_stride, coverage_stride):
+def piece_spans(length, size, coverage, scan_end, parent_stride, coverage_stride, boundaries=None):
     """Spans of one sampled parent window, in its own positions.
 
-    Anchor windows are cut into consecutive pieces. A coverage window is one tile of a whole scan, tiled by the
+    Anchor windows are cut into consecutive pieces. Given `boundaries` (true where a document starts at that
+    position), a cut never separates a document start from its previous page: the piece ends earlier and the
+    next one starts on the previous page instead. Only when every position a piece could end at is a document
+    start (W single-page documents in a row) is the boundary cut. A coverage window is one tile of a whole scan, tiled by the
     sampler at `parent_stride` with the regular tail; the scan itself is cut with `size` at `coverage_stride`
     (regular tail). Each scan window is assigned to the tile in which it starts, so the tiles of one scan together
     hold exactly that scanning, and every window lies inside its tile.
     """
     if not coverage:
-        return [(lo, min(lo + size, length)) for lo in range(0, length, size)]
+        spans, lo = [], 0
+        while lo < length:
+            hi = min(lo + size, length)
+            if boundaries is not None and hi < length:
+                cut = hi
+                while cut > lo + 1 and boundaries[cut]:
+                    cut -= 1
+                hi = hi if boundaries[cut] else cut
+            spans.append((lo, hi))
+            lo = hi
+        return spans
     if not scan_end:
         return [(lo, lo + size) for lo in range(0, parent_stride, coverage_stride)]
     return window_spans(length, size, coverage_stride, 'regular')
 
 
-def scan_context(batch, size, parent_stride, coverage_stride):
+def scan_context(batch, size, parent_stride, coverage_stride, boundary_aware=False):
     """Cut every parent into its pieces, keep targets and boundary features, and reweight repeated pages.
 
+    With `boundary_aware`, anchor windows are cut so that no document start loses its pair (see `piece_spans`).
+    Without a `coverage_stride`, coverage windows are cut exactly like anchor windows.
     Repeated pages and pairs get reciprocal weight over all pieces of the update, as `collate_windows` does
     for parent windows. The first position of a piece has no predecessor and no pair target.
     """
     lengths = batch['attention_mask'].sum(1).tolist()
     pieces = []
     for b, (length, source, scan_end) in enumerate(zip(lengths, batch['sources'], batch['scan_ends'])):
-        spans = piece_spans(length, size, source == 'coverage', scan_end, parent_stride, coverage_stride)
+        boundaries = (batch['starts'][b, :length] > 0).tolist() if boundary_aware else None
+        coverage = source == 'coverage' and coverage_stride is not None
+        spans = piece_spans(length, size, coverage, scan_end, parent_stride, coverage_stride, boundaries)
         if any(lo < 0 or hi > length or hi <= lo for lo, hi in spans):
             raise ValueError('scan piece outside its parent window')
         pieces += [(b, lo, hi) for lo, hi in spans]
@@ -123,7 +140,7 @@ def backward_chunks(model, batch, features, size, microbatch, weights, scaler, d
     """One optimizer update's loss, normalized over ALL chunks, not per chunk.
 
     `microbatch` limits the page positions of one physical batch. `coverage_scan`, a dict with the sampler's
-    `parent_stride` and the `coverage_stride`, switches to `scan_context`; otherwise parents are cut into
+    `parent_stride`, the `coverage_stride` and optionally `boundary_aware`, switches to `scan_context`; otherwise parents are cut into
     consecutive chunks (`split_context`).
     """
     if microbatch < 1 or weights.boundary_consistency:
