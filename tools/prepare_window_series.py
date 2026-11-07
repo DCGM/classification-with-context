@@ -8,7 +8,7 @@ losses and stages. Every W trains on the same sampled data; only the context dif
   at W512 the windows stay whole. Pairs across a cut are not trained (about 1/W of all pairs, boundaries
   included, independent of their content or position). All pieces of an update are trained together in
   physical batches of at most 32,768 positions with one optimizer step;
-- fixed phase lengths without early stopping (15,427 pretraining and 4,000 fine-tuning updates), and input
+- fixed phase lengths without early stopping (16,000 pretraining and 4,000 fine-tuning updates), and input
   dropout seeded per update (`augmentation_seed_per_step`), so the dropout is the same for every W;
 - validation and final evaluation merge windows with the deployed MetaKat policy scaled to W
   (`inference.deployment_inference`: overlap W/8, cubic ramp 3/4 and ignored edge 3/16 of the overlap).
@@ -36,9 +36,9 @@ from page_sequence.inference import deployment_inference  # noqa: E402
 STORES = {'nvme': '/home/ikohut/tmp/document-store-ocr-lines-sparse-v2',
           'ssd': '/run/media/ikohut/3de48e10-fa2f-4c8b-bea2-166e76ea8e4a/data/document-store-ocr-lines-sparse-v2'}
 PARENT, PHYSICAL = 512, 32768
-# Pretraining keeps the r19 budget as a fixed length (most runs selected 14,000-15,427). Fine-tuning runs stopped
-# at about 2,250 updates with their best at 250-3,500; it gets a fixed, slightly longer 4,000.
-PRETRAIN_STEPS, FINETUNE_STEPS = 15427, 4000
+# Pretraining: the r19 budget (15,427; most runs selected 14,000-15,427) rounded up to 16,000. Fine-tuning runs
+# stopped at about 2,250 updates with their best at 250-3,500; it gets a fixed, slightly longer 4,000.
+PRETRAIN_STEPS, FINETUNE_STEPS = 16000, 4000
 # (window, slot, dependency): larger windows first, the two disks alternating after the running W1 jobs.
 JOBS = [(512, 'nvme', 'r21-w1-STI'), (256, 'ssd', 'r21-w1-SI'), (128, 'nvme', 'r22-w512'),
         (64, 'ssd', 'r22-w256'), (32, 'nvme', 'r22-w128'), (16, 'ssd', 'r22-w64'), (8, 'nvme', 'r22-w32')]
