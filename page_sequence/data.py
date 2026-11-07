@@ -48,7 +48,8 @@ def make_example(pages, features, window):
     pair_mask[0] = False
     return {'features': features(pages), 'type': np.array(labels, np.int64),
             'gold': np.array(gold, bool), 'placement': np.array(side, np.int64),
-            'starts': starts, 'pair_mask': pair_mask, 'rows': window.rows, 'source': window.source}
+            'starts': starts, 'pair_mask': pair_mask, 'rows': window.rows, 'source': window.source,
+            'scan_end': window.scan_end}
 
 
 def page_edge_targets(index, rows):
@@ -85,6 +86,8 @@ def collate_windows(examples):
               'page_end': torch.full((b, l), float(IGNORE)),
               'weight': torch.zeros(b, l), 'pair_weight': torch.zeros(b, l),
               'rows': [e['rows'] for e in examples],
+              'sources': [e.get('source') for e in examples],
+              'scan_ends': [bool(e.get('scan_end', False)) for e in examples],
               'storage_pages': {name: sum(e.get('storage_pages', {}).get(name, 0) for e in examples)
                                 for name in ('nvme', 'fallback')}}
     occurrences = Counter(row for e in examples for row in e['rows'])

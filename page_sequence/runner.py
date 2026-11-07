@@ -194,6 +194,18 @@ def train(config, resume=None, stop_after=None):
         raise ValueError('invalid fixed-parent context experiment')
     if chunked and any(w.boundary_consistency for w in weights_by_stage.values()):
         raise ValueError('chunked training does not support boundary consistency')
+    coverage_scan = None
+    if 'context_coverage_stride' in config:
+        # Coverage scans are cut with the context window at this stride; anchor windows consecutively.
+        scan_settings = config.get('scan_batches', {})
+        coverage_scan = dict(parent_stride=scan_settings.get('stride', parent_size // 2),
+                             coverage_stride=config['context_coverage_stride'])
+        size, stride, parent_stride = config['window_size'], coverage_scan['coverage_stride'], coverage_scan['parent_stride']
+        if (not chunked or not config.get('boundary_features') or config.get('scan_borders')
+                or scan_settings.get('tail') != 'regular' or not 1 <= stride < size
+                or parent_stride % stride or size > parent_size - parent_stride + stride):
+            raise ValueError('coverage scanning needs fixed parents, five-bit features, regular parent tails and '
+                             'a context stride that tiles the parent stride')
     if config['window_size'] == 1 and (not chunked or any(w.starts for w in weights_by_stage.values())):
         raise ValueError('W1 requires fixed-parent chunks and disabled pairwise boundary loss')
     if any(w.boundary_consistency for w in weights_by_stage.values()) and not config.get('auxiliary_edges', False):
@@ -385,7 +397,7 @@ def train(config, resume=None, stop_after=None):
                         output = None
                         losses, denominators = backward_chunks(
                             model, batch, augmented, config['window_size'],
-                            config['context_microbatch_size'], loss_weights, scaler, device)
+                            config['context_microbatch_size'], loss_weights, scaler, device, coverage_scan)
                     else:
                         with autocast(model, device):
                             output = model(augmented, batch['attention_mask'])
@@ -422,7 +434,8 @@ def train(config, resume=None, stop_after=None):
                               'sampler': dict(sampler.counters), 'coverage_epochs': sampler.epoch}
                     if chunked:
                         record['context_partition'] = dict(parent_size=parent_size,
-                            context_size=config['window_size'], microbatch=config['context_microbatch_size'])
+                            context_size=config['window_size'], microbatch=config['context_microbatch_size'],
+                            **(coverage_scan or {}))
                     # The device copy and scalar logging are complete. Do not retain
                     # the consumer's pinned batch (or last training graph) in validation.
                     del raw_batch, batch, augmented, output, losses, denominators, norm

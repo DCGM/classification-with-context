@@ -122,8 +122,10 @@ class ScanBatchSampler(WindowSampler):
         if window.scan_end and window.rows[-1] != last_doc.first + last_doc.length - 1:
             raise RuntimeError('scan ends inside a document')
         tokens = len(window.rows) + (window.scan_start + window.scan_end) * self.scan_batches['border_tokens']
-        if tokens > self.window_size or (tokens < self.window_size and not (window.scan_start and window.scan_end)):
-            raise RuntimeError('only complete scans may produce short padded windows')
+        # Short windows: complete short scans, and with the regular tail also the last tile of a scan.
+        short_allowed = window.scan_end and (window.scan_start or self.scan_batches.get('tail') == 'regular')
+        if tokens > self.window_size or (tokens < self.window_size and not short_allowed):
+            raise RuntimeError('only complete scans or regular scan tails may produce short padded windows')
         self.counters['metadata_windows:' + ('provided' if window.document_metadata else 'absent')] += 1
         self.counters['source:' + source] += 1
         self.counters['processed_pages'] += len(pages)
