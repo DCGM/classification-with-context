@@ -5,9 +5,10 @@ losses, stages and stopping. Changes for all W:
 - complete scans are tiled by the sampler with the regular tail (`scan_batches.tail`), as at inference;
 - validation and final evaluation merge windows with the deployed MetaKat policy scaled to W
   (`inference.deployment_inference`: overlap W/8, cubic ramp 3/4 and ignored edge 3/16 of the overlap).
-For W < 512 additionally (`context_coverage_stride`): each sampled anchor window is cut into consecutive W pieces,
+For every W, 512 included (`context_coverage_stride`): each sampled anchor window is cut into consecutive W pieces,
 each coverage scan is scanned with W at stride W/2 (regular tail), and all pieces of the update are trained
-together in physical batches of at most 32,768 positions with one optimizer step.
+together in physical batches of at most 32,768 positions with one optimizer step. At W512 the cut reproduces the
+sampled windows.
 
 The source is frozen from a committed revision (`git archive`), the store copy follows the job's disk slot.
 Registration in the queue monitor is a separate step.
@@ -63,11 +64,10 @@ def recipe(reference, window, slot):
     config['scan_batches'] = dict(config['scan_batches'], tail='regular')
     config['inference'] = asdict(deployment_inference(window, batch_size=PHYSICAL // window,
                                                       start_threshold=config['inference']['start_threshold']))
-    if window < PARENT:
-        config.update(window_size=window, sampling_window_size=PARENT, context_microbatch_size=PHYSICAL,
-                      context_coverage_stride=window // 2)
-    parent = f'b64-w512' if window == PARENT else f'b64parent512-w{window}'
-    name = (f'bert-mini-fp16-{slot}-{parent}-boundary5-metadata50-scattered-mmbert-ocr-lines-stats180-'
+    # The same path for every W, 512 included: sampled windows are cut with W (coverage scans at W/2).
+    config.update(window_size=window, sampling_window_size=PARENT, context_microbatch_size=PHYSICAL,
+                  context_coverage_stride=window // 2)
+    name = (f'bert-mini-fp16-{slot}-b64parent512-w{window}-boundary5-metadata50-scattered-mmbert-ocr-lines-stats180-'
             f'tailregular-ftweak005-seed17-r22')
     config['run_dir'] = str(Path(config['run_dir']).parent / name)
     config['clearml'] = dict(config['clearml'], name=name)

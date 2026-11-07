@@ -15,7 +15,7 @@ from page_sequence.schema import Window
 from page_sequence.tests.test_context_training import setup_data
 
 
-@pytest.mark.parametrize('size', [256, 128, 64, 32, 16, 8, 2])
+@pytest.mark.parametrize('size', [512, 256, 128, 64, 32, 16, 8, 2])
 def test_coverage_tiles_together_scan_the_whole_scan_with_overlap(size):
     for n in [1, 7, 255, 256, 511, 512, 513, 700, 768, 769, 1024, 1100, 2047, 2048, 2300]:
         pieces = []
@@ -27,12 +27,24 @@ def test_coverage_tiles_together_scan_the_whole_scan_with_overlap(size):
         assert {p for a, b in pieces for p in range(a + 1, b)} == set(range(1, n))
 
 
-@pytest.mark.parametrize('size', [256, 64, 8, 3])
+@pytest.mark.parametrize('size', [512, 256, 64, 8, 3])
 def test_anchor_windows_are_cut_consecutively(size):
     for n in [1, 5, 300, 512]:
         spans = piece_spans(n, size, False, False, 256, max(1, size // 2))
         assert [p for a, b in spans for p in range(a, b)] == list(range(n))
         assert all(b - a == size for a, b in spans[:-1])
+
+
+def test_full_size_cut_reproduces_the_sampled_windows(tmp_path):
+    _, index, ds = setup_data(tmp_path)
+    d = index.documents('fit')[0]
+    rows = tuple(range(d.first, d.first + 12))
+    tiles = [Window(rows[lo:hi], 'coverage', lo == 0, hi == 12) for lo, hi in window_spans(12, 8, 4, 'regular')]
+    batch = collate_windows([ds[w] for w in tiles + [Window(rows[2:9], 'interesting')]])
+    pieces = scan_context(batch, 8, parent_stride=4, coverage_stride=4)
+    assert [tuple(r) for r in pieces['rows']] == [tuple(r) for r in batch['rows']]
+    for key in ('type', 'weight', 'pair_weight', 'attention_mask'):
+        torch.testing.assert_close(pieces[key], batch[key][:, :8])
 
 
 def test_scan_context_keeps_pages_and_weights_each_page_once(tmp_path):

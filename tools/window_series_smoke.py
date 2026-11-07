@@ -25,7 +25,8 @@ def main():
     root = Path(__file__).resolve().parent
     config = json.loads((root / 'smoke-config.json').read_text())
     window = config['window_size']
-    chunked = 'sampling_window_size' in config
+    chunked = True
+    assert config['sampling_window_size'] == 512 and config['context_coverage_stride'] == window // 2
     run = Path(config['run_dir'])
     assert config['inference'] == asdict(deployment_inference(window, config['inference']['batch_size'],
                                                               config['inference']['start_threshold']))
