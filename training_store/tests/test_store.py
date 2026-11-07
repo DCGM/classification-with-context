@@ -215,3 +215,33 @@ def test_full_cli_and_resume_guard(tmp_path, example):
     atomic_json(output / 'plan.json', plan)
     with pytest.raises(ValueError, match='resume inputs'):
         run(args)
+
+
+def test_published_store_records_its_vector_sources_without_the_lmdbs(tmp_path, example):
+    import shutil
+    from page_sequence.index import PageIndex
+    from page_sequence.pagination import PaginationDataset
+    from page_sequence.schema import Window
+    from training_store.dataset import StoreDataset
+    config, _ = example
+    output, plan = prepare(tmp_path, config)
+    publish(output, plan)
+    features = FeaturePipeline.from_config(config['features'])
+    dataset = StoreDataset(PageIndex(output / 'catalogue.sqlite'), features, output)
+    live = features.source_provenance()
+    assert dataset.vector_provenance(features) == live
+    with pytest.raises(ValueError, match='under construction'):
+        StoreDataset(PageIndex(output / 'catalogue.sqlite'), features, output,
+                     allow_building=True).vector_provenance(features)
+    for kind in ('image', 'text', 'stats'):
+        shutil.rmtree(tmp_path / kind)
+    # Another machine: no LMDBs, the same provenance, every vector still read from the store.
+    assert dataset.vector_provenance(features) == live
+    assert dataset[Window((1, 2))]['storage_pages'] == {'nvme': 2, 'fallback': 0}
+    wrapped = PaginationDataset.__new__(PaginationDataset)
+    wrapped.dataset = dataset
+    assert wrapped.vector_provenance(features) == live
+    other = json.loads(json.dumps(config['features']))
+    other['sources']['text']['stores']['private'] = str(tmp_path / 'elsewhere')
+    with pytest.raises(ValueError, match='built from'):
+        dataset.vector_provenance(FeaturePipeline.from_config(other))

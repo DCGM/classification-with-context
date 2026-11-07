@@ -282,7 +282,9 @@ def train(config, resume=None, stop_after=None):
     diagnostic_blocks = (context_blocks(index, streams, context_config.get('sample_pages', 2048))
                          if context_config.get('enabled', False) else [])
     prov = provenance(index, config['dev_manifest'])
-    prov['vector_sources'] = features.source_provenance()
+    published = config.get('training_store') and not config['training_store'].get('allow_building', False)
+    # A published store holds every vector; its manifest records the LMDBs (identical to a live stat).
+    prov['vector_sources'] = dataset.vector_provenance(features) if published else features.source_provenance()
     if config.get('training_store'):
         if index.fingerprint() != dataset.plan['index_sha256']:
             raise ValueError('training catalogue checksum mismatch')

@@ -76,6 +76,24 @@ class StoreDataset(Dataset):
                 'build_id': self.plan['build_id'], 'allow_building': self.allow_building,
                 'fallback': self.plan['reference_sources'] if self.allow_building else None}
 
+    def vector_provenance(self, features):
+        """The vector LMDBs a published store was built from, as recorded in its manifest.
+
+        Training on a published store reads every vector from the store, so the LMDBs need not exist
+        (e.g. on another machine). The configured sources must still name the recorded ones.
+        """
+        if self.allow_building:
+            raise ValueError('a store under construction falls back to the live LMDBs')
+        recorded = self.plan['reference_sources']
+        configured = {name: {'stores': {label: str(Path(path).resolve()) for label, path in source.stores.items()},
+                             'kind': source.kind, 'dim': source.dim, 'dtype': source.dtype}
+                      for name, source in features.sources.items()}
+        named = {name: dict(spec, stores={label: store['path'] for label, store in spec['stores'].items()})
+                 for name, spec in recorded.items()}
+        if configured != named:
+            raise ValueError('configured vector sources differ from those the store was built from')
+        return recorded
+
     def _shard_ready(self, shard):
         shard = int(shard)
         if shard in self._ready:

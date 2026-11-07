@@ -96,6 +96,9 @@ class PaginationDataset(Dataset):
     def source_provenance(self):
         return self.dataset.source_provenance()
 
+    def vector_provenance(self, features):
+        return self.dataset.vector_provenance(features)
+
     def pagination_provenance(self):
         return dict(self.report, path=self.path, cap=self.cap)
 
