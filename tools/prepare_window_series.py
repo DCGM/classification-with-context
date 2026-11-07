@@ -4,10 +4,10 @@ Every run starts from the r19 STI W512 recipe and keeps its 512-page sampler, 64
 losses and stages. Every W trains on the same sampled data; only the context differs:
 - the sampler tiles complete (coverage) scans into 512-page windows without overlap (stride 512, regular tail);
   anchor windows are sampled as before;
-- every sampled window, coverage or anchor, is cut into consecutive pieces of at most W, never between a
-  document start and its previous page (`context_boundary_aware_cuts`); at W512 the windows stay whole. All
-  pieces of an update are trained together in physical batches of at most 32,768 positions with one optimizer
-  step;
+- every sampled window, coverage or anchor, is cut into consecutive pieces of W (the shorter last piece kept);
+  at W512 the windows stay whole. Pairs across a cut are not trained (about 1/W of all pairs, boundaries
+  included, independent of their content or position). All pieces of an update are trained together in
+  physical batches of at most 32,768 positions with one optimizer step;
 - fixed phase lengths without early stopping (15,427 pretraining and 4,000 fine-tuning updates), and input
   dropout seeded per update (`augmentation_seed_per_step`), so the dropout is the same for every W;
 - validation and final evaluation merge windows with the deployed MetaKat policy scaled to W
@@ -72,9 +72,9 @@ def recipe(reference, window, slot):
     config['inference'] = asdict(deployment_inference(window, batch_size=PHYSICAL // window,
                                                       start_threshold=config['inference']['start_threshold']))
     # The same path for every W, 512 included: every sampled window, coverage or anchor, is cut into
-    # consecutive pieces of at most W, never separating a document start from its previous page.
+    # consecutive pieces of W (the W1 cut). Pairs across a cut are not trained, about 1/W of them, unbiased.
     config.update(window_size=window, sampling_window_size=PARENT, context_microbatch_size=PHYSICAL,
-                  context_boundary_aware_cuts=True, augmentation_seed_per_step=True)
+                  augmentation_seed_per_step=True)
     # Fixed phase lengths, no early stopping: every W trains on the same data. The best checkpoint of each
     # phase is still selected by validation (pretraining only after the first coverage epoch, as in r19).
     if config['stopping'] != {'pretrain': {'min_coverage_epochs': 1, 'patience': 5}, 'finetune': {'patience': 5}}:
@@ -126,8 +126,8 @@ def prepare(reference, output, repository):
         reference=str(reference), parent_window_size=PARENT, parent_batch_size=64,
         windows=[w for w, _, _ in JOBS], max_physical_positions=PHYSICAL,
         sampler='r19 sampler; complete scans tiled into 512-page windows without overlap, regular tail',
-        cutting='every sampled window cut into consecutive pieces of at most W, never separating a document '
-                'start from its previous page; each page once',
+        cutting='every sampled window cut into consecutive pieces of W, each page once; pairs across cuts '
+                'untrained (about 1/W)',
         phases=dict(pretrain_steps=PRETRAIN_STEPS, finetune_steps=FINETUNE_STEPS, early_stopping=False),
         augmentation_randomness='seeded per update, independent of the model and W',
         augmentation='drawn per sampled window before cutting',

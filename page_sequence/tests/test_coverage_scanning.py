@@ -183,7 +183,7 @@ def test_non_overlapping_cut_training_resumes(tmp_path):
     config, _, _ = setup_data(tmp_path)
     scan = {'stride': 12, 'border_tokens': False, 'metadata_probability': .5, 'tail': 'regular'}
     config.update(window_size=4, sampling_window_size=12, context_microbatch_size=16,
-                  context_boundary_aware_cuts=True, augmentation_seed_per_step=True,
+                  augmentation_seed_per_step=True,
                   auxiliary_edges=True, scan_batches=scan, pretrain_steps=2, finetune_steps=2,
                   validate_every=2, document_metadata_evaluation=True)
     config['inference'] = dict(window_size=4, stride=3, edge_ramp=1, batch_size=16, edge_power=3, tail='regular')
@@ -191,6 +191,6 @@ def test_non_overlapping_cut_training_resumes(tmp_path):
     run = Path(config['run_dir'])
     train(config, resume=run / 'latest.pt')
     records = [json.loads(line) for line in (run / 'metrics.jsonl').read_text().splitlines()]
-    assert records[-1]['context_partition'] == dict(parent_size=12, context_size=4, microbatch=16, parent_stride=12,
-                                                    coverage_stride=None, boundary_aware=True)
+    assert records[-1]['context_partition'] == dict(parent_size=12, context_size=4, microbatch=16)
+    assert all(r['loss']['starts'] > 0 for r in records)
     assert (run / 'finetune_final.pt').exists()
