@@ -82,6 +82,26 @@ def test_sampling_scan_contract_anchors_coverage_and_exact_resume(tmp_path):
         changed.load_state_dict(sampler.state_dict())
 
 
+
+def test_scan_tiling_regular_tail_is_opt_in_and_part_of_the_resume_policy(tmp_path):
+    config, index, _, _ = fixture(tmp_path)
+    original = ScanBatchSampler(index, 12, variable_lengths=True, scan_batches=config['scan_batches'])
+    assert 'tail' not in original.scan_batches
+    regular = ScanBatchSampler(index, 12, variable_lengths=True,
+                               scan_batches=dict(config['scan_batches'], tail='regular'))
+    assert regular.scan_batches['tail'] == 'regular'
+    docs = sorted(regular.docs, key=lambda d: -d.length)[:3]
+    n = sum(d.length for d in docs)
+    assert n > 12
+    rows = tuple(r for d in docs for r in range(d.first, d.first + d.length))
+    for sampler, tail in ((regular, 'regular'), (original, 'anchored')):
+        windows = [(w.rows, w.scan_start, w.scan_end) for w in sampler._tiles(docs, 'test')]
+        assert windows == [(rows[lo:hi], begin, end) for lo, hi, begin, end in scan_windows(n, 12, 6, True, tail)]
+    with pytest.raises(ValueError, match='scan batch policy'):
+        regular.load_state_dict(original.state_dict())
+    with pytest.raises(ValueError, match='tail'):
+        ScanBatchSampler(index, 12, scan_batches={'tail': 'shifted'})
+
 def test_marker_gradients_padding_invariance_dropout_and_checkpoint(tmp_path):
     _, index, dataset, model = fixture(tmp_path)
     d = index.documents('fit')[0]

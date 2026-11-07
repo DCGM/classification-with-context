@@ -15,7 +15,7 @@ class ScanBatchSampler(WindowSampler):
         if self.window_size < 3 or any(self.edge_crops.values()):
             raise ValueError('scan borders require >=3 positions and replace legacy edge crops')
         settings = dict(scan_batches or {})
-        if set(settings) - {'full_scan_multiplier', 'stride', 'border_tokens', 'metadata_probability'}:
+        if set(settings) - {'full_scan_multiplier', 'stride', 'border_tokens', 'metadata_probability', 'tail'}:
             raise ValueError('unknown scan batch setting')
         self.scan_batches = dict(full_scan_multiplier=settings.get('full_scan_multiplier', 4),
                                  stride=settings.get('stride', self.window_size // 2),
@@ -32,12 +32,20 @@ class ScanBatchSampler(WindowSampler):
             if self.scan_batches['border_tokens']:
                 raise ValueError('document metadata requires five-bit features')
             self.scan_batches['metadata_probability'] = probability
+        # 'anchored' (the original default) shifts the last window back to end at the scan end; 'regular' keeps
+        # the stride and lets the last window be shorter, as at inference. Only the non-default value is stored,
+        # so the sampler state of earlier runs stays unchanged.
+        tail = settings.get('tail', 'anchored')
+        if tail not in ('anchored', 'regular'):
+            raise ValueError('scan batch tail must be anchored or regular')
+        if tail == 'regular':
+            self.scan_batches['tail'] = tail
         self.pending_coverage_windows = deque()
 
     def _tiles(self, docs, source):
         rows = tuple(row for d in docs for row in range(d.first, d.first + d.length))
         tiles = scan_windows(len(rows), self.window_size, self.scan_batches['stride'],
-                             self.scan_batches['border_tokens'])
+                             self.scan_batches['border_tokens'], self.scan_batches.get('tail', 'anchored'))
         self.counters['constructed_scans:' + source] += 1
         self.counters['constructed_scan_pages:' + source] += len(rows)
         self.counters['constructed_scan_documents:' + source] += len(docs)
