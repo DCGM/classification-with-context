@@ -33,3 +33,15 @@ def test_regular_tail_covers_pages_pairs_and_sets_only_true_scan_endpoints(overl
 def test_unknown_tail_policy_rejected():
     with pytest.raises(ValueError, match='tail'):
         InferenceConfig(tail='unknown')
+
+
+def test_deployment_inference_scales_the_metakat_policy_to_each_window():
+    from page_sequence.inference import deployment_inference
+    expected = {512: (448, 48, 12), 256: (224, 24, 6), 128: (112, 12, 3), 64: (56, 6, 1),
+                32: (28, 3, 0), 16: (14, 1, 0), 8: (7, 1, 0), 4: (3, 1, 0), 2: (1, 1, 0)}
+    for window, (stride, ramp, ignore) in expected.items():
+        config = deployment_inference(window)
+        assert (config.stride, config.edge_ramp, config.edge_ignore) == (stride, ramp, ignore)
+        assert (config.merge, config.edge_power, config.tail) == ('center_logits', 3, 'regular')
+    single = deployment_inference(1)
+    assert (single.window_size, single.stride, single.edge_ignore) == (1, 1, 0)

@@ -3,6 +3,8 @@
 `evaluate` runs the selected checkpoint (`finetune_best.pt`) of each given run on the full dev streams of its
 manifest, once per nonempty subset of the run's enabled modalities (image/text/stats), in the `none` condition
 of `page_sequence.evaluate_conditions`: no page numbers and no document boundaries, only the scan endpoints.
+Windows are merged with the policy deployed in MetaKat, scaled to each model's window (overlap W/8, regular tail,
+cubic centre weights, ramp 3/4 and ignored edge 3/16 of the overlap), not with the checkpoint's validation settings.
 All checkpoints are evaluated in one process from one copy of the native store (`--store`), so the catalogue is
 hashed once; `evaluation_dataset` still checks each checkpoint's store identity. Reports go to
 `<output>/<run name>/<subset>/none.json`; existing reports are kept, so the command can be repeated as runs finish.
@@ -12,9 +14,9 @@ that can handle it, with precision, recall and F1 of the curated page type and o
 both support-weighted averages over the classes (as in the README's page type evaluation), and of document starts.
 
 Examples:
-    python tools/modality_overview.py evaluate --output /home/ikohut/tmp/modality-overview \\
+    python tools/modality_overview.py evaluate --output /home/ikohut/tmp/modality-overview-deployment \\
         --store /home/ikohut/tmp/document-store-ocr-lines-sparse-v2 --device cuda RUN_DIR [RUN_DIR ...]
-    python tools/modality_overview.py table --output /home/ikohut/tmp/modality-overview > docs/modality-overview.md
+    python tools/modality_overview.py table --output /home/ikohut/tmp/modality-overview-deployment > docs/modality-overview.md
 """
 import argparse
 import functools
@@ -71,7 +73,8 @@ def evaluate(args):
         config = json.loads((run / 'config.json').read_text())
         print(run.name, flush=True)
         evaluate_checkpoint(checkpoint, config['dev_manifest'], args.output / run.name, ['none'], ['all'],
-                            training_store=args.store, device=args.device, limit_streams=args.limit_streams)
+                            training_store=args.store, device=args.device, limit_streams=args.limit_streams,
+                            inference='deployment')
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -97,6 +100,8 @@ def table(args):
     supports = set()
     for path in sorted(args.output.glob('*/*/none.json')):
         report = json.loads(path.read_text())
+        if report.get('inference_policy') != 'deployment':
+            raise ValueError(f'{path} was not evaluated with the deployed merging policy')
         run = path.parents[1].name
         rows[abbreviation(report['modalities'])].append((model_label(run, report), scores(report), run))
         supports.add((report['curated_type']['n'], report['placement_db_agreement']['n'],
@@ -112,7 +117,9 @@ def table(args):
         'combination of the main signals (S statistics, T text, I image): the other signals are masked as in '
         'the modality ablations (vectors and presence zero), and every model trained with at least these '
         'signals is listed. A model is named by its experiment, the signals it was trained with and its '
-        'context window.', '',
+        'context window. Overlapping windows are merged as deployed in MetaKat, scaled to the window: overlap W/8 '
+        '(64 at W512), regular tail, centre-weighted cubic logits with the ramp ending at 3/4 of the overlap and '
+        '3/16 of the overlap ignored at artificial window edges.', '',
         f'- **Page type**: the {curated:,} curated dev pages. Precision, recall and F1 are support-weighted '
         'averages over the page types, as in the README\'s page type evaluation.',
         f'- **Side**: the {sides:,} dev pages with a DB placement (left/right/single), weighted the same way.',

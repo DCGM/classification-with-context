@@ -39,6 +39,19 @@ class InferenceConfig:
             raise ValueError('tail must be anchored or regular')
 
 
+def deployment_inference(window_size, batch_size=8, start_threshold=.5):
+    """The merging policy deployed in MetaKat, scaled to a window: overlap W/8 (64 at W512, at least one page),
+    regular tail, centre-weighted cubic logits whose ramp ends at 3/4 of the overlap with 3/16 of the overlap
+    ignored at artificial window edges, rounded like MetaKat's `overlap_merge`. W1 has nothing to merge."""
+    if window_size == 1:
+        return InferenceConfig(window_size=1, stride=1, merge='uniform_logits', edge_ramp=1, edge_ignore=0,
+                               edge_power=1, tail='regular', start_threshold=start_threshold, batch_size=batch_size)
+    overlap = max(1, window_size // 8)
+    return InferenceConfig(window_size=window_size, stride=window_size - overlap, merge='center_logits',
+                           edge_ramp=max(1, int(overlap * .75)), edge_ignore=int(overlap * .1875), edge_power=3,
+                           tail='regular', start_threshold=start_threshold, batch_size=batch_size)
+
+
 def window_spans(n, size, stride, tail='anchored'):
     if size == 1 and stride == 1 and n >= 1:
         return [(i, i + 1) for i in range(n)]
