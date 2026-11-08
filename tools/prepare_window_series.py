@@ -140,10 +140,27 @@ def prepare(reference, output, repository):
     return jobs
 
 
+def extend(reference, output, repository, windows, slot='nvme'):
+    """Add windows to a prepared series: same recipe, not registered in the queue (they run elsewhere,
+    see tools/port_recipe.py). The series' frozen code stays; ported jobs freeze their own revision."""
+    design = json.loads((output / 'design.json').read_text())
+    if str(reference) != design['reference'] or set(windows) & set(design['windows']):
+        raise ValueError('another reference or windows already in the series')
+    jobs = [prepare_job(reference, output, repository, w, slot, None) | {'depends_on': []} for w in windows]
+    write(output / 'jobs.json', json.loads((output / 'jobs.json').read_text()) + jobs)
+    write(output / 'design.json', design | {'windows': design['windows'] + list(windows)})
+    return jobs
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--reference', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--add-windows', type=int, nargs='+', help='Extend an existing series with these windows')
     args = parser.parse_args()
-    print(json.dumps(prepare(args.reference.resolve(), args.output.resolve(),
-                             Path(__file__).resolve().parents[1]), indent=2))
+    repository = Path(__file__).resolve().parents[1]
+    if args.add_windows:
+        print(json.dumps(extend(args.reference.resolve(), args.output.resolve(), repository, args.add_windows),
+                         indent=2))
+    else:
+        print(json.dumps(prepare(args.reference.resolve(), args.output.resolve(), repository), indent=2))
