@@ -35,14 +35,19 @@ class WindowSampler:
             if d.periodical:
                 self.periodicals[d.library, d.periodical].append(d)
         self.hard_volumes = [v for v in self.volumes.values() if len(v) > 1]
+        # Per periodical, the volume of each document as a code (0: none), in document order, so that a
+        # cross-volume pool is one vectorized comparison instead of a Python scan of the whole periodical.
+        self._volume_codes = {}
+        for key, members in self.periodicals.items():
+            codes = {}
+            self._volume_codes[key] = (codes, np.array(
+                [codes.setdefault(d.volume, len(codes) + 1) if d.volume else 0 for d in members], np.int32))
         self.anchor_counts = {s: dict(index.db.execute(
             'SELECT label,COUNT(*) FROM anchors WHERE source=? GROUP BY label', (s,)))
             for s in ('interesting', 'annotated')}
         # Derived, bounded caches: not sampler state and never consume RNG draws.
         self._page_sets = OrderedDict()
         self._cached_pages = 0
-        self._cross_volume_pools = OrderedDict()
-        self._cached_neighbors = 0
         self.rng = np.random.default_rng(seed)
         self.epoch = 0
         self.coverage_order = []
@@ -96,20 +101,13 @@ class WindowSampler:
         return pages
 
     def _cross_volume_pool(self, doc):
-        key = doc.library, doc.periodical, doc.volume
-        if key in self._cross_volume_pools:
-            self._cross_volume_pools.move_to_end(key)
-            return self._cross_volume_pools[key]
-        pool = [d for d in self.periodicals.get((doc.library, doc.periodical), [])
-                if join_stratum(doc, d) == 'cross_volume'] if doc.periodical else []
-        if len(pool) <= 65536:
-            while self._cross_volume_pools and (self._cached_neighbors + len(pool) > 65536
-                                               or len(self._cross_volume_pools) >= 128):
-                _, removed = self._cross_volume_pools.popitem(last=False)
-                self._cached_neighbors -= len(removed)
-            self._cross_volume_pools[key] = pool
-            self._cached_neighbors += len(pool)
-        return pool
+        """Documents of the same periodical in another volume (join_stratum 'cross_volume'), in document order."""
+        key = doc.library, doc.periodical
+        if not doc.periodical or not doc.volume or key not in self._volume_codes:
+            return ()
+        codes, volumes = self._volume_codes[key]
+        own = codes.get(doc.volume, -1)
+        return _Subset(self.periodicals[key], np.flatnonzero((volumes != 0) & (volumes != own)))
 
     def _neighbor(self, doc, excluded):
         requested = self.rng.choice(('same_volume', 'cross_volume', 'unrestricted'), p=(.6, .2, .2))
@@ -325,3 +323,17 @@ class WindowSampler:
                 self.pair_cardinality.add(pair)
         self.counters.pop('unique_join_pairs', None)
         self.counters['unique_join_pairs_estimate'] = self.pair_cardinality.estimate()
+
+
+class _Subset:
+    """Read-only view of the listed positions of a sequence."""
+    __slots__ = ('items', 'positions')
+
+    def __init__(self, items, positions):
+        self.items, self.positions = items, positions
+
+    def __len__(self):
+        return len(self.positions)
+
+    def __getitem__(self, i):
+        return self.items[self.positions[i]]
