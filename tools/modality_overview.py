@@ -86,6 +86,75 @@ def comparison_section(directory):
     return lines + ['']
 
 
+# The r23 input ablations of r22 W512: run-name tag -> (label, signals the model is trained with).
+INPUT_MODELS = (
+    ('-boundary5-metadata50-', 'r22 W512: all signals', {'page_numbers', 'metadata', 'scan_flags'}),
+    ('-noedgeheads-nometadata-scattered-', 'r23 A: no page-edge heads, no metadata', {'page_numbers', 'scan_flags'}),
+    ('-noedgeheads-nometadata-noscanflags-scattered-', 'r23 B: A without scan flags', {'page_numbers'}),
+    ('-noedgeheads-nometadata-noscanflags-nopagenumbers-', 'r23 C: B without page numbers (embeddings only)', set()))
+SIGNAL_NAMES = {'page_numbers': 'page numbers', 'metadata': 'document start/end metadata',
+                'scan_flags': 'scan start/end flags'}
+INPUT_SECTION = [
+    '## Optional input signals: r23 ablations of r22 W512, statistics + text + image', '',
+    'r22 W512 trained without the optional signals, cumulatively (`tools/prepare_input_ablations.py`): **A** without '
+    'the page-start/page-end heads and without document start/end metadata on the input, **B** also without the scan '
+    'start/end flags, **C** also without the page numbers, i.e. only the page embeddings. A removed signal is zeroed '
+    'inside the model (training, validation, evaluation), so the sampled data, the input dropout and the '
+    'initialization of all other parameters are those of r22 W512; the only data difference are the 3-4 updates per '
+    'run skipped for an fp16 gradient overflow, whose batches are dropped. Each situation below is a set of signals '
+    'given at inference and lists the models trained with at least those signals, evaluated with exactly them '
+    '(scan flags withheld from r22 W512 or A are zeroed inside the model for that evaluation). Border: pairwise head; '
+    'Both: agreement of the page-edge heads, which A-C do not have.', '']
+
+
+def input_section(output, comparisons=None):
+    from page_sequence.evaluate_conditions import CONDITIONS
+    reports = {}
+    for path in output.glob('*/image+text+stats/*.json'):
+        run, condition = path.parents[1].name, path.stem
+        if condition not in CONDITIONS or '-dinoorig-' in run or not re.search(r'-w512-.*-r2[23]$', run):
+            continue
+        for tag, label, trained in INPUT_MODELS:
+            if tag in run and (run.endswith('-r22') == (tag == INPUT_MODELS[0][0])):
+                reports[(label, condition)] = (json.loads(path.read_text()), path, run)
+    if not any(label != INPUT_MODELS[0][1] for label, _ in reports):
+        return []
+    deltas = {}
+    for path in (comparisons.glob('*-vs-*.json') if comparisons else ()):
+        result = json.loads(path.read_text())
+        deltas[(Path(result['b']['checkpoint']).parent.name, result['condition'])] = result['metrics']
+    fmt = lambda x: '–' if x is None else f'{100 * x:.1f}'
+    lines = list(INPUT_SECTION)
+    situations = sorted(CONDITIONS.items(), key=lambda item: -sum(item[1]) * 10 - item[1][0] * 4 - item[1][2] * 2)
+    for condition, (pages, metadata, scan) in situations:
+        given = {name for name, on in (('page_numbers', pages), ('metadata', metadata), ('scan_flags', scan)) if on}
+        title = ' + '.join(SIGNAL_NAMES[n] for n in SIGNAL_NAMES if n in given) or 'no optional signal'
+        rows = [(label, *reports[(label, condition)]) for _, label, trained in INPUT_MODELS
+                if given <= trained and (label, condition) in reports]
+        if not rows:
+            continue
+        lines += [f'### {title[0].upper() + title[1:]} (`{condition}`)', '',
+                  '| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | '
+                  '**Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |', '|---|' + '---:|' * 13]
+        for label, report, path, run in rows:
+            values = scores(report) + both_scores(path)[2:]
+            cells = [fmt(v) if i % 3 != 2 or i == 9 else f'**{fmt(v)}**' for i, v in enumerate(values)]
+            metrics = deltas.get((run, condition))
+            for key in ('type_weighted_f1', 'side_weighted_f1', 'boundary_f1'):
+                if metrics is None:
+                    cells.append('')
+                    continue
+                m = metrics[key]
+                lo, hi = (100 * x for x in m['ci95'])
+                text = f'{100 * m["difference"]:+.2f} [{lo:+.2f}, {hi:+.2f}]'
+                cells.append(f'**{text}**' if lo > 0 or hi < 0 else text)
+            lines.append(f'| {label} | ' + ' | '.join(cells) + ' |')
+        lines.append('')
+    lines += ['Δ: difference to r22 W512 in the same situation, in points, with the 95% interval of a paired '
+              'bootstrap over the dev streams (`tools/compare_checkpoints.py`); bold where it excludes zero.', '']
+    return lines
+
+
 BORDER_NAMES = {'pair': 'Pair', 'start': 'Start', 'end': 'End', 'both': 'Both'}
 BORDER_SECTION = [
     '## Borders from the page edge heads', '',
@@ -164,7 +233,7 @@ def scores(report):
 
 def both_scores(path):
     """Border precision, recall and F1 of the agreement of the page edge heads, next to a pair report."""
-    both = path.with_name('none-border-both.json')
+    both = path.with_name(f'{path.stem}-border-both.json')
     return triple(json.loads(both.read_text())['starts']['all']) if both.exists() else [None] * 3
 
 
@@ -177,6 +246,8 @@ def table(args):
         if report.get('inference_policy') != 'deployment':
             raise ValueError(f'{path} was not evaluated with the deployed merging policy')
         run = path.parents[1].name
+        if run.endswith('-r23'):
+            continue  # the input ablations have a section of their own
         label = model_label(run, report) + (' (original DINOv2 image features)' if '-dinoorig-' in run else '')
         rows[abbreviation(report['modalities'])].append((label, scores(report) + both_scores(path), run))
         if WINDOW_SERIES.search(run) and report['modalities'] == report['checkpoint_modalities']:
@@ -227,6 +298,7 @@ def table(args):
         lines.append('')
     if args.comparisons:
         lines += comparison_section(args.comparisons)
+    lines += input_section(args.output, args.input_comparisons)
     heads = border_heads(args.output)
     if heads:
         lines += BORDER_SECTION + [
@@ -274,6 +346,8 @@ def main():
                      help='A modality subset, e.g. image+text+stats; repeatable (default: all nonempty subsets)')
     show = commands.add_parser('table')
     show.add_argument('--output', type=Path, required=True)
+    show.add_argument('--input-comparisons', type=Path,
+                      help='Paired comparisons of the r23 input ablations against r22 W512, per condition')
     show.add_argument('--comparisons', type=Path,
                       help='Paired comparisons of the window series against W512 (`compare_checkpoints.py compare` '
                            'outputs named <A>-vs-<B>.json)')
