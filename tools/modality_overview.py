@@ -12,6 +12,8 @@ hashed once; `evaluation_dataset` still checks each checkpoint's store identity.
 `table` writes the Markdown overview: one section per combination (STI, ST, SI, TI, S, T, I) listing every model
 that can handle it, with precision, recall and F1 of the curated page type and of the DB side (left/right/single),
 both support-weighted averages over the classes (as in the README's page type evaluation), and of document starts.
+The r22 context-window series (`-b64parent512-` ... `-r22`, evaluated with `--subsets image+text+stats` only) gets a
+section of its own, ordered by window, instead of rows in the combination sections.
 
 Examples:
     python tools/modality_overview.py evaluate --output /home/ikohut/tmp/modality-overview-deployment \\
@@ -33,6 +35,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 ABBREVIATIONS = {'stats': 'S', 'text': 'T', 'image': 'I'}
 SECTIONS = ('STI', 'ST', 'SI', 'TI', 'S', 'T', 'I')
 NAMES = {'S': 'statistics', 'T': 'text', 'I': 'image'}
+
+
+WINDOW_SERIES = re.compile(r'-b64parent512-w\d+-.*-r22$')
+WINDOW_SECTION = [
+    '## Context window: r22 series, statistics + text + image', '',
+    'The same STI model trained with context windows from 512 pages down to 2 (`tools/prepare_window_series.py`). '
+    'Every window trains on the same sampled data: the sampler draws 64 windows of 512 pages per update (complete '
+    'scans tiled without overlap), and each is cut into consecutive pieces of W pages, so page pairs across a cut, '
+    'about 1/W of them, boundaries included, are not trained. Fixed 16,000 pretraining and 4,000 fine-tuning '
+    'updates without early stopping, input dropout seeded per update, the best checkpoint of each phase selected '
+    'on dev. One seed per window. Evaluated as above, with all three signals; the merging overlap scales with W '
+    '(W/8, at least one page). The W1 models of r21 (cut the same way, W1 sections above) complete the series.', '']
 
 
 def abbreviation(modalities):
@@ -72,7 +86,7 @@ def evaluate(args):
             raise FileNotFoundError(f'{checkpoint} is missing; the run has not selected a fine-tuning checkpoint')
         config = json.loads((run / 'config.json').read_text())
         print(run.name, flush=True)
-        evaluate_checkpoint(checkpoint, config['dev_manifest'], args.output / run.name, ['none'], ['all'],
+        evaluate_checkpoint(checkpoint, config['dev_manifest'], args.output / run.name, ['none'], args.subsets,
                             training_store=args.store, device=args.device, limit_streams=args.limit_streams,
                             inference='deployment')
         gc.collect()
@@ -97,13 +111,18 @@ def scores(report):
 
 def table(args):
     rows = {section: [] for section in SECTIONS}
+    windows = []
     supports = set()
     for path in sorted(args.output.glob('*/*/none.json')):
         report = json.loads(path.read_text())
         if report.get('inference_policy') != 'deployment':
             raise ValueError(f'{path} was not evaluated with the deployed merging policy')
         run = path.parents[1].name
-        rows[abbreviation(report['modalities'])].append((model_label(run, report), scores(report), run))
+        if WINDOW_SERIES.search(run):
+            label = model_label(run, report) + (' (original DINOv2 image features)' if '-dinoorig-' in run else '')
+            windows.append((report['inference']['window_size'], '-dinoorig-' in run, label, scores(report)))
+        else:
+            rows[abbreviation(report['modalities'])].append((model_label(run, report), scores(report), run))
         supports.add((report['curated_type']['n'], report['placement_db_agreement']['n'],
                       report['starts']['all'].get('positive') if report.get('boundary_enabled', True) else None,
                       report['streams_evaluated']))
@@ -138,6 +157,14 @@ def table(args):
             cells = [fmt(v) if i % 3 != 2 else f'**{fmt(v)}**' for i, v in enumerate(values)]
             lines.append(f'| {label} | ' + ' | '.join(cells) + ' |')
         lines.append('')
+    if windows:
+        lines += WINDOW_SECTION + [
+            '| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | '
+            '**Border F1** |', '|---|' + '---:|' * 9]
+        for _, _, label, values in sorted(windows, key=lambda r: (-r[0], r[1])):
+            cells = [fmt(v) if i % 3 != 2 else f'**{fmt(v)}**' for i, v in enumerate(values)]
+            lines.append(f'| {label} | ' + ' | '.join(cells) + ' |')
+        lines.append('')
     print('\n'.join(lines))
 
 
@@ -150,6 +177,8 @@ def main():
     run.add_argument('--store', help='Native store copy for all checkpoints (identity is checked)')
     run.add_argument('--device', default='cuda')
     run.add_argument('--limit-streams', type=int, help='Only the first streams, for testing')
+    run.add_argument('--subsets', nargs='+', default=['all'],
+                     help="Modality subsets, e.g. image+text+stats (default: all nonempty subsets)")
     show = commands.add_parser('table')
     show.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
