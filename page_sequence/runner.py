@@ -242,6 +242,8 @@ def train(config, resume=None, stop_after=None):
     scattered_config = config.get('scattered_dropout', {})
     scattered_dropout({name: torch.zeros(0, 0, 3) for name in ('presence', 'image', 'text', 'stats')},
                       **scattered_config)
+    if 'document_metadata' in config.get('disabled_inputs', ()) and config.get('document_metadata_evaluation'):
+        raise ValueError('a model trained without document metadata cannot be evaluated with it')
     if any(dropout.values()) and not config.get('pagination'):
         raise ValueError('pagination dropout requires pagination configuration')
     precision = config.get('precision', 'float32')
@@ -310,7 +312,8 @@ def train(config, resume=None, stop_after=None):
         model = PageTagger(backbone, getattr(dataset, 'model_dims', features.dims), config.get('fusion', 'linear'),
                            auxiliary_edges=config.get('auxiliary_edges', False),
                            scan_borders=config.get('scan_borders', False),
-                           enabled_modalities=config.get('enabled_modalities')).to(device)
+                           enabled_modalities=config.get('enabled_modalities'),
+                           disabled_inputs=config.get('disabled_inputs')).to(device)
         step, best = 0, -1.
     model.compute_precision = precision
     scaler = torch.amp.GradScaler('cuda', enabled=precision == 'float16', init_scale=1024.)

@@ -98,10 +98,21 @@ class Fusion(nn.Module):
         return self.scale * self.norm(self.projection(torch.cat(parts + [flags], dim=-1)))
 
 
+# Optional inputs that a model can be trained without: the feature and the columns that are zeroed in its forward
+# pass (for training, validation and every evaluation alike). The data pipeline and its randomness stay unchanged.
+DISABLEABLE_INPUTS = {'document_metadata': ('boundaries', slice(2, 5)),  # provided bit, document start, document end
+                      'scan_flags': ('boundaries', slice(0, 2)),         # scan start, scan end
+                      'page_numbers': ('pagination', slice(None))}       # all pagination features, availability too
+
+
 class PageTagger(nn.Module):
     def __init__(self, backbone, dims, fusion='linear', num_types=len(PAGE_TYPES), auxiliary_edges=False,
-                 scan_borders=False, enabled_modalities=None):
+                 scan_borders=False, enabled_modalities=None, disabled_inputs=None):
         super().__init__()
+        self.disabled_inputs = tuple(name for name in DISABLEABLE_INPUTS if name in (disabled_inputs or ()))
+        if set(disabled_inputs or ()) - set(self.disabled_inputs) or any(
+                DISABLEABLE_INPUTS[name][0] not in dims for name in self.disabled_inputs):
+            raise ValueError(f'disabled inputs must be among {tuple(DISABLEABLE_INPUTS)} and present in the model')
         self.backbone, self.dims, self.fusion_kind, self.num_types = backbone, dims, fusion, num_types
         self.enabled_modalities = canonical_modalities(enabled_modalities)
         h = backbone.hidden_size
@@ -128,6 +139,13 @@ class PageTagger(nn.Module):
             flags = features['presence']
             keep = flags.new_tensor([name in self.enabled_modalities for name in MODALITIES])
             features = dict(features, presence=flags * keep)
+        if self.disabled_inputs:
+            features = dict(features)
+            for name in self.disabled_inputs:
+                feature, columns = DISABLEABLE_INPUTS[name]
+                masked = features[feature].clone()
+                masked[..., columns] = 0
+                features[feature] = masked
         x = self.fusion(features)
         if self.scan_borders:
             # Metadata is page-aligned only for batching. The learned tokens are
@@ -178,6 +196,8 @@ class PageTagger(nn.Module):
             spec['scan_borders'] = True
         if self.enabled_modalities != MODALITIES:
             spec['enabled_modalities'] = list(self.enabled_modalities)
+        if self.disabled_inputs:
+            spec['disabled_inputs'] = list(self.disabled_inputs)
         return spec
 
 
@@ -190,4 +210,4 @@ def from_specification(spec):
     if 'initial_scale' in b:
         backbone.initial_scale = b['initial_scale']
     return PageTagger(backbone, spec['dims'], spec['fusion'], spec['num_types'], spec.get('auxiliary_edges', False),
-                      spec.get('scan_borders', False), spec.get('enabled_modalities'))
+                      spec.get('scan_borders', False), spec.get('enabled_modalities'), spec.get('disabled_inputs'))

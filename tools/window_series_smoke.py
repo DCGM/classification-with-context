@@ -111,7 +111,8 @@ def main():
         dev = json.loads(line)['dev']
         assert dev['starts']['all']['n'] > 0 and dev['curated_type']['n'] > 0
     assert list(run.glob('final-scan-context-step*/report.json'))
-    assert list(run.glob('final-provided-context-step*/report.json'))
+    assert bool(list(run.glob('final-provided-context-step*/report.json'))) == bool(
+        config.get('document_metadata_evaluation'))
     assert (run / 'final-context-evaluation.json').exists()
     expected = json.loads((root / 'expected-initialization.json').read_text())
     assert audit['initial_parameter_sha256'] == expected['sha256']
