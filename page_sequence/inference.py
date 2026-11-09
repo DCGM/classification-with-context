@@ -69,10 +69,16 @@ def window_spans(n, size, stride, tail='anchored'):
 
 
 def context_weights(start, end, n, ramp, ignore=0, power=2):
-    r = np.arange(end - start)
+    return window_weights(np.array([start]), np.array([end]), n, ramp, ignore, power)[0]
+
+
+def window_weights(starts, ends, n, ramp, ignore=0, power=2):
+    """Page weights of windows [starts, ends) of a stream of n pages, zero-padded to the longest window."""
+    sizes = ends - starts
+    r = np.arange(sizes.max())[None]
     # True stream endpoints have no missing outside context to penalize.
-    left = r + 1 if start > 0 else np.full(end - start, np.inf)
-    right = end - start - r if end < n else np.full(end - start, np.inf)
+    left = np.where(starts[:, None] > 0, r + 1, np.inf)
+    right = np.where(ends[:, None] < n, sizes[:, None] - r, np.inf)
     distance = np.minimum(left, right)
     if ignore:
         # Exactly `ignore` pages at artificial edges contribute nothing. Real
@@ -80,8 +86,11 @@ def context_weights(start, end, n, ramp, ignore=0, power=2):
         # ramp still reaches full weight at the original distance `ramp`.
         if ignore >= ramp:
             raise ValueError('ignore must be smaller than ramp')
-        return np.power(np.clip((distance - ignore) / (ramp - ignore), 0, 1), power).astype(np.float32)
-    return np.power(np.minimum(1, distance / ramp), power).astype(np.float32)
+        weights = np.power(np.clip((distance - ignore) / (ramp - ignore), 0, 1), power).astype(np.float32)
+    else:
+        weights = np.power(np.minimum(1, distance / ramp), power).astype(np.float32)
+    weights[r >= sizes[:, None]] = 0
+    return weights
 
 
 def softmax(x):
@@ -111,22 +120,36 @@ class StreamMerger:
             self.entropy_sum = np.zeros(n, np.float32)
 
     def add(self, start, end, output):
-        if not 0 <= start < end <= self.n:
-            raise ValueError('window outside stream')
+        """One window; `output` holds its unpadded outputs."""
+        self.add_batch([(start, end)], {k: np.asarray(v)[None] for k, v in output.items()})
+
+    def add_batch(self, spans, output):
+        """Windows [start, end) with their outputs padded to a common length, merged in the given order."""
         c = self.config
-        w = context_weights(start, end, self.n, c.edge_ramp, c.edge_ignore, c.edge_power)
+        if c.merge == 'central' and len(spans) > 1:
+            for i, span in enumerate(spans):  # each window competes with the weights left by earlier ones
+                self.add_batch([span], {k: v[i:i + 1] for k, v in output.items()})
+            return
+        starts, ends = np.array([s for s, _ in spans]), np.array([e for _, e in spans])
+        if not ((0 <= starts) & (starts < ends) & (ends <= self.n)).all():
+            raise ValueError('window outside stream')
+        w = window_weights(starts, ends, self.n, c.edge_ramp, c.edge_ignore, c.edge_power)
+        length = w.shape[1]
+        valid = np.arange(length)[None] < (ends - starts)[:, None]
         if c.merge.startswith('uniform'):
             w[w > 0] = 1
-        pair_w = np.r_[0, np.minimum(w[:-1], w[1:])].astype(np.float32)
+        pair_w = np.zeros_like(w)
+        pair_w[:, 1:] = np.minimum(w[:, :-1], w[:, 1:])
         if c.edge_ignore:
             # When trimming half the overlap, retained regions meet between
             # two pages. Keep that seam pair if either endpoint is retained;
             # pairs with both endpoints inside the discarded region stay zero.
-            seam = (w[:-1] == 0) != (w[1:] == 0)
-            pair_w[1:][seam] = np.maximum(w[:-1], w[1:])[seam]
+            seam = ((w[:, :-1] == 0) != (w[:, 1:] == 0)) & valid[:, 1:]
+            pair_w[:, 1:][seam] = np.maximum(w[:, :-1], w[:, 1:])[seam]
         p = np.asarray(output['pair_mask'], bool)
         singleton = c.window_size == 1
-        if p.shape != (end - start,) or (p.any() if singleton else p[0] or not p[1:].all()):
+        if (p.shape[0] != len(spans) or p.shape[1] < length
+                or (p[:, :length][valid].any() if singleton else p[:, 0].any() or not p[:, 1:length][valid[:, 1:]].all())):
             raise ValueError('invalid pair coverage in an unpadded inference window')
         if singleton:
             pair_w[:] = 0
@@ -137,48 +160,56 @@ class StreamMerger:
                 self.sums[task] = np.zeros(self.n, np.float32)
         elif optional != self.optional_outputs:
             raise ValueError('auxiliary outputs changed between windows')
+        # Stream position of every valid window page, in window order (the order of sequential merging).
+        index = (starts[:, None] + np.arange(length)[None])[valid]
+        w_valid, pair_valid = w[valid], pair_w[valid]
         tasks = [('type', 'type_logits'), ('placement', 'placement_logits'),
                  ('starts', 'starts_document_logits')] + [(k, k + '_logits') for k in optional]
         for task, key in tasks:
             x = np.asarray(output[key], np.float32)
-            if x.shape != self.sums[task][start:end].shape or not np.isfinite(x).all():
+            if x.shape[0] != len(spans) or x.shape[1] < length or x.shape[2:] != self.sums[task].shape[1:]:
+                raise ValueError('invalid window outputs')
+            x = x[:, :length][valid]
+            if not np.isfinite(x).all():
                 raise ValueError('invalid window outputs')
             if c.merge.endswith('probs'):
                 x = sigmoid(x) if x.ndim == 1 else softmax(x)
-            weight = pair_w if task == 'starts' else w
+            weight = pair_valid if task == 'starts' else w_valid
             if c.merge == 'central':
-                previous = self.pair_weight[start:end] if task == 'starts' else self.page_weight[start:end]
+                previous = (self.pair_weight if task == 'starts' else self.page_weight)[index]
                 take = weight > previous  # deterministic earlier-window tie break
-                self.sums[task][start:end][take] = x[take]
+                self.sums[task][index[take]] = x[take]
             else:
-                self.sums[task][start:end] += x * (weight if x.ndim == 1 else weight[:, None])
+                np.add.at(self.sums[task], index, x * (weight if x.ndim == 1 else weight[:, None]))
         if self.collect_embeddings:
             x = np.asarray(output['embeddings'], np.float32)
-            if (x.ndim != 2 or x.shape[0] != end - start or x.shape[1] < 1
-                    or not np.isfinite(x).all()):
+            if x.ndim != 3 or x.shape[0] != len(spans) or x.shape[1] < length or x.shape[2] < 1:
+                raise ValueError('invalid window embeddings')
+            x = x[:, :length][valid]
+            if not np.isfinite(x).all():
                 raise ValueError('invalid window embeddings')
             if self.embedding_sum is None:
                 self.embedding_sum = np.zeros((self.n, x.shape[1]), np.float32)
             if x.shape[1] != self.embedding_sum.shape[1]:
                 raise ValueError('embedding width changed between windows')
             if c.merge == 'central':
-                take = w > self.page_weight[start:end]
-                self.embedding_sum[start:end][take] = x[take]
+                take = w_valid > self.page_weight[index]
+                self.embedding_sum[index[take]] = x[take]
             else:
-                self.embedding_sum[start:end] += x * w[:, None]
+                np.add.at(self.embedding_sum, index, x * w_valid[:, None])
         if self.collect_window_stats:
-            probabilities = softmax(np.asarray(output['type_logits'], np.float32))
+            probabilities = softmax(np.asarray(output['type_logits'], np.float32)[:, :length][valid])
             entropy = -(probabilities * np.log(np.maximum(probabilities, 1e-30))).sum(-1)
-            self.window_count[start:end] += (w > 0)
-            self.stats_weight[start:end] += w
-            self.prob_sum[start:end] += probabilities * w[:, None]
-            self.entropy_sum[start:end] += entropy * w
+            np.add.at(self.window_count, index, (w_valid > 0).astype(np.int32))
+            np.add.at(self.stats_weight, index, w_valid)
+            np.add.at(self.prob_sum, index, probabilities * w_valid[:, None])
+            np.add.at(self.entropy_sum, index, entropy * w_valid)
         if c.merge == 'central':
-            self.page_weight[start:end] = np.maximum(self.page_weight[start:end], w)
-            self.pair_weight[start:end] = np.maximum(self.pair_weight[start:end], pair_w)
+            self.page_weight[index] = np.maximum(self.page_weight[index], w_valid)
+            self.pair_weight[index] = np.maximum(self.pair_weight[index], pair_valid)
         else:
-            self.page_weight[start:end] += w
-            self.pair_weight[start:end] += pair_w
+            np.add.at(self.page_weight, index, w_valid)
+            np.add.at(self.pair_weight, index, pair_valid)
 
     def finalize(self):
         enabled = self.config.window_size != 1
@@ -224,7 +255,7 @@ def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu',
 
     One code path for every window size, W1 included. As in training, each batch reads its contiguous stretch
     of the stream once and its windows are cut from it in memory; only the scan flags differ per window. The
-    outputs are copied to the host once per batch and merged window by window.
+    outputs are copied to the host and merged once per batch.
     """
     n = len(rows)
     borders = getattr(model, 'scan_borders', False)
@@ -273,9 +304,8 @@ def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu',
             with autocast(model, device):
                 kwargs = {'return_embeddings': True} if collect_embeddings else {}
                 output = model(batch['features'], batch['attention_mask'], **kwargs)
-            output = {k: v.detach().float().cpu().numpy() for k, v in output.items()}
-            for i, (s, e, _, _) in enumerate(current):
-                merger.add(s, e, {k: v[i, :e - s] for k, v in output.items()})
+            merger.add_batch([(s, e) for s, e, _, _ in current],
+                             {k: v.detach().float().cpu().numpy() for k, v in output.items()})
     finally:
         model.train(was_training)
     result = merger.finalize()
