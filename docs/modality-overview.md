@@ -96,3 +96,19 @@ The same STI model trained with context windows from 512 pages down to a few (`t
 | r22 STI W16 | 91.7 | 91.6 | **91.6** | 90.0 | 90.0 | **90.0** | 94.7 | 89.4 | **92.0** |
 | r22 STI W8 | 91.5 | 91.5 | **91.4** | 87.8 | 87.8 | **87.8** | 90.6 | 86.1 | **88.3** |
 
+## Borders from the page edge heads
+
+The same evaluation of document starts, scored by different heads of the same models, on every adjacent page pair inside a scan (the scan start and end are never scored). **Pair**: the pairwise border head (as above). **Start**: the page-start head on the later page of each pair, i.e. the start head itself on every page but the first of the scan (is this page a document start?). **End**: the page-end head on the earlier page, i.e. the end head itself on every page but the last (is this page a document end?). **Both**: a border only where both fire (the smaller of the two probabilities at threshold 0.5). AP: average precision of the scores. The W1 model has no pairwise head; its page edge heads give it borders.
+
+| Model | Pair P | Pair R | **Pair F1** | Pair AP | Start P | Start R | **Start F1** | Start AP | End P | End R | **End F1** | End AP | Both P | Both R | **Both F1** | Both AP |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 STI W512 | 94.8 | 87.8 | **91.2** | 95.8 | 85.8 | 75.3 | **80.2** | 87.2 | 81.9 | 71.5 | **76.3** | 84.3 | 92.2 | 65.9 | **76.9** | 87.9 |
+| r22 STI W512 (original DINOv2 image features) | 91.8 | 89.7 | **90.7** | 96.0 | 80.9 | 74.7 | **77.7** | 84.6 | 71.0 | 70.1 | **70.6** | 76.1 | 87.4 | 64.6 | **74.3** | 83.3 |
+| r22 STI W256 | 94.1 | 91.4 | **92.7** | 97.0 | 86.7 | 78.8 | **82.6** | 89.0 | 85.1 | 70.7 | **77.2** | 84.8 | 93.8 | 67.6 | **78.6** | 88.7 |
+| r22 STI W128 | 95.8 | 87.0 | **91.2** | 95.9 | 86.6 | 73.3 | **79.4** | 84.8 | 82.3 | 67.1 | **73.9** | 82.2 | 93.3 | 62.0 | **74.5** | 85.8 |
+| r22 STI W64 | 93.8 | 91.1 | **92.4** | 96.7 | 85.1 | 73.9 | **79.1** | 85.3 | 84.3 | 68.4 | **75.5** | 84.1 | 92.1 | 61.7 | **73.9** | 85.8 |
+| r22 STI W32 | 94.3 | 90.6 | **92.5** | 97.0 | 84.8 | 75.7 | **80.0** | 86.7 | 82.9 | 66.4 | **73.8** | 82.4 | 94.5 | 62.1 | **75.0** | 87.6 |
+| r22 STI W16 | 94.7 | 89.4 | **92.0** | 97.0 | 85.4 | 76.0 | **80.4** | 86.2 | 78.1 | 67.8 | **72.6** | 80.4 | 92.1 | 62.2 | **74.2** | 86.0 |
+| r22 STI W8 | 90.6 | 86.1 | **88.3** | 93.5 | 79.5 | 67.3 | **72.9** | 75.9 | 63.5 | 59.7 | **61.6** | 66.7 | 89.3 | 48.8 | **63.1** | 78.9 |
+| r21 STI W1 | – | – | **–** | – | 69.0 | 49.5 | **57.6** | 53.3 | 41.5 | 25.0 | **31.2** | 26.9 | 93.9 | 12.0 | **21.3** | 61.8 |
+
