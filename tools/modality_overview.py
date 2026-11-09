@@ -40,7 +40,7 @@ NAMES = {'S': 'statistics', 'T': 'text', 'I': 'image'}
 WINDOW_SERIES = re.compile(r'-b64parent512-w\d+-.*-r22$')
 WINDOW_SECTION = [
     '## Context window: r22 series, statistics + text + image', '',
-    'The same STI model trained with context windows from 512 pages down to 2 (`tools/prepare_window_series.py`). '
+    'The same STI model trained with context windows from 512 pages down to a few (`tools/prepare_window_series.py`). '
     'Every window trains on the same sampled data: the sampler draws 64 windows of 512 pages per update (complete '
     'scans tiled without overlap), and each is cut into consecutive pieces of W pages, so page pairs across a cut, '
     'about 1/W of them, boundaries included, are not trained. Fixed 16,000 pretraining and 4,000 fine-tuning '
