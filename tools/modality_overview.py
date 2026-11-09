@@ -13,7 +13,11 @@ hashed once; `evaluation_dataset` still checks each checkpoint's store identity.
 that can handle it, with precision, recall and F1 of the curated page type and of the DB side (left/right/single),
 both support-weighted averages over the classes (as in the README's page type evaluation), and of document starts.
 The r22 context-window series (`-b64parent512-` ... `-r22`, evaluated with `--subset image+text+stats` only) gets a
-section of its own, ordered by window, instead of rows in the combination sections.
+section of its own, ordered by window, instead of rows in the combination sections; every run with border reports of
+the page edge heads gets a row in the head comparison.
+
+Each checkpoint runs once per combination: all its outputs are stored in `<output>/<run>/<subset>/none-predictions/`
+(`page_sequence.stored_predictions`) and every report is derived from them, so new statistics need no GPU.
 
 Examples:
     python tools/modality_overview.py evaluate --output /home/ikohut/tmp/modality-overview-deployment \\
@@ -52,10 +56,13 @@ WINDOW_SECTION = [
 BORDER_NAMES = {'pair': 'Pair', 'start': 'Start', 'end': 'End', 'both': 'Both'}
 BORDER_SECTION = [
     '## Borders from the page edge heads', '',
-    'The same evaluation of document starts, scored by different heads of the same models. **Pair**: the pairwise '
-    'border head (as above). **Start**: the page-start head on the later page of each adjacent pair. **End**: the '
-    'page-end head on the earlier page. **Both**: a border only where both fire (the smaller of the two '
-    'probabilities at threshold 0.5). The W1 model has no pairwise head; its page edge heads give it borders.', '']
+    'The same evaluation of document starts, scored by different heads of the same models, on every adjacent '
+    'page pair inside a scan (the scan start and end are never scored). **Pair**: the pairwise border head (as '
+    'above). **Start**: the page-start head on the later page of each pair, i.e. the start head itself on every '
+    'page but the first of the scan (is this page a document start?). **End**: the page-end head on the earlier '
+    'page, i.e. the end head itself on every page but the last (is this page a document end?). **Both**: a border '
+    'only where both fire (the smaller of the two probabilities at threshold 0.5). AP: average precision of the '
+    'scores. The W1 model has no pairwise head; its page edge heads give it borders.', '']
 
 
 def abbreviation(modalities):
@@ -97,7 +104,7 @@ def evaluate(args):
         print(run.name, flush=True)
         evaluate_checkpoint(checkpoint, config['dev_manifest'], args.output / run.name, ['none'], args.subsets or ['all'],
                             training_store=args.store, device=args.device, limit_streams=args.limit_streams,
-                            inference='deployment', border_sources=('pair', *(args.border_sources or ())))
+                            inference='deployment', border_sources=tuple(BORDER_NAMES))
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -177,10 +184,11 @@ def table(args):
     heads = border_heads(args.output)
     if heads:
         lines += BORDER_SECTION + [
-            '| Model | ' + ' | '.join(f'{name} P | {name} R | **{name} F1**' for name in BORDER_NAMES.values())
-            + ' |', '|---|' + '---:|' * (3 * len(BORDER_NAMES))]
+            '| Model | ' + ' | '.join(f'{name} P | {name} R | **{name} F1** | {name} AP'
+                                     for name in BORDER_NAMES.values()) + ' |',
+            '|---|' + '---:|' * (4 * len(BORDER_NAMES))]
         for _, _, label, values in sorted(heads, key=lambda r: (-r[0], r[1])):
-            cells = [fmt(v) if i % 3 != 2 else f'**{fmt(v)}**' for i, v in enumerate(values)]
+            cells = [fmt(v) if i % 4 != 2 else f'**{fmt(v)}**' for i, v in enumerate(values)]
             lines.append(f'| {label} | ' + ' | '.join(cells) + ' |')
         lines.append('')
     print('\n'.join(lines))
@@ -194,8 +202,12 @@ def border_heads(output):
             'none.json' if source == 'pair' else f'none-border-{source}.json')).read_text()) for source in BORDER_NAMES}
         run, pair = directory.parent.name, reports['pair']
         label = model_label(run, pair) + (' (original DINOv2 image features)' if '-dinoorig-' in run else '')
-        result.append((pair['inference']['window_size'], '-dinoorig-' in run, label,
-                       [v for source in BORDER_NAMES for v in scores(reports[source])[6:]]))
+        values = []
+        for source in BORDER_NAMES:
+            starts = reports[source]['starts']['all'] if reports[source].get('boundary_enabled', True) else None
+            values += ([starts[k] for k in ('precision', 'recall', 'f1', 'average_precision')] if starts
+                       else [None] * 4)
+        result.append((pair['inference']['window_size'], '-dinoorig-' in run, label, values))
     return result
 
 
@@ -210,8 +222,6 @@ def main():
     run.add_argument('--limit-streams', type=int, help='Only the first streams, for testing')
     run.add_argument('--subset', dest='subsets', action='append',
                      help='A modality subset, e.g. image+text+stats; repeatable (default: all nonempty subsets)')
-    run.add_argument('--border-source', dest='border_sources', action='append', choices=('start', 'end', 'both'),
-                     help='Also score borders with the page edge heads; repeatable (`evaluation.border_result`)')
     show = commands.add_parser('table')
     show.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()

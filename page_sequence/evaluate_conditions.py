@@ -31,7 +31,8 @@ import numpy as np
 from .inference import InferenceConfig, deployment_inference
 from .manifests import file_sha256, load_streams
 from .modalities import ModalitySubsetDataset, enabled_modalities
-from .runner import evaluate_streams, evaluation_dataset, load_checkpoint
+from .runner import evaluation_dataset, load_checkpoint
+from .stored_predictions import COMPLETE, evaluate_stored, store_predictions
 
 CONDITIONS = {'none': (False, False), 'page_numbers': (True, False), 'boundaries': (False, True),
               'both': (True, True)}
@@ -71,10 +72,12 @@ INFERENCE_POLICIES = ('checkpoint', 'deployment')
 def evaluate_checkpoint(checkpoint, manifest, output, conditions=tuple(CONDITIONS), modalities=None, split='dev',
                         training_store=None, device='cpu', limit_streams=None, inference='checkpoint',
                         border_sources=('pair',)):
-    """Write one report per (modality subset, condition) that is not there yet; return the written paths.
+    """Run the checkpoint once per (modality subset, condition), store all outputs, derive the reports.
 
-    Border sources other than 'pair' (`evaluation.border_result`) score the document starts with the page edge
-    heads; their reports, `<condition>-border-<source>.json`, come from the same predictions.
+    The outputs go to `<condition>-predictions/` (`stored_predictions`); a stored directory is never recomputed.
+    The reports are derived from it: `<condition>.json` and, for border sources other than 'pair'
+    (`evaluation.border_result`, the page edge heads), `<condition>-border-<source>.json`. A report is written
+    when it is missing or older than its predictions. Returns the written paths.
     """
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
@@ -91,34 +94,47 @@ def evaluate_checkpoint(checkpoint, manifest, output, conditions=tuple(CONDITION
         streams = streams[:limit_streams]
     enabled = enabled_modalities(config.get('enabled_modalities'))
     subsets = modality_subsets(list(modalities), enabled) if modalities else [None]
+    checkpoint_sha256, manifest_sha256 = file_sha256(checkpoint), file_sha256(manifest)
     written = []
     for subset, name in [(subset, name) for subset in subsets for name in conditions]:
         pagination, boundaries = CONDITIONS[name]
         directory = output if subset is None else output / '+'.join(subset)
         directory.mkdir(parents=True, exist_ok=True)
+        modalities_used = list(enabled if subset is None else subset)
+        stored = directory / f'{name}-predictions'
+        if not (stored / COMPLETE).exists():
+            data = dataset if subset is None else ModalitySubsetDataset(dataset, subset)
+            store_predictions(model, data if pagination else WithoutPagination(data), streams, inference, device,
+                              stored, provide_document_metadata=boundaries, metadata=dict(
+                                  checkpoint=str(checkpoint), checkpoint_sha256=checkpoint_sha256,
+                                  checkpoint_step=state['step'], manifest=str(manifest),
+                                  manifest_sha256=manifest_sha256, split=split, condition=name,
+                                  modalities=modalities_used, inference=asdict(inference), inference_policy=policy))
+        meta = json.loads((stored / COMPLETE).read_text())
+        if meta['checkpoint_sha256'] != checkpoint_sha256 or meta['manifest_sha256'] != manifest_sha256:
+            raise ValueError(f'{stored} holds predictions of another checkpoint or manifest')
         paths = {source: directory / (f'{name}.json' if source == 'pair' else f'{name}-border-{source}.json')
                  for source in border_sources}
-        missing = [source for source, path in paths.items() if not path.exists()]
+        produced = (stored / COMPLETE).stat().st_mtime
+        missing = [source for source, path in paths.items()
+                   if not path.exists() or path.stat().st_mtime < produced]
         if not missing:
             continue
-        data = dataset if subset is None else ModalitySubsetDataset(dataset, subset)
-        reports = evaluate_streams(model, data if pagination else WithoutPagination(data), streams, inference,
-                                   device, provide_document_metadata=boundaries, border_sources=missing)
+        reports = evaluate_stored(stored, dataset.index, streams, inference.start_threshold, missing)
         for source in missing:
             report = reports[source]
             report.update(condition=name, page_numbers=pagination, document_boundaries=boundaries,
-                          checkpoint_modalities=list(enabled),
-                          modalities=list(enabled if subset is None else subset),
+                          checkpoint_modalities=list(enabled), modalities=modalities_used,
                           inference=asdict(inference), inference_policy=policy, checkpoint=str(checkpoint),
-                          checkpoint_sha256=file_sha256(checkpoint), manifest=str(manifest),
-                          manifest_sha256=file_sha256(manifest), checkpoint_step=state['step'],
-                          streams_evaluated=len(streams))
+                          checkpoint_sha256=checkpoint_sha256, manifest=str(manifest),
+                          manifest_sha256=manifest_sha256, checkpoint_step=state['step'],
+                          streams_evaluated=len(streams), predictions=str(stored))
             if source != 'pair':
                 report['border_source'] = source
             paths[source].write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
             written.append(paths[source])
         print(name if subset is None else '+'.join(subset) + ' ' + name, ' '.join(missing),
-              f'{report["seconds"]:.0f} s', flush=True)
+              f'{meta["seconds"]:.0f} s', flush=True)
     return written
 
 

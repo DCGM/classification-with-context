@@ -5,6 +5,7 @@ from page_sequence.evaluation import border_result
 from page_sequence.inference import deployment_inference
 from page_sequence.manifests import load_streams
 from page_sequence.runner import evaluate_streams
+from page_sequence.stored_predictions import evaluate_stored, load_stream, store_predictions
 from page_sequence.tests.test_context_training import model_for, setup_data
 
 
@@ -26,15 +27,26 @@ def test_border_scores_from_page_edge_heads():
 
 
 @pytest.mark.parametrize('window', [1, 8])
-def test_one_prediction_pass_gives_every_source(tmp_path, window):
+def test_stored_predictions_give_the_direct_report_and_every_source(tmp_path, window):
     config, index, dataset = setup_data(tmp_path)
     model = model_for(dataset).eval()
     streams = load_streams(config['dev_manifest'], index, 'dev')
     inference = deployment_inference(window, 16)
-    single = evaluate_streams(model, dataset, streams, inference, 'cpu')
-    reports = evaluate_streams(model, dataset, streams, inference, 'cpu', border_sources=['pair', 'start', 'both'])
-    for key in ('curated_type', 'placement_db_agreement', 'starts'):
-        assert reports['pair'][key] == single[key]
-    assert reports['start']['curated_type'] == single['curated_type']
-    assert reports['start']['starts']['all']['n'] == sum(s['pages'] - 1 for s in single['streams'])
-    assert reports['both']['starts']['all']['tp'] <= reports['start']['starts']['all']['tp']
+    direct = evaluate_streams(model, dataset, streams, inference, 'cpu')
+    stored = store_predictions(model, dataset, streams, inference, 'cpu', tmp_path / 'none-predictions')
+    with pytest.raises(FileExistsError):
+        store_predictions(model, dataset, streams, inference, 'cpu', stored)
+    reports = evaluate_stored(stored, index, streams, inference.start_threshold, ['pair', 'start', 'end', 'both'])
+    for key in direct:
+        if key not in ('seconds', 'unique_pages_per_second'):
+            assert reports['pair'][key] == direct[key], key
+    assert reports['start']['curated_type'] == direct['curated_type']
+    pairs = sum(s['pages'] - 1 for s in direct['streams'])
+    for source in ('start', 'end', 'both'):
+        assert reports[source]['starts']['all']['n'] == pairs
+    assert reports['both']['starts']['all']['tp'] <= min(reports[s]['starts']['all']['tp'] for s in ('start', 'end'))
+    result = load_stream(stored, 0, streams[0])
+    assert result['embeddings'].dtype == np.float16 and len(result['type']) == len(streams[0]['rows'])
+    assert {'page_start_probs', 'page_end_probs', 'type_window_js', 'window_count', 'page_weight'} <= set(result)
+    with pytest.raises(ValueError):
+        evaluate_stored(stored, index, streams[1:], .5)

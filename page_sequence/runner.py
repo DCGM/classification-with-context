@@ -16,7 +16,7 @@ import numpy as np
 import torch
 
 from .data import WindowDataset, collate_windows, to_device
-from .evaluation import Evaluator, border_result
+from .evaluation import Evaluator
 from .context_evaluation import context_blocks, evaluate_contexts
 from .features import FeaturePipeline
 from .index import PageIndex
@@ -145,10 +145,8 @@ def make_optimizer(model, config):
 
 
 def evaluate_streams(model, dataset, streams, inference, device, predictions_dir=None,
-                     provide_document_metadata=False, collect_embeddings=False, collect_window_stats=False,
-                     border_sources=None):
-    """One report; with `border_sources`, one report per source of the border scores (`border_result`)."""
-    evaluators = {source: Evaluator(inference.start_threshold) for source in border_sources or ['pair']}
+                     provide_document_metadata=False, collect_embeddings=False, collect_window_stats=False):
+    evaluator = Evaluator(inference.start_threshold)
     if predictions_dir is not None:
         Path(predictions_dir).mkdir(parents=True, exist_ok=True)
     start = time.perf_counter()
@@ -161,22 +159,17 @@ def evaluate_streams(model, dataset, streams, inference, device, predictions_dir
         result = predict_stream(model, dataset, stream['rows'], inference, device, **metadata,
                                 collect_embeddings=collect_embeddings, collect_window_stats=collect_window_stats)
         documents = {(d.library, d.doc): d for d in dataset.index.documents_for_rows(stream['rows'])}
-        pages = dataset.index.pages(stream['rows'])
-        for source, evaluator in evaluators.items():
-            evaluator.add(stream['id'], pages, border_result(result, source), documents,
-                          stream['censored_left'], stream['censored_right'])
+        evaluator.add(stream['id'], dataset.index.pages(stream['rows']), result, documents,
+                      stream['censored_left'], stream['censored_right'])
         if predictions_dir is not None:
             # Filenames use ordinal positions, not untrusted manifest IDs or source paths.
             np.savez_compressed(Path(predictions_dir) / f'{i:06d}.npz',
                                 stream_id=stream['id'], rows=np.asarray(stream['rows'], np.int64), **result)
         del result, documents
-    seconds = time.perf_counter() - start
-    reports = {}
-    for source, evaluator in evaluators.items():
-        report = reports[source] = evaluator.report()
-        report['seconds'] = seconds
-        report['unique_pages_per_second'] = sum(s['pages'] for s in report['streams']) / seconds
-    return reports if border_sources else reports['pair']
+    report = evaluator.report()
+    report['seconds'] = time.perf_counter() - start
+    report['unique_pages_per_second'] = sum(s['pages'] for s in report['streams']) / report['seconds']
+    return report
 
 
 def provenance(index, manifest):
