@@ -12,7 +12,7 @@ hashed once; `evaluation_dataset` still checks each checkpoint's store identity.
 `table` writes the Markdown overview: one section per combination (STI, ST, SI, TI, S, T, I) listing every model
 that can handle it, with precision, recall and F1 of the curated page type and of the DB side (left/right/single),
 both support-weighted averages over the classes (as in the README's page type evaluation), and of document starts.
-The r22 context-window series (`-b64parent512-` ... `-r22`, evaluated with `--subsets image+text+stats` only) gets a
+The r22 context-window series (`-b64parent512-` ... `-r22`, evaluated with `--subset image+text+stats` only) gets a
 section of its own, ordered by window, instead of rows in the combination sections.
 
 Examples:
@@ -86,7 +86,7 @@ def evaluate(args):
             raise FileNotFoundError(f'{checkpoint} is missing; the run has not selected a fine-tuning checkpoint')
         config = json.loads((run / 'config.json').read_text())
         print(run.name, flush=True)
-        evaluate_checkpoint(checkpoint, config['dev_manifest'], args.output / run.name, ['none'], args.subsets,
+        evaluate_checkpoint(checkpoint, config['dev_manifest'], args.output / run.name, ['none'], args.subsets or ['all'],
                             training_store=args.store, device=args.device, limit_streams=args.limit_streams,
                             inference='deployment')
         gc.collect()
@@ -177,8 +177,8 @@ def main():
     run.add_argument('--store', help='Native store copy for all checkpoints (identity is checked)')
     run.add_argument('--device', default='cuda')
     run.add_argument('--limit-streams', type=int, help='Only the first streams, for testing')
-    run.add_argument('--subsets', nargs='+', default=['all'],
-                     help="Modality subsets, e.g. image+text+stats (default: all nonempty subsets)")
+    run.add_argument('--subset', dest='subsets', action='append',
+                     help='A modality subset, e.g. image+text+stats; repeatable (default: all nonempty subsets)')
     show = commands.add_parser('table')
     show.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
