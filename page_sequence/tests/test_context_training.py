@@ -149,3 +149,20 @@ def test_preflight_does_not_reuse_a_smaller_physical_batch_check(tmp_path):
     result = subprocess.run([sys.executable, str(tmp_path / 'launch.py')], capture_output=True)
     assert result.returncode != 0
     assert b'physical batch changed' in result.stderr
+
+
+def test_sampler_counters_are_logged_at_validations_only(tmp_path):
+    config, _, _ = setup_data(tmp_path)
+    config.update(pretrain_steps=3, finetune_steps=2, validate_every=2)
+    train(config)
+    run = __import__('pathlib').Path(config['run_dir'])
+    steps = [json.loads(line) for line in (run / 'metrics.jsonl').read_text().splitlines()]
+    assert len(steps) == 5 and not any('sampler' in r for r in steps)
+    validations = [json.loads(line) for line in (run / 'validation.jsonl').read_text().splitlines()]
+    assert validations and all(v['sampler'] for v in validations)
+    # A validation record is the update's metrics line plus the counters and the dev report.
+    by_step = {r['step']: r for r in steps}
+    for v in validations:
+        assert {k: x for k, x in v.items() if k not in ('sampler', 'dev')} == by_step[v['step']]
+    _, state = load_checkpoint(run / 'finetune_final.pt')
+    assert validations[-1]['sampler'] == dict(state['sampler']['counters'])

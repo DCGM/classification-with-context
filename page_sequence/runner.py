@@ -458,7 +458,7 @@ def train(config, resume=None, stop_after=None):
                               'storage_pages': raw_batch.get('storage_pages', {}),
                               'loss_scale': scaler.get_scale(),
                               'pages_per_second': int(raw_batch['attention_mask'].sum()) / elapsed,
-                              'sampler': dict(sampler.counters), 'coverage_epochs': sampler.epoch}
+                              'coverage_epochs': sampler.epoch}
                     if chunked:
                         record['context_partition'] = dict(parent_size=parent_size,
                             context_size=config['window_size'], microbatch=config['context_microbatch_size'],
@@ -483,6 +483,9 @@ def train(config, resume=None, stop_after=None):
                     # Overflowed draws count as exposure, never as optimizer updates.
                     # Finish the requested update segment before validation/checkpointing.
                     continue
+                # The cumulative sampler counters are kept at validation steps only (validation.jsonl and
+                # the checkpoints); the segment's draws are complete, so they are those of its last update.
+                record['sampler'] = dict(sampler.counters)
                 # Preserve model/optimizer/sampler before potentially failing evaluation.
                 # Resume evaluates this pending boundary before drawing any more windows.
                 progress['pending_validation'] = record
