@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from .data import PageListDataset, collate_windows, to_device
+from .data import PageListDataset, to_device
 from .schema import Window
 from .precision import autocast
 
@@ -220,98 +220,66 @@ class StreamMerger:
 def predict_stream(model, dataset, rows, config=InferenceConfig(), device='cpu',
                    document_starts=None, document_ends=None,
                    collect_embeddings=False, collect_window_stats=False):
-    if config.window_size == 1:
-        return predict_singletons(model, dataset, rows, config, device,
-                                  document_starts, document_ends, collect_embeddings, collect_window_stats)
+    """Tile the stream into windows and predict them in batches of up to `config.batch_size` windows.
+
+    One code path for every window size, W1 included. As in training, each batch reads its contiguous stretch
+    of the stream once and its windows are cut from it in memory; only the scan flags differ per window. The
+    outputs are copied to the host once per batch and merged window by window.
+    """
+    n = len(rows)
     borders = getattr(model, 'scan_borders', False)
     boundary_features = getattr(model, 'boundary_features', False)
     if borders or boundary_features:
         from .scan_borders import scan_windows
-        tiles = scan_windows(len(rows), config.window_size, config.stride,
-                             border_tokens=borders, tail=config.tail)
+        tiles = scan_windows(n, config.window_size, config.stride, border_tokens=borders, tail=config.tail)
     else:
-        tiles = [(s, e, False, False) for s, e in
-                 window_spans(len(rows), config.window_size, config.stride, config.tail)]
+        tiles = [(s, e, False, False) for s, e in window_spans(n, config.window_size, config.stride, config.tail)]
     supplied = None
     if document_starts is not None or document_ends is not None:
         if not boundary_features:
             raise ValueError('document metadata requires five-bit boundary features')
         from .scan_borders import encode_boundary_features
-        supplied = encode_boundary_features(len(rows), document_starts=document_starts,
-                                            document_ends=document_ends)
-    spans = [(s, e) for s, e, _, _ in tiles]
-    merger = StreamMerger(len(rows), model.num_types, config,
-                          collect_embeddings, collect_window_stats)
+        supplied = torch.from_numpy(encode_boundary_features(n, document_starts=document_starts,
+                                                             document_ends=document_ends))
+    merger = StreamMerger(n, model.num_types, config, collect_embeddings, collect_window_stats)
+    feature_dtype = torch.float32 if getattr(model, 'compute_precision', 'float32') == 'float32' else None
     was_training = model.training
     model.eval()
     try:
-        for first in range(0, len(spans), config.batch_size):
-            current = spans[first:first + config.batch_size]
-            examples = []
-            for s, e, begin, end in tiles[first:first + config.batch_size]:
-                example = dataset[Window(tuple(rows[s:e]), scan_start=begin, scan_end=end)]
-                if borders and 'scan_borders' not in example['features']:
-                    flags = np.zeros((e - s, 2), np.float32)
-                    flags[0, 0], flags[-1, 1] = begin, end
-                    example['features'] = dict(example['features'], scan_borders=flags)
-                if boundary_features and 'boundaries' not in example['features']:
-                    from .scan_borders import encode_boundary_features
-                    values = encode_boundary_features(e - s, begin, end)
-                    example['features'] = dict(example['features'], boundaries=values)
-                if supplied is not None:
-                    values = supplied[s:e].copy()
-                    values[0, 0], values[-1, 1] = begin, end
-                    example['features'] = dict(example['features'], boundaries=values)
-                examples.append(example)
-            batch = to_device(collate_windows(examples), device,
-                              feature_dtype=torch.float32 if getattr(model, 'compute_precision', 'float32')
-                              == 'float32' else None)
+        for first in range(0, len(tiles), config.batch_size):
+            current = tiles[first:first + config.batch_size]
+            lo, hi = min(t[0] for t in current), max(t[1] for t in current)
+            block = dataset[Window(tuple(rows[lo:hi]), scan_start=lo == 0, scan_end=hi == n)]['features']
+            sizes = torch.tensor([e - s for s, e, _, _ in current])
+            positions = torch.arange(int(sizes.max()))
+            mask = positions[None] < sizes[:, None]
+            index = (torch.tensor([s - lo for s, _, _, _ in current])[:, None] + positions[None]).clamp_max(hi - lo - 1)
+            features = {name: torch.from_numpy(np.ascontiguousarray(x))[index].masked_fill(~mask[..., None], 0)
+                        for name, x in block.items() if name not in ('scan_borders', 'boundaries')}
+            # Scan flags belong to each window: its first page may open the scan, its last may close it.
+            begin = torch.tensor([float(b) for _, _, b, _ in current])
+            end = torch.tensor([float(e) for _, _, _, e in current])
+            last = (torch.arange(len(current)), sizes - 1)
+            if borders or 'scan_borders' in block:
+                flags = torch.zeros(len(current), len(positions), 2)
+                flags[:, 0, 0], flags[last + (1,)] = begin, end
+                features['scan_borders'] = flags
+            if boundary_features or 'boundaries' in block:
+                values = (supplied[lo:hi][index].masked_fill(~mask[..., None], 0) if supplied is not None
+                          else torch.zeros(len(current), len(positions), 5))
+                values[:, 0, 0], values[last + (1,)] = begin, end
+                features['boundaries'] = values
+            batch = to_device({'features': features, 'attention_mask': mask}, device, feature_dtype=feature_dtype)
             with autocast(model, device):
                 kwargs = {'return_embeddings': True} if collect_embeddings else {}
                 output = model(batch['features'], batch['attention_mask'], **kwargs)
-            for i, (s, e) in enumerate(current):
-                merger.add(s, e, {k: v[i, :e - s].detach().float().cpu().numpy() for k, v in output.items()})
+            output = {k: v.detach().float().cpu().numpy() for k, v in output.items()}
+            for i, (s, e, _, _) in enumerate(current):
+                merger.add(s, e, {k: v[i, :e - s] for k, v in output.items()})
     finally:
         model.train(was_training)
     result = merger.finalize()
-    result['processed_pages'] = sum(e - s for s, e in spans)
-    return result
-
-
-@torch.inference_mode()
-def predict_singletons(model, dataset, rows, config, device, document_starts=None,
-                       document_ends=None, collect_embeddings=False, collect_window_stats=False):
-    """Read contiguous storage blocks, encode each page alone; no invented scan edges."""
-    from .context_training import split_context
-    from .scan_borders import encode_boundary_features
-    if getattr(model, 'scan_borders', False):
-        raise ValueError('singleton inference requires page-aligned boundary features')
-    supplied = (encode_boundary_features(len(rows), document_starts=document_starts,
-                                        document_ends=document_ends)
-                if document_starts is not None or document_ends is not None else None)
-    merger = StreamMerger(len(rows), model.num_types, config, collect_embeddings, collect_window_stats)
-    was_training = model.training
-    model.eval()
-    try:
-        for lo in range(0, len(rows), config.batch_size):
-            hi = min(len(rows), lo + config.batch_size)
-            example = dataset[Window(tuple(rows[lo:hi]), scan_start=lo == 0, scan_end=hi == len(rows))]
-            if getattr(model, 'boundary_features', False):
-                values = (supplied[lo:hi].copy() if supplied is not None else
-                          encode_boundary_features(hi - lo))
-                values[0, 0], values[-1, 1] = lo == 0, hi == len(rows)
-                example['features'] = dict(example['features'], boundaries=values)
-            batch = to_device(split_context(collate_windows([example]), 1), device,
-                              feature_dtype=torch.float32 if getattr(model, 'compute_precision', 'float32')
-                              == 'float32' else None)
-            with autocast(model, device):
-                kwargs = {'return_embeddings': True} if collect_embeddings else {}
-                output = model(batch['features'], batch['attention_mask'], **kwargs)
-            merger.add(lo, hi, {k: v[:, 0].detach().float().cpu().numpy() for k, v in output.items()})
-    finally:
-        model.train(was_training)
-    result = merger.finalize()
-    result['processed_pages'] = len(rows)
+    result['processed_pages'] = sum(e - s for s, e, _, _ in tiles)
     return result
 
 
