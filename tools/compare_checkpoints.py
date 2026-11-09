@@ -183,7 +183,7 @@ def compare(a, b, resamples=10000, seed=0):
                    'p_b_not_better': float((d <= 0).mean()), 'p_b_not_worse': float((d >= 0).mean())}
     return {'a': {'checkpoint': ra['checkpoint'], 'step': ra['checkpoint_step']},
             'b': {'checkpoint': rb['checkpoint'], 'step': rb['checkpoint_step']},
-            'streams': n, 'resamples': resamples, 'metrics': rows}
+            'condition': ra['condition'], 'streams': n, 'resamples': resamples, 'metrics': rows}
 
 
 def main():

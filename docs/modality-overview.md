@@ -184,6 +184,67 @@ Difference of each window to W512 in points, with the 95% interval of a paired b
 | 4 | **-1.64 [-2.45, -0.83]** | **-1.82 [-2.51, -1.14]** | -1.52 [-3.53, +0.19] | **-9.29 [-10.99, -7.62]** | **-5.91 [-7.21, -4.71]** |
 | 2 | **-2.51 [-3.38, -1.64]** | **-2.76 [-3.67, -1.83]** | **-6.48 [-8.80, -4.32]** | **-9.52 [-11.21, -7.83]** | **-8.17 [-9.58, -6.81]** |
 
+## Optional input signals: r23 ablations of r22 W512, statistics + text + image
+
+r22 W512 trained without the optional signals, cumulatively (`tools/prepare_input_ablations.py`): **A** without the page-start/page-end heads and without document start/end metadata on the input, **B** also without the scan start/end flags, **C** also without the page numbers, i.e. only the page embeddings. A removed signal is zeroed inside the model (training, validation, evaluation), so the sampled data, the input dropout and the initialization of all other parameters are those of r22 W512; the only data difference are the 3-4 updates per run skipped for an fp16 gradient overflow, whose batches are dropped. Each situation below is a set of signals given at inference and lists the models trained with at least those signals, evaluated with exactly them (scan flags withheld from r22 W512 or A are zeroed inside the model for that evaluation). Border: pairwise head; Both: agreement of the page-edge heads, which A-C do not have.
+
+### Page numbers + document start/end metadata + scan start/end flags (`both`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: all signals | 92.8 | 92.8 | **92.7** | 94.9 | 94.9 | **94.9** | 99.3 | 99.7 | **99.5** | 97.7 |  |  |  |
+
+### Page numbers + scan start/end flags (`page_numbers`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: all signals | 92.1 | 92.2 | **92.1** | 94.8 | 94.8 | **94.8** | 96.0 | 88.0 | **91.8** | 78.2 |  |  |  |
+| r23 A: no page-edge heads, no metadata | 91.9 | 91.9 | **91.8** | 95.1 | 95.1 | **95.1** | 93.7 | 92.9 | **93.3** | – | -0.29 [-0.96, +0.43] | +0.36 [-0.03, +0.94] | **+1.46 [+0.72, +2.20]** |
+
+### Page numbers + document start/end metadata (`both-noscan`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: all signals | 92.8 | 92.8 | **92.7** | 94.9 | 94.9 | **94.9** | 99.3 | 99.7 | **99.5** | 97.7 |  |  |  |
+
+### Document start/end metadata + scan start/end flags (`boundaries`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: all signals | 92.7 | 92.7 | **92.6** | 88.4 | 88.4 | **88.4** | 99.3 | 99.6 | **99.4** | 97.8 |  |  |  |
+
+### Page numbers (`page_numbers-noscan`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: all signals | 92.1 | 92.2 | **92.1** | 94.8 | 94.8 | **94.8** | 95.7 | 88.1 | **91.8** | 78.2 |  |  |  |
+| r23 A: no page-edge heads, no metadata | 91.9 | 91.9 | **91.8** | 95.1 | 95.1 | **95.1** | 93.6 | 92.9 | **93.3** | – | -0.31 [-0.98, +0.40] | +0.36 [-0.03, +0.93] | **+1.48 [+0.74, +2.22]** |
+| r23 B: A without scan flags | 92.1 | 92.0 | **92.0** | 94.9 | 94.9 | **94.9** | 93.3 | 90.9 | **92.1** | – | -0.13 [-0.68, +0.42] | +0.18 [-0.11, +0.70] | +0.34 [-0.61, +1.20] |
+
+### Scan start/end flags (`none`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: all signals | 91.9 | 92.0 | **91.9** | 88.3 | 88.3 | **88.3** | 94.8 | 87.8 | **91.2** | 76.9 |  |  |  |
+| r23 A: no page-edge heads, no metadata | 92.0 | 92.0 | **92.0** | 89.7 | 89.7 | **89.7** | 93.0 | 92.7 | **92.8** | – | +0.09 [-0.57, +0.78] | **+1.39 [+0.89, +2.02]** | **+1.65 [+0.84, +2.45]** |
+
+### Document start/end metadata (`boundaries-noscan`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: all signals | 92.7 | 92.8 | **92.7** | 88.4 | 88.4 | **88.4** | 99.3 | 99.6 | **99.4** | 97.8 |  |  |  |
+
+### No optional signal (`none-noscan`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: all signals | 91.8 | 91.9 | **91.8** | 88.3 | 88.3 | **88.3** | 94.7 | 87.8 | **91.1** | 76.9 |  |  |  |
+| r23 A: no page-edge heads, no metadata | 92.0 | 92.0 | **91.9** | 89.6 | 89.6 | **89.6** | 93.0 | 92.7 | **92.8** | – | +0.14 [-0.53, +0.83] | **+1.39 [+0.89, +2.02]** | **+1.68 [+0.86, +2.49]** |
+| r23 B: A without scan flags | 91.9 | 91.9 | **91.8** | 88.5 | 88.5 | **88.5** | 92.6 | 90.5 | **91.5** | – | +0.02 [-0.56, +0.62] | +0.25 [-0.25, +0.89] | +0.40 [-0.55, +1.27] |
+| r23 C: B without page numbers (embeddings only) | 91.9 | 91.9 | **91.8** | 90.9 | 90.9 | **90.9** | 90.7 | 93.4 | **92.0** | – | +0.05 [-0.57, +0.68] | **+2.66 [+1.89, +3.44]** | **+0.86 [+0.06, +1.66]** |
+
+Δ: difference to r22 W512 in the same situation, in points, with the 95% interval of a paired bootstrap over the dev streams (`tools/compare_checkpoints.py`); bold where it excludes zero.
+
 ## Borders from the page edge heads
 
 The same evaluation of document starts, scored by different heads of the same models, on every adjacent page pair inside a scan (the scan start and end are never scored). **Pair**: the pairwise border head (as above). **Start**: the page-start head on the later page of each pair, i.e. the start head itself on every page but the first of the scan (is this page a document start?). **End**: the page-end head on the earlier page, i.e. the end head itself on every page but the last (is this page a document end?). **Both**: a border only where both fire (the smaller of the two probabilities at threshold 0.5). AP: average precision of the scores. The W1 model has no pairwise head; its page edge heads give it borders.

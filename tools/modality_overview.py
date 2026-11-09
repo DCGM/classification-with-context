@@ -23,7 +23,8 @@ Examples:
     python tools/modality_overview.py evaluate --output /home/ikohut/tmp/modality-overview-deployment \\
         --store /home/ikohut/tmp/document-store-ocr-lines-sparse-v2 --device cuda RUN_DIR [RUN_DIR ...]
     python tools/modality_overview.py table --output /home/ikohut/tmp/modality-overview-deployment \\
-        --comparisons /home/ikohut/tmp/checkpoint-comparison-windows > docs/modality-overview.md
+        --comparisons /home/ikohut/tmp/checkpoint-comparison-windows \\
+        --input-comparisons /home/ikohut/tmp/checkpoint-comparison-inputs > docs/modality-overview.md
 """
 import argparse
 import functools
