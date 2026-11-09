@@ -57,3 +57,21 @@ def test_all_signals_off_specification_and_validation():
     assert 'disabled_inputs' not in model().specification()
     with pytest.raises(ValueError):
         model(disabled_inputs=['page_numbrs'])
+
+
+def test_scan_flags_omitted_for_an_evaluation_only():
+    from page_sequence.evaluate_conditions import CONDITIONS, without_scan_flags
+    m, blind = model(), model(disabled_inputs=['scan_flags'])
+    blind.load_state_dict(m.state_dict())
+    features, mask = batch(2)
+    normal = outputs(m, features, mask)
+    with without_scan_flags(m, True):
+        assert m.disabled_inputs == ('scan_flags',)
+        for key, value in outputs(m, features, mask).items():
+            torch.testing.assert_close(value, outputs(blind, features, mask)[key], rtol=0, atol=0)
+    assert m.disabled_inputs == ()
+    for key, value in outputs(m, features, mask).items():
+        torch.testing.assert_close(value, normal[key], rtol=0, atol=0)
+    with without_scan_flags(blind, True):
+        assert blind.disabled_inputs == ('scan_flags',)
+    assert sum(not scan for _, _, scan in CONDITIONS.values()) == 4

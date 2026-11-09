@@ -92,11 +92,13 @@ def from_stored(predictions, output, catalogue, manifest, name=None):
     from page_sequence.stored_predictions import COMPLETE, load_stream
     predictions = Path(predictions)
     meta = json.loads((predictions / COMPLETE).read_text())
-    if meta['condition'] != 'none' or meta['inference_policy'] != 'deployment':
-        raise ValueError('stored predictions of another condition or merging policy')
+    if meta['inference_policy'] != 'deployment':
+        raise ValueError('stored predictions of another merging policy')
     if file_sha256(manifest) != meta['manifest_sha256']:
         raise ValueError('the manifest differs from the one the predictions were made on')
-    path = output / f'{name or Path(meta["checkpoint"]).parent.name}.json'
+    condition = meta['condition']
+    path = output / (f'{name or Path(meta["checkpoint"]).parent.name}'
+                     f'{"" if condition == "none" else "@" + condition}.json')
     if path.exists():
         return path
     index = PageIndex(catalogue)
@@ -105,7 +107,7 @@ def from_stored(predictions, output, catalogue, manifest, name=None):
         raise ValueError('stored predictions cover other streams')
     results = (load_stream(predictions, i, s) for i, s in enumerate(streams))
     report, entries = per_stream(index, streams, results, meta['inference']['start_threshold'])
-    report.update(seconds=meta['seconds'], condition='none', inference=meta['inference'],
+    report.update(seconds=meta['seconds'], condition=condition, inference=meta['inference'],
                   inference_policy='deployment', checkpoint=meta['checkpoint'],
                   checkpoint_sha256=meta['checkpoint_sha256'], checkpoint_step=meta['checkpoint_step'],
                   manifest=str(manifest), manifest_sha256=meta['manifest_sha256'], modalities=meta['modalities'],

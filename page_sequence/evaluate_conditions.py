@@ -21,6 +21,7 @@ Example:
         --manifest /home/ikohut/tmp/page-sequence-data/dev.jsonl --output /home/ikohut/tmp/conditions --device cuda
 """
 import argparse
+from contextlib import contextmanager
 from dataclasses import asdict
 from itertools import combinations
 import json
@@ -34,8 +35,29 @@ from .modalities import ModalitySubsetDataset, enabled_modalities
 from .runner import evaluation_dataset, load_checkpoint
 from .stored_predictions import COMPLETE, evaluate_stored, store_predictions
 
-CONDITIONS = {'none': (False, False), 'page_numbers': (True, False), 'boundaries': (False, True),
-              'both': (True, True)}
+# (page numbers given, document start/end metadata given, scan start/end flags given)
+CONDITIONS = {'none': (False, False, True), 'page_numbers': (True, False, True), 'boundaries': (False, True, True),
+              'both': (True, True, True), 'none-noscan': (False, False, False),
+              'page_numbers-noscan': (True, False, False), 'boundaries-noscan': (False, True, False),
+              'both-noscan': (True, True, False)}
+DEFAULT_CONDITIONS = ('none', 'page_numbers', 'boundaries', 'both')
+
+
+@contextmanager
+def without_scan_flags(model, active):
+    """Zero the scan start/end flags inside the model (`models.DISABLEABLE_INPUTS`) for an evaluation."""
+    if not active:
+        yield
+        return
+    if not getattr(model, 'boundary_features', False):
+        raise ValueError('the checkpoint has no scan flags to omit')
+    from .models import DISABLEABLE_INPUTS
+    original = model.disabled_inputs
+    model.disabled_inputs = tuple(n for n in DISABLEABLE_INPUTS if n in original or n == 'scan_flags')
+    try:
+        yield
+    finally:
+        model.disabled_inputs = original
 
 
 class WithoutPagination:
@@ -69,7 +91,7 @@ def modality_subsets(requested, enabled):
 INFERENCE_POLICIES = ('checkpoint', 'deployment')
 
 
-def evaluate_checkpoint(checkpoint, manifest, output, conditions=tuple(CONDITIONS), modalities=None, split='dev',
+def evaluate_checkpoint(checkpoint, manifest, output, conditions=DEFAULT_CONDITIONS, modalities=None, split='dev',
                         training_store=None, device='cpu', limit_streams=None, inference='checkpoint',
                         border_sources=('pair',)):
     """Run the checkpoint once per (modality subset, condition), store all outputs, derive the reports.
@@ -97,14 +119,15 @@ def evaluate_checkpoint(checkpoint, manifest, output, conditions=tuple(CONDITION
     checkpoint_sha256, manifest_sha256 = file_sha256(checkpoint), file_sha256(manifest)
     written = []
     for subset, name in [(subset, name) for subset in subsets for name in conditions]:
-        pagination, boundaries = CONDITIONS[name]
+        pagination, boundaries, scan = CONDITIONS[name]
         directory = output if subset is None else output / '+'.join(subset)
         directory.mkdir(parents=True, exist_ok=True)
         modalities_used = list(enabled if subset is None else subset)
         stored = directory / f'{name}-predictions'
         if not (stored / COMPLETE).exists():
             data = dataset if subset is None else ModalitySubsetDataset(dataset, subset)
-            store_predictions(model, data if pagination else WithoutPagination(data), streams, inference, device,
+            with without_scan_flags(model, not scan):
+                store_predictions(model, data if pagination else WithoutPagination(data), streams, inference, device,
                               stored, provide_document_metadata=boundaries, metadata=dict(
                                   checkpoint=str(checkpoint), checkpoint_sha256=checkpoint_sha256,
                                   checkpoint_step=state['step'], manifest=str(manifest),
@@ -123,7 +146,7 @@ def evaluate_checkpoint(checkpoint, manifest, output, conditions=tuple(CONDITION
         reports = evaluate_stored(stored, dataset.index, streams, inference.start_threshold, missing)
         for source in missing:
             report = reports[source]
-            report.update(condition=name, page_numbers=pagination, document_boundaries=boundaries,
+            report.update(condition=name, page_numbers=pagination, document_boundaries=boundaries, scan_flags=scan,
                           checkpoint_modalities=list(enabled), modalities=modalities_used,
                           inference=asdict(inference), inference_policy=policy, checkpoint=str(checkpoint),
                           checkpoint_sha256=checkpoint_sha256, manifest=str(manifest),
@@ -145,7 +168,7 @@ def main():
     parser.add_argument('--split', choices=['dev', 'test'], default='dev')
     parser.add_argument('--training-store')
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--conditions', nargs='+', choices=list(CONDITIONS), default=list(CONDITIONS))
+    parser.add_argument('--conditions', nargs='+', choices=list(CONDITIONS), default=list(DEFAULT_CONDITIONS))
     parser.add_argument('--modalities', nargs='+', metavar='SUBSET',
                         help='Main-signal subsets such as image+text, or all; default: the checkpoint\'s own set')
     parser.add_argument('--inference', choices=INFERENCE_POLICIES, default='checkpoint',

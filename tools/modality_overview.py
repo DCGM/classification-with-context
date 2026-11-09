@@ -135,9 +135,11 @@ def evaluate(args):
             raise FileNotFoundError(f'{checkpoint} is missing; the run has not selected a fine-tuning checkpoint')
         config = json.loads((run / 'config.json').read_text())
         print(run.name, flush=True)
-        evaluate_checkpoint(checkpoint, config['dev_manifest'], args.output / run.name, ['none'], args.subsets or ['all'],
-                            training_store=args.store, device=args.device, limit_streams=args.limit_streams,
-                            inference='deployment', border_sources=tuple(BORDER_NAMES))
+        # The page edge heads give three more border sources; models without them have only the pairwise one.
+        sources = tuple(BORDER_NAMES) if config.get('auxiliary_edges') else ('pair',)
+        evaluate_checkpoint(checkpoint, config['dev_manifest'], args.output / run.name, args.conditions or ['none'],
+                            args.subsets or ['all'], training_store=args.store, device=args.device,
+                            limit_streams=args.limit_streams, inference='deployment', border_sources=sources)
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -266,6 +268,8 @@ def main():
     run.add_argument('--store', help='Native store copy for all checkpoints (identity is checked)')
     run.add_argument('--device', default='cuda')
     run.add_argument('--limit-streams', type=int, help='Only the first streams, for testing')
+    run.add_argument('--condition', dest='conditions', action='append',
+                     help='Inputs given at inference (`evaluate_conditions.CONDITIONS`); repeatable (default: none)')
     run.add_argument('--subset', dest='subsets', action='append',
                      help='A modality subset, e.g. image+text+stats; repeatable (default: all nonempty subsets)')
     show = commands.add_parser('table')
