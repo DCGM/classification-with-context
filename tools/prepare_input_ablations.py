@@ -12,6 +12,11 @@ metadata); a model given the document metadata keeps the page-start/page-end hea
 - F `metadata-scan-flags`: the document metadata and the scan flags (with the heads), no page numbers;
 - G `metadata-page-numbers`: the document metadata and the page numbers (with the heads), no scan flags.
 
+The models given the document metadata once more without the page-start/page-end heads:
+- H `metadata-only-noheads`, I `metadata-scan-flags-noheads`, J `metadata-page-numbers-noheads`: E, F, G without
+  the heads;
+- K `all-signals-noheads`: r22 W512 without the heads.
+
 The signals are removed inside the model (`models.DISABLEABLE_INPUTS`: zeroed in its forward pass for training,
 validation and every evaluation), so the sampled data, the augmentation randomness and the initialization of every
 remaining parameter are those of r22 W512; without the heads only the four auxiliary head tensors are missing. The
@@ -34,15 +39,20 @@ import torch
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 AUXILIARY = ('page_start_head.weight', 'page_start_head.bias', 'page_end_head.weight', 'page_end_head.bias')
-# (directory, run-name tag, disabled inputs); the page-edge heads are kept exactly when the metadata is.
-VARIANTS = [('a-no-edges-metadata', 'noedgeheads-nometadata', ['document_metadata']),
-            ('b-no-scan-flags', 'noedgeheads-nometadata-noscanflags', ['document_metadata', 'scan_flags']),
+# (directory, run-name tag, disabled inputs, page-edge heads)
+VARIANTS = [('a-no-edges-metadata', 'noedgeheads-nometadata', ['document_metadata'], False),
+            ('b-no-scan-flags', 'noedgeheads-nometadata-noscanflags', ['document_metadata', 'scan_flags'], False),
             ('c-no-page-numbers', 'noedgeheads-nometadata-noscanflags-nopagenumbers',
-             ['document_metadata', 'scan_flags', 'page_numbers']),
-            ('d-scan-flags-only', 'noedgeheads-nometadata-nopagenumbers', ['document_metadata', 'page_numbers']),
-            ('e-metadata-only', 'boundary5-metadata50-noscanflags-nopagenumbers', ['scan_flags', 'page_numbers']),
-            ('f-metadata-scan-flags', 'boundary5-metadata50-nopagenumbers', ['page_numbers']),
-            ('g-metadata-page-numbers', 'boundary5-metadata50-noscanflags', ['scan_flags'])]
+             ['document_metadata', 'scan_flags', 'page_numbers'], False),
+            ('d-scan-flags-only', 'noedgeheads-nometadata-nopagenumbers', ['document_metadata', 'page_numbers'], False),
+            ('e-metadata-only', 'boundary5-metadata50-noscanflags-nopagenumbers', ['scan_flags', 'page_numbers'], True),
+            ('f-metadata-scan-flags', 'boundary5-metadata50-nopagenumbers', ['page_numbers'], True),
+            ('g-metadata-page-numbers', 'boundary5-metadata50-noscanflags', ['scan_flags'], True),
+            ('h-metadata-only-noheads', 'noedgeheads-boundary5-metadata50-noscanflags-nopagenumbers',
+             ['scan_flags', 'page_numbers'], False),
+            ('i-metadata-scan-flags-noheads', 'noedgeheads-boundary5-metadata50-nopagenumbers', ['page_numbers'], False),
+            ('j-metadata-page-numbers-noheads', 'noedgeheads-boundary5-metadata50-noscanflags', ['scan_flags'], False),
+            ('k-all-signals-noheads', 'noedgeheads-boundary5-metadata50', [], False)]
 
 
 def digest(state, skip=()):
@@ -54,11 +64,13 @@ def digest(state, skip=()):
     return h.hexdigest()
 
 
-def variant(config, tag, disabled, smoke=False):
+def variant(config, tag, disabled, heads, smoke=False):
     config = json.loads(json.dumps(config))
     config['disabled_inputs'] = disabled
     if 'document_metadata' in disabled:
-        config.update(auxiliary_edges=False, document_metadata_evaluation=False)
+        config['document_metadata_evaluation'] = False
+    if not heads:
+        config['auxiliary_edges'] = False
         config['loss_weights'] = dict(config['loss_weights'], page_start=0.0, page_end=0.0)
     elif not config.get('auxiliary_edges'):
         raise ValueError('the reference has no page-edge heads')
@@ -90,16 +102,15 @@ def prepare(reference, reference_run, output, names=None):
     source = json.loads((reference / 'config.json').read_text())
     smoke = json.loads((reference / 'smoke-config.json').read_text())
     jobs = []
-    for directory, tag, disabled in selected:
-        heads = 'document_metadata' not in disabled
+    for directory, tag, disabled, heads in selected:
         root = output / directory
         root.mkdir(parents=True)
-        config = variant(source, tag, disabled)
+        config = variant(source, tag, disabled, heads)
         (root / 'config.json').write_text(json.dumps(config, indent=2) + '\n')
         (root / 'config-diff.json').write_text(json.dumps(
             {k: {'before': source.get(k), 'after': v} for k, v in config.items() if source.get(k) != v}
             | {'derived_from': str(reference)}, indent=2) + '\n')
-        test = variant(smoke, tag, disabled, smoke=True)
+        test = variant(smoke, tag, disabled, heads, smoke=True)
         test.update(run_dir=str(root / 'smoke-run'), dev_manifest=str(root / 'smoke-dev.jsonl'))
         (root / 'smoke-config.json').write_text(json.dumps(test, indent=2) + '\n')
         (root / 'expected-initialization.json').write_text(json.dumps(
