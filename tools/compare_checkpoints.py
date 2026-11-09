@@ -9,7 +9,13 @@ and the boundary counts, so metrics can be recomputed for any resample of stream
 `compare` resamples the streams (paired: the same resample for both models) and reports, for each metric, the
 difference B - A with a percentile confidence interval and the fraction of resamples in which B is not better.
 
+`stored` writes the same per-stream report from stored predictions (`page_sequence.stored_predictions`, e.g. the
+`none-predictions` directories of `tools/modality_overview.py`), with only the catalogue.
+
 Examples:
+    python tools/compare_checkpoints.py stored --output /home/ikohut/tmp/checkpoint-comparison \\
+        --catalogue /home/ikohut/tmp/document-store-ocr-lines-sparse-v2/catalogue.sqlite \\
+        --manifest /home/ikohut/tmp/page-sequence-data/dev.jsonl RUN_OUTPUT/image+text+stats/none-predictions
     python tools/compare_checkpoints.py evaluate --output /home/ikohut/tmp/checkpoint-comparison \\
         --store /home/ikohut/tmp/document-store-ocr-lines-sparse-v2 --device cuda RUN_DIR [RUN_DIR ...]
     python tools/compare_checkpoints.py compare /home/ikohut/tmp/checkpoint-comparison/A.json \\
@@ -28,9 +34,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 TYPE_KEYS = ('curated_type', 'placement_db_agreement')
 
 
+def per_stream(index, streams, results, threshold):
+    """The Evaluator report of the results (one per stream, in order) and each stream's own counts."""
+    from page_sequence.evaluation import Evaluator
+    evaluator = Evaluator(threshold)
+    entries = []
+    for stream, result in zip(streams, results, strict=True):
+        before = {k: evaluator.confusions[k].copy() for k in TYPE_KEYS}
+        documents = {(d.library, d.doc): d for d in index.documents_for_rows(stream['rows'])}
+        evaluator.add(stream['id'], index.pages(stream['rows']), result, documents,
+                      stream['censored_left'], stream['censored_right'])
+        starts = evaluator.streams[-1]['starts']
+        entry = {'id': stream['id'], 'starts': {k: starts[k] for k in ('tp', 'fp', 'fn')}}
+        for k in TYPE_KEYS:
+            delta = evaluator.confusions[k] - before[k]
+            entry[k] = [[int(i), int(j), int(delta[i, j])] for i, j in zip(*np.nonzero(delta))]
+        entries.append(entry)
+    report = evaluator.report()
+    report.pop('streams')
+    return report, entries
+
+
 def evaluate_run(run, output, store=None, device='cuda', limit_streams=None):
     from page_sequence.evaluate_conditions import WithoutPagination
-    from page_sequence.evaluation import Evaluator
     from page_sequence.inference import InferenceConfig, deployment_inference
     from page_sequence.runner import evaluation_dataset, file_sha256, load_checkpoint, load_streams
     from page_sequence.runner import predict_stream
@@ -46,29 +72,44 @@ def evaluate_run(run, output, store=None, device='cuda', limit_streams=None):
     inference = deployment_inference(saved.window_size, saved.batch_size, saved.start_threshold)
     streams = load_streams(config['dev_manifest'], dataset.index, 'dev')[:limit_streams]
     data = WithoutPagination(dataset)
-    evaluator = Evaluator(inference.start_threshold)
-    per_stream = []
     start = time.perf_counter()
-    for stream in streams:
-        before = {k: evaluator.confusions[k].copy() for k in TYPE_KEYS}
-        result = predict_stream(model, data, stream['rows'], inference, device)
-        documents = {(d.library, d.doc): d for d in dataset.index.documents_for_rows(stream['rows'])}
-        evaluator.add(stream['id'], dataset.index.pages(stream['rows']), result, documents,
-                      stream['censored_left'], stream['censored_right'])
-        starts = evaluator.streams[-1]['starts']
-        entry = {'id': stream['id'], 'starts': {k: starts[k] for k in ('tp', 'fp', 'fn')}}
-        for k in TYPE_KEYS:
-            delta = evaluator.confusions[k] - before[k]
-            nonzero = np.nonzero(delta)
-            entry[k] = [[int(i), int(j), int(delta[i, j])] for i, j in zip(*nonzero)]
-        per_stream.append(entry)
-    report = evaluator.report()
+    results = (predict_stream(model, data, stream['rows'], inference, device) for stream in streams)
+    report, entries = per_stream(dataset.index, streams, results, inference.start_threshold)
     report.update(seconds=time.perf_counter() - start, condition='none', inference=asdict(inference),
                   inference_policy='deployment', checkpoint=str(checkpoint),
                   checkpoint_sha256=file_sha256(checkpoint), checkpoint_step=state['step'],
                   manifest=config['dev_manifest'], manifest_sha256=file_sha256(config['dev_manifest']),
-                  modalities=config.get('enabled_modalities'), per_stream=per_stream)
-    report.pop('streams')
+                  modalities=config.get('enabled_modalities'), per_stream=entries)
+    output.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, allow_nan=False) + '\n')
+    return path
+
+
+def from_stored(predictions, output, catalogue, manifest, name=None):
+    """The same report from stored predictions (`page_sequence.stored_predictions`), without the model."""
+    from page_sequence.index import PageIndex
+    from page_sequence.manifests import file_sha256, load_streams
+    from page_sequence.stored_predictions import COMPLETE, load_stream
+    predictions = Path(predictions)
+    meta = json.loads((predictions / COMPLETE).read_text())
+    if meta['condition'] != 'none' or meta['inference_policy'] != 'deployment':
+        raise ValueError('stored predictions of another condition or merging policy')
+    if file_sha256(manifest) != meta['manifest_sha256']:
+        raise ValueError('the manifest differs from the one the predictions were made on')
+    path = output / f'{name or Path(meta["checkpoint"]).parent.name}.json'
+    if path.exists():
+        return path
+    index = PageIndex(catalogue)
+    streams = load_streams(manifest, index, meta['split'])
+    if meta['stream_ids'] != [str(s['id']) for s in streams]:
+        raise ValueError('stored predictions cover other streams')
+    results = (load_stream(predictions, i, s) for i, s in enumerate(streams))
+    report, entries = per_stream(index, streams, results, meta['inference']['start_threshold'])
+    report.update(seconds=meta['seconds'], condition='none', inference=meta['inference'],
+                  inference_policy='deployment', checkpoint=meta['checkpoint'],
+                  checkpoint_sha256=meta['checkpoint_sha256'], checkpoint_step=meta['checkpoint_step'],
+                  manifest=str(manifest), manifest_sha256=meta['manifest_sha256'], modalities=meta['modalities'],
+                  predictions=str(predictions), per_stream=entries)
     output.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, allow_nan=False) + '\n')
     return path
@@ -152,6 +193,11 @@ def main():
     run.add_argument('--store')
     run.add_argument('--device', default='cuda')
     run.add_argument('--limit-streams', type=int)
+    stored = sub.add_parser('stored', help='Per-stream report from stored predictions, without the model')
+    stored.add_argument('predictions', nargs='+', help='<condition>-predictions directories')
+    stored.add_argument('--output', type=Path, required=True)
+    stored.add_argument('--catalogue', required=True)
+    stored.add_argument('--manifest', required=True)
     cmp = sub.add_parser('compare')
     cmp.add_argument('a')
     cmp.add_argument('b')
@@ -162,6 +208,9 @@ def main():
         torch.set_num_threads(4)
         for r in args.runs:
             print(evaluate_run(r, args.output, args.store, args.device, args.limit_streams), flush=True)
+    elif args.command == 'stored':
+        for p in args.predictions:
+            print(from_stored(p, args.output, args.catalogue, args.manifest), flush=True)
     else:
         print(json.dumps(compare(args.a, args.b, args.resamples), indent=2))
 
