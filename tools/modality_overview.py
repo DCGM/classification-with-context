@@ -22,7 +22,8 @@ Each checkpoint runs once per combination: all its outputs are stored in `<outpu
 Examples:
     python tools/modality_overview.py evaluate --output /home/ikohut/tmp/modality-overview-deployment \\
         --store /home/ikohut/tmp/document-store-ocr-lines-sparse-v2 --device cuda RUN_DIR [RUN_DIR ...]
-    python tools/modality_overview.py table --output /home/ikohut/tmp/modality-overview-deployment > docs/modality-overview.md
+    python tools/modality_overview.py table --output /home/ikohut/tmp/modality-overview-deployment \\
+        --comparisons /home/ikohut/tmp/checkpoint-comparison-windows > docs/modality-overview.md
 """
 import argparse
 import functools
@@ -51,6 +52,38 @@ WINDOW_SECTION = [
     'updates without early stopping, input dropout seeded per update, the best checkpoint of each phase selected '
     'on dev. One seed per window. Evaluated as above, with all three signals; the merging overlap scales with W '
     '(W/8, at least one page). The W1 models of r21 (cut the same way, W1 sections above) complete the series.', '']
+
+
+COMPARED = (('type_weighted_f1', 'Type F1'), ('side_weighted_f1', 'Side F1'), ('boundary_precision', 'Border P'),
+            ('boundary_recall', 'Border R'), ('boundary_f1', 'Border F1'))
+
+
+def comparison_section(directory):
+    """Differences of every window against the W512 reference, with 95% bootstrap intervals."""
+    rows = []
+    for path in directory.glob('*-vs-*.json'):
+        result = json.loads(path.read_text())
+        a, b = (re.search(r'-w(\d+)-', result[k]['checkpoint']) for k in ('a', 'b'))
+        if a and int(a.group(1)) == 512 and '-dinoorig-' not in result['a']['checkpoint'] + result['b']['checkpoint']:
+            rows.append((int(b.group(1)), result))
+    if not rows:
+        return []
+    streams, resamples = rows[0][1]['streams'], rows[0][1]['resamples']
+    lines = ['### Paired comparison with W512', '',
+             f'Difference of each window to W512 in points, with the 95% interval of a paired bootstrap over the '
+             f'{streams} dev streams ({resamples:,} resamples, `tools/compare_checkpoints.py`); bold where the '
+             'interval excludes zero. The bootstrap covers the choice of dev streams, not the training randomness '
+             '(one seed per window).', '',
+             '| W | ' + ' | '.join(label for _, label in COMPARED) + ' |', '|---|' + '---:|' * len(COMPARED)]
+    for window, result in sorted(rows, key=lambda r: -r[0]):
+        cells = []
+        for key, _ in COMPARED:
+            m = result['metrics'][key]
+            lo, hi = (100 * x for x in m['ci95'])
+            text = f'{100 * m["difference"]:+.2f} [{lo:+.2f}, {hi:+.2f}]'
+            cells.append(f'**{text}**' if lo > 0 or hi < 0 else text)
+        lines.append(f'| {window} | ' + ' | '.join(cells) + ' |')
+    return lines + ['']
 
 
 BORDER_NAMES = {'pair': 'Pair', 'start': 'Start', 'end': 'End', 'both': 'Both'}
@@ -181,6 +214,8 @@ def table(args):
             cells = [fmt(v) if i % 3 != 2 else f'**{fmt(v)}**' for i, v in enumerate(values)]
             lines.append(f'| {label} | ' + ' | '.join(cells) + ' |')
         lines.append('')
+    if args.comparisons:
+        lines += comparison_section(args.comparisons)
     heads = border_heads(args.output)
     if heads:
         lines += BORDER_SECTION + [
@@ -224,6 +259,9 @@ def main():
                      help='A modality subset, e.g. image+text+stats; repeatable (default: all nonempty subsets)')
     show = commands.add_parser('table')
     show.add_argument('--output', type=Path, required=True)
+    show.add_argument('--comparisons', type=Path,
+                      help='Paired comparisons of the window series against W512 (`compare_checkpoints.py compare` '
+                           'outputs named <A>-vs-<B>.json)')
     args = parser.parse_args()
     evaluate(args) if args.command == 'evaluate' else table(args)
 
