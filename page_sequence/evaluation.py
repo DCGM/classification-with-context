@@ -128,6 +128,30 @@ def side_sequence_report(counts):
     return result
 
 
+BORDER_SOURCES = ('pair', 'start', 'end', 'both')
+
+
+def border_result(result, source):
+    """The stream result with its document starts scored by `source` instead of the pairwise head.
+
+    'start': the page-start head on the later page of each adjacent pair; 'end': the page-end head on the earlier
+    page; 'both': the smaller of the two, so a border is predicted only where both heads fire. Every internal pair
+    is scored, also for W1 models, which have no pairwise head.
+    """
+    if source == 'pair':
+        return result
+    if source not in BORDER_SOURCES:
+        raise ValueError(f'border source must be one of {BORDER_SOURCES}')
+    if 'page_start_probs' not in result or 'page_end_probs' not in result:
+        raise ValueError('page edge heads required')
+    later, earlier = result['page_start_probs'][1:], result['page_end_probs'][:-1]
+    scores = np.full(len(result['page_start_probs']), np.nan, np.float32)
+    scores[1:] = {'start': later, 'end': earlier, 'both': np.minimum(later, earlier)}[source]
+    pairs = np.ones(len(scores), bool)
+    pairs[0] = False
+    return dict(result, starts_document_probs=scores, pair_mask=pairs, boundary_enabled=True)
+
+
 class Evaluator:
     def __init__(self, threshold=.5):
         self.threshold = threshold
