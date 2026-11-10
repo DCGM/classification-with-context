@@ -186,64 +186,140 @@ Difference of each window to W512 in points, with the 95% interval of a paired b
 
 ## Optional input signals: r23 ablations of r22 W512, statistics + text + image
 
-r22 W512 trained without the optional signals, cumulatively (`tools/prepare_input_ablations.py`): **A** without the page-start/page-end heads and without document start/end metadata on the input, **B** also without the scan start/end flags, **C** also without the page numbers, i.e. only the page embeddings. A removed signal is zeroed inside the model (training, validation, evaluation), so the sampled data, the input dropout and the initialization of all other parameters are those of r22 W512; the only data difference are the 3-4 updates per run skipped for an fp16 gradient overflow, whose batches are dropped. Each situation below is a set of signals given at inference and lists the models trained with at least those signals, evaluated with exactly them (scan flags withheld from r22 W512 or A are zeroed inside the model for that evaluation). Border: pairwise head; Both: agreement of the page-edge heads, which A-C do not have.
+r22 W512 retrained with every combination of the three optional input signals (`tools/prepare_input_ablations.py`): **page numbers**, **scan borders** (the scan start/end flags) and **doc borders** (the document start/end metadata, given in half of the training windows, as in r22). A model trained with the doc borders has the page-start/page-end heads of r22 W512 and is trained once more without them (E-H, G-J, F-I, W512-K); the models without the doc borders have no heads. A removed signal is zeroed inside the model (training, validation, evaluation), so the sampled data, the input dropout and the initialization of all other parameters are those of r22 W512; the only data difference are the few updates per run skipped for an fp16 gradient overflow, whose batches are dropped. One seed per model.
 
-### Page numbers + document start/end metadata + scan start/end flags (`both`)
+### Each model with all its signals
+
+Every model evaluated with exactly the signals it was trained with. Border: pairwise head; Both: agreement of the page-edge heads.
+
+| Model | Trained with | Heads | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| W512 | page numbers + scan borders + doc borders | yes | 92.8 | 92.8 | **92.7** | 94.9 | 94.9 | **94.9** | 99.3 | 99.7 | **99.5** | 97.7 |
+| K | page numbers + scan borders + doc borders | no | 92.6 | 92.6 | **92.5** | 95.1 | 95.1 | **95.1** | 99.2 | 99.4 | **99.3** | – |
+| G | page numbers + doc borders | yes | 92.8 | 92.9 | **92.8** | 95.2 | 95.2 | **95.1** | 99.4 | 99.7 | **99.6** | 97.4 |
+| J | page numbers + doc borders | no | 92.8 | 92.6 | **92.6** | 95.1 | 95.1 | **95.1** | 99.2 | 99.8 | **99.5** | – |
+| F | scan borders + doc borders | yes | 92.7 | 92.8 | **92.7** | 91.6 | 91.5 | **91.5** | 98.5 | 100.0 | **99.2** | 97.7 |
+| I | scan borders + doc borders | no | 92.4 | 92.4 | **92.4** | 91.7 | 91.7 | **91.7** | 98.2 | 99.9 | **99.1** | – |
+| E | doc borders | yes | 92.3 | 92.3 | **92.2** | 92.0 | 92.0 | **92.0** | 98.6 | 99.9 | **99.2** | 98.3 |
+| H | doc borders | no | 92.8 | 92.9 | **92.8** | 92.5 | 92.5 | **92.5** | 98.3 | 99.9 | **99.1** | – |
+| A | page numbers + scan borders | no | 91.9 | 91.9 | **91.8** | 95.1 | 95.1 | **95.1** | 93.7 | 92.9 | **93.3** | – |
+| B | page numbers | no | 92.1 | 92.0 | **92.0** | 94.9 | 94.9 | **94.9** | 93.3 | 90.9 | **92.1** | – |
+| D | scan borders | no | 92.5 | 92.4 | **92.3** | 92.6 | 92.6 | **92.6** | 94.7 | 92.6 | **93.6** | – |
+| C | nothing | no | 91.9 | 91.9 | **91.8** | 90.9 | 90.9 | **90.9** | 90.7 | 93.4 | **92.0** | – |
+
+### The page-edge heads
+
+Difference of the model without the page-start/page-end heads to the same model with them, in every situation both can handle (95% interval of a paired bootstrap over the dev streams, bold where it excludes zero).
+
+| With heads | Without heads | Given at inference | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---|---|---:|---:|---:|
+| W512 | K | page numbers + scan borders + doc borders | -0.21 [-0.76, +0.37] | +0.26 [-0.21, +0.88] | -0.22 [-0.53, +0.08] |
+| W512 | K | page numbers + scan borders | -0.25 [-0.84, +0.37] | +0.18 [-0.43, +0.83] | +0.50 [-0.23, +1.23] |
+| W512 | K | scan borders + doc borders | -0.32 [-0.88, +0.25] | **+1.01 [+0.54, +1.64]** | -0.17 [-0.46, +0.11] |
+| W512 | K | page numbers + doc borders | -0.25 [-0.82, +0.32] | +0.26 [-0.22, +0.87] | -0.22 [-0.53, +0.08] |
+| W512 | K | scan borders | -0.24 [-0.84, +0.36] | **+0.90 [+0.43, +1.53]** | **+0.84 [+0.11, +1.59]** |
+| W512 | K | page numbers | -0.42 [-1.00, +0.19] | +0.18 [-0.43, +0.84] | +0.57 [-0.13, +1.31] |
+| W512 | K | doc borders | -0.39 [-0.96, +0.18] | **+1.01 [+0.54, +1.64]** | -0.17 [-0.46, +0.11] |
+| W512 | K | nothing | -0.26 [-0.85, +0.33] | **+0.90 [+0.43, +1.53]** | **+0.81 [+0.08, +1.57]** |
+| G | J | page numbers + doc borders | -0.22 [-0.68, +0.24] | -0.01 [-0.12, +0.14] | -0.06 [-0.28, +0.16] |
+| G | J | page numbers | -0.24 [-0.75, +0.29] | +0.00 [-0.13, +0.18] | -0.34 [-1.07, +0.41] |
+| G | J | doc borders | -0.19 [-0.64, +0.26] | +0.14 [-0.08, +0.38] | -0.08 [-0.30, +0.11] |
+| G | J | nothing | -0.16 [-0.69, +0.38] | +0.11 [-0.13, +0.39] | -0.28 [-1.06, +0.50] |
+| F | I | scan borders + doc borders | -0.37 [-0.86, +0.12] | +0.12 [-0.39, +0.61] | -0.19 [-0.48, +0.08] |
+| F | I | scan borders | -0.01 [-0.55, +0.52] | +0.20 [-0.25, +0.66] | +0.43 [-0.40, +1.25] |
+| F | I | doc borders | -0.38 [-0.85, +0.10] | +0.12 [-0.40, +0.61] | -0.19 [-0.48, +0.08] |
+| F | I | nothing | +0.12 [-0.43, +0.66] | +0.20 [-0.26, +0.66] | +0.51 [-0.34, +1.37] |
+| E | H | doc borders | +0.55 [-0.06, +1.17] | **+0.51 [+0.15, +0.92]** | -0.14 [-0.42, +0.13] |
+| E | H | nothing | +0.32 [-0.33, +0.97] | **+0.54 [+0.16, +0.97]** | **+1.35 [+0.52, +2.17]** |
+
+### Every situation
+
+Each situation is a set of signals given at inference and lists the models trained with at least those signals, evaluated with exactly them (a signal a model was trained with but is not given is zeroed inside the model). Δ: difference to r22 W512 in the same situation, in points, with the 95% interval of a paired bootstrap over the dev streams (`tools/compare_checkpoints.py`); bold where it excludes zero.
+
+#### Page numbers + scan borders + doc borders (`both`)
 
 | Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| r22 W512: all signals | 92.8 | 92.8 | **92.7** | 94.9 | 94.9 | **94.9** | 99.3 | 99.7 | **99.5** | 97.7 |  |  |  |
+| r22 W512: page numbers + scan borders + doc borders, heads | 92.8 | 92.8 | **92.7** | 94.9 | 94.9 | **94.9** | 99.3 | 99.7 | **99.5** | 97.7 |  |  |  |
+| K: page numbers + scan borders + doc borders | 92.6 | 92.6 | **92.5** | 95.1 | 95.1 | **95.1** | 99.2 | 99.4 | **99.3** | – | -0.21 [-0.76, +0.37] | +0.26 [-0.21, +0.88] | -0.22 [-0.53, +0.08] |
 
-### Page numbers + scan start/end flags (`page_numbers`)
-
-| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| r22 W512: all signals | 92.1 | 92.2 | **92.1** | 94.8 | 94.8 | **94.8** | 96.0 | 88.0 | **91.8** | 78.2 |  |  |  |
-| r23 A: no page-edge heads, no metadata | 91.9 | 91.9 | **91.8** | 95.1 | 95.1 | **95.1** | 93.7 | 92.9 | **93.3** | – | -0.29 [-0.96, +0.43] | +0.36 [-0.03, +0.94] | **+1.46 [+0.72, +2.20]** |
-
-### Page numbers + document start/end metadata (`both-noscan`)
+#### Page numbers + scan borders (`page_numbers`)
 
 | Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| r22 W512: all signals | 92.8 | 92.8 | **92.7** | 94.9 | 94.9 | **94.9** | 99.3 | 99.7 | **99.5** | 97.7 |  |  |  |
+| r22 W512: page numbers + scan borders + doc borders, heads | 92.1 | 92.2 | **92.1** | 94.8 | 94.8 | **94.8** | 96.0 | 88.0 | **91.8** | 78.2 |  |  |  |
+| K: page numbers + scan borders + doc borders | 91.9 | 92.0 | **91.9** | 95.0 | 95.0 | **95.0** | 96.1 | 88.9 | **92.3** | – | -0.25 [-0.84, +0.37] | +0.18 [-0.43, +0.83] | +0.50 [-0.23, +1.23] |
+| A: page numbers + scan borders | 91.9 | 91.9 | **91.8** | 95.1 | 95.1 | **95.1** | 93.7 | 92.9 | **93.3** | – | -0.29 [-0.96, +0.43] | +0.36 [-0.03, +0.94] | **+1.46 [+0.72, +2.20]** |
 
-### Document start/end metadata + scan start/end flags (`boundaries`)
-
-| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| r22 W512: all signals | 92.7 | 92.7 | **92.6** | 88.4 | 88.4 | **88.4** | 99.3 | 99.6 | **99.4** | 97.8 |  |  |  |
-
-### Page numbers (`page_numbers-noscan`)
+#### Page numbers + doc borders (`both-noscan`)
 
 | Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| r22 W512: all signals | 92.1 | 92.2 | **92.1** | 94.8 | 94.8 | **94.8** | 95.7 | 88.1 | **91.8** | 78.2 |  |  |  |
-| r23 A: no page-edge heads, no metadata | 91.9 | 91.9 | **91.8** | 95.1 | 95.1 | **95.1** | 93.6 | 92.9 | **93.3** | – | -0.31 [-0.98, +0.40] | +0.36 [-0.03, +0.93] | **+1.48 [+0.74, +2.22]** |
-| r23 B: A without scan flags | 92.1 | 92.0 | **92.0** | 94.9 | 94.9 | **94.9** | 93.3 | 90.9 | **92.1** | – | -0.13 [-0.68, +0.42] | +0.18 [-0.11, +0.70] | +0.34 [-0.61, +1.20] |
+| r22 W512: page numbers + scan borders + doc borders, heads | 92.8 | 92.8 | **92.7** | 94.9 | 94.9 | **94.9** | 99.3 | 99.7 | **99.5** | 97.7 |  |  |  |
+| K: page numbers + scan borders + doc borders | 92.5 | 92.6 | **92.5** | 95.1 | 95.1 | **95.1** | 99.2 | 99.4 | **99.3** | – | -0.25 [-0.82, +0.32] | +0.26 [-0.22, +0.87] | -0.22 [-0.53, +0.08] |
+| G: page numbers + doc borders, heads | 92.8 | 92.9 | **92.8** | 95.2 | 95.2 | **95.1** | 99.4 | 99.7 | **99.6** | 97.4 | +0.05 [-0.49, +0.59] | **+0.28 [+0.09, +0.58]** | +0.08 [-0.11, +0.28] |
+| J: page numbers + doc borders | 92.8 | 92.6 | **92.6** | 95.1 | 95.1 | **95.1** | 99.2 | 99.8 | **99.5** | – | -0.17 [-0.72, +0.35] | **+0.27 [+0.04, +0.68]** | +0.03 [-0.22, +0.27] |
 
-### Scan start/end flags (`none`)
-
-| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| r22 W512: all signals | 91.9 | 92.0 | **91.9** | 88.3 | 88.3 | **88.3** | 94.8 | 87.8 | **91.2** | 76.9 |  |  |  |
-| r23 A: no page-edge heads, no metadata | 92.0 | 92.0 | **92.0** | 89.7 | 89.7 | **89.7** | 93.0 | 92.7 | **92.8** | – | +0.09 [-0.57, +0.78] | **+1.39 [+0.89, +2.02]** | **+1.65 [+0.84, +2.45]** |
-
-### Document start/end metadata (`boundaries-noscan`)
+#### Scan borders + doc borders (`boundaries`)
 
 | Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| r22 W512: all signals | 92.7 | 92.8 | **92.7** | 88.4 | 88.4 | **88.4** | 99.3 | 99.6 | **99.4** | 97.8 |  |  |  |
+| r22 W512: page numbers + scan borders + doc borders, heads | 92.7 | 92.7 | **92.6** | 88.4 | 88.4 | **88.4** | 99.3 | 99.6 | **99.4** | 97.8 |  |  |  |
+| K: page numbers + scan borders + doc borders | 92.4 | 92.4 | **92.3** | 89.4 | 89.4 | **89.4** | 99.2 | 99.4 | **99.3** | – | -0.32 [-0.88, +0.25] | **+1.01 [+0.54, +1.64]** | -0.17 [-0.46, +0.11] |
+| F: scan borders + doc borders, heads | 92.7 | 92.8 | **92.7** | 91.6 | 91.5 | **91.5** | 98.5 | 100.0 | **99.2** | 97.7 | +0.08 [-0.53, +0.67] | **+3.18 [+2.35, +4.03]** | -0.19 [-0.52, +0.14] |
+| I: scan borders + doc borders | 92.4 | 92.4 | **92.4** | 91.7 | 91.7 | **91.7** | 98.2 | 99.9 | **99.1** | – | -0.30 [-0.87, +0.27] | **+3.30 [+2.49, +4.12]** | **-0.38 [-0.71, -0.08]** |
 
-### No optional signal (`none-noscan`)
+#### Page numbers (`page_numbers-noscan`)
 
 | Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| r22 W512: all signals | 91.8 | 91.9 | **91.8** | 88.3 | 88.3 | **88.3** | 94.7 | 87.8 | **91.1** | 76.9 |  |  |  |
-| r23 A: no page-edge heads, no metadata | 92.0 | 92.0 | **91.9** | 89.6 | 89.6 | **89.6** | 93.0 | 92.7 | **92.8** | – | +0.14 [-0.53, +0.83] | **+1.39 [+0.89, +2.02]** | **+1.68 [+0.86, +2.49]** |
-| r23 B: A without scan flags | 91.9 | 91.9 | **91.8** | 88.5 | 88.5 | **88.5** | 92.6 | 90.5 | **91.5** | – | +0.02 [-0.56, +0.62] | +0.25 [-0.25, +0.89] | +0.40 [-0.55, +1.27] |
-| r23 C: B without page numbers (embeddings only) | 91.9 | 91.9 | **91.8** | 90.9 | 90.9 | **90.9** | 90.7 | 93.4 | **92.0** | – | +0.05 [-0.57, +0.68] | **+2.66 [+1.89, +3.44]** | **+0.86 [+0.06, +1.66]** |
+| r22 W512: page numbers + scan borders + doc borders, heads | 92.1 | 92.2 | **92.1** | 94.8 | 94.8 | **94.8** | 95.7 | 88.1 | **91.8** | 78.2 |  |  |  |
+| K: page numbers + scan borders + doc borders | 91.8 | 91.8 | **91.7** | 94.9 | 94.9 | **94.9** | 96.1 | 88.9 | **92.4** | – | -0.42 [-1.00, +0.19] | +0.18 [-0.43, +0.84] | +0.57 [-0.13, +1.31] |
+| G: page numbers + doc borders, heads | 92.0 | 92.1 | **91.9** | 95.0 | 95.1 | **95.0** | 94.5 | 90.1 | **92.3** | 78.2 | -0.17 [-0.73, +0.40] | **+0.29 [+0.11, +0.56]** | +0.51 [-0.18, +1.22] |
+| J: page numbers + doc borders | 91.9 | 91.8 | **91.7** | 95.0 | 95.1 | **95.0** | 93.1 | 90.8 | **92.0** | – | -0.41 [-0.97, +0.17] | **+0.29 [+0.07, +0.68]** | +0.17 [-0.53, +0.90] |
+| A: page numbers + scan borders | 91.9 | 91.9 | **91.8** | 95.1 | 95.1 | **95.1** | 93.6 | 92.9 | **93.3** | – | -0.31 [-0.98, +0.40] | +0.36 [-0.03, +0.93] | **+1.48 [+0.74, +2.22]** |
+| B: page numbers | 92.1 | 92.0 | **92.0** | 94.9 | 94.9 | **94.9** | 93.3 | 90.9 | **92.1** | – | -0.13 [-0.68, +0.42] | +0.18 [-0.11, +0.70] | +0.34 [-0.61, +1.20] |
 
-Δ: difference to r22 W512 in the same situation, in points, with the 95% interval of a paired bootstrap over the dev streams (`tools/compare_checkpoints.py`); bold where it excludes zero.
+#### Scan borders (`none`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: page numbers + scan borders + doc borders, heads | 91.9 | 92.0 | **91.9** | 88.3 | 88.3 | **88.3** | 94.8 | 87.8 | **91.2** | 76.9 |  |  |  |
+| K: page numbers + scan borders + doc borders | 91.7 | 91.7 | **91.6** | 89.2 | 89.2 | **89.2** | 95.7 | 88.6 | **92.0** | – | -0.24 [-0.84, +0.36] | **+0.90 [+0.43, +1.53]** | **+0.84 [+0.11, +1.59]** |
+| F: scan borders + doc borders, heads | 91.9 | 91.9 | **91.9** | 91.4 | 91.4 | **91.4** | 93.2 | 89.4 | **91.3** | 76.3 | -0.02 [-0.66, +0.64] | **+3.08 [+2.29, +3.89]** | +0.06 [-0.64, +0.75] |
+| I: scan borders + doc borders | 91.9 | 91.9 | **91.8** | 91.6 | 91.6 | **91.6** | 92.7 | 90.7 | **91.7** | – | -0.03 [-0.66, +0.63] | **+3.28 [+2.48, +4.10]** | +0.49 [-0.29, +1.28] |
+| A: page numbers + scan borders | 92.0 | 92.0 | **92.0** | 89.7 | 89.7 | **89.7** | 93.0 | 92.7 | **92.8** | – | +0.09 [-0.57, +0.78] | **+1.39 [+0.89, +2.02]** | **+1.65 [+0.84, +2.45]** |
+| D: scan borders | 92.5 | 92.4 | **92.3** | 92.6 | 92.6 | **92.6** | 94.7 | 92.6 | **93.6** | – | +0.45 [-0.14, +1.04] | **+4.37 [+3.44, +5.35]** | **+2.41 [+1.58, +3.25]** |
+
+#### Doc borders (`boundaries-noscan`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: page numbers + scan borders + doc borders, heads | 92.7 | 92.8 | **92.7** | 88.4 | 88.4 | **88.4** | 99.3 | 99.6 | **99.4** | 97.8 |  |  |  |
+| K: page numbers + scan borders + doc borders | 92.3 | 92.4 | **92.3** | 89.4 | 89.4 | **89.4** | 99.2 | 99.4 | **99.3** | – | -0.39 [-0.96, +0.18] | **+1.01 [+0.54, +1.64]** | -0.17 [-0.46, +0.11] |
+| G: page numbers + doc borders, heads | 92.7 | 92.8 | **92.7** | 89.0 | 89.0 | **89.0** | 99.3 | 99.7 | **99.5** | 97.3 | +0.00 [-0.55, +0.55] | **+0.64 [+0.34, +1.01]** | +0.06 [-0.14, +0.25] |
+| J: page numbers + doc borders | 92.6 | 92.5 | **92.5** | 89.2 | 89.1 | **89.1** | 99.1 | 99.8 | **99.4** | – | -0.19 [-0.69, +0.32] | **+0.78 [+0.43, +1.24]** | -0.03 [-0.30, +0.23] |
+| F: scan borders + doc borders, heads | 92.7 | 92.8 | **92.7** | 91.5 | 91.5 | **91.5** | 98.5 | 100.0 | **99.2** | 97.7 | +0.06 [-0.54, +0.66] | **+3.17 [+2.35, +4.02]** | -0.22 [-0.55, +0.11] |
+| I: scan borders + doc borders | 92.4 | 92.4 | **92.4** | 91.7 | 91.7 | **91.6** | 98.1 | 99.9 | **99.0** | – | -0.32 [-0.90, +0.25] | **+3.29 [+2.49, +4.11]** | **-0.41 [-0.74, -0.11]** |
+| E: doc borders, heads | 92.3 | 92.3 | **92.2** | 92.0 | 92.0 | **92.0** | 98.6 | 99.9 | **99.2** | 98.3 | -0.46 [-1.03, +0.12] | **+3.60 [+2.74, +4.48]** | -0.19 [-0.50, +0.11] |
+| H: doc borders | 92.8 | 92.9 | **92.8** | 92.5 | 92.5 | **92.5** | 98.3 | 99.9 | **99.1** | – | +0.09 [-0.51, +0.70] | **+4.10 [+3.16, +5.12]** | **-0.33 [-0.64, -0.03]** |
+
+#### No optional signal (`none-noscan`)
+
+| Model | Type P | Type R | **Type F1** | Side P | Side R | **Side F1** | Border P | Border R | **Border F1** | Both F1 | Δ Type F1 | Δ Side F1 | Δ Border F1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| r22 W512: page numbers + scan borders + doc borders, heads | 91.8 | 91.9 | **91.8** | 88.3 | 88.3 | **88.3** | 94.7 | 87.8 | **91.1** | 76.9 |  |  |  |
+| K: page numbers + scan borders + doc borders | 91.6 | 91.6 | **91.5** | 89.2 | 89.2 | **89.1** | 95.6 | 88.6 | **92.0** | – | -0.26 [-0.85, +0.33] | **+0.90 [+0.43, +1.53]** | **+0.81 [+0.08, +1.57]** |
+| G: page numbers + doc borders, heads | 91.8 | 91.9 | **91.8** | 88.9 | 88.9 | **88.9** | 93.6 | 89.5 | **91.5** | 77.7 | +0.00 [-0.61, +0.62] | **+0.65 [+0.36, +0.97]** | +0.36 [-0.44, +1.20] |
+| J: page numbers + doc borders | 91.7 | 91.7 | **91.6** | 89.0 | 89.0 | **89.0** | 92.0 | 90.5 | **91.2** | – | -0.16 [-0.77, +0.47] | **+0.75 [+0.41, +1.21]** | +0.08 [-0.65, +0.82] |
+| F: scan borders + doc borders, heads | 91.8 | 91.8 | **91.8** | 91.3 | 91.4 | **91.3** | 92.9 | 89.3 | **91.1** | 76.3 | -0.02 [-0.66, +0.62] | **+3.08 [+2.29, +3.89]** | -0.08 [-0.78, +0.61] |
+| I: scan borders + doc borders | 92.0 | 91.9 | **91.9** | 91.6 | 91.6 | **91.5** | 92.5 | 90.7 | **91.6** | – | +0.10 [-0.55, +0.77] | **+3.28 [+2.48, +4.08]** | +0.44 [-0.34, +1.24] |
+| E: doc borders, heads | 91.7 | 91.7 | **91.6** | 91.8 | 91.8 | **91.8** | 92.6 | 90.1 | **91.3** | 79.7 | -0.15 [-0.80, +0.51] | **+3.54 [+2.69, +4.42]** | +0.18 [-0.55, +0.91] |
+| H: doc borders | 92.1 | 92.0 | **91.9** | 92.3 | 92.3 | **92.3** | 93.8 | 91.6 | **92.7** | – | +0.17 [-0.48, +0.84] | **+4.08 [+3.14, +5.09]** | **+1.52 [+0.79, +2.26]** |
+| A: page numbers + scan borders | 92.0 | 92.0 | **91.9** | 89.6 | 89.6 | **89.6** | 93.0 | 92.7 | **92.8** | – | +0.14 [-0.53, +0.83] | **+1.39 [+0.89, +2.02]** | **+1.68 [+0.86, +2.49]** |
+| B: page numbers | 91.9 | 91.9 | **91.8** | 88.5 | 88.5 | **88.5** | 92.6 | 90.5 | **91.5** | – | +0.02 [-0.56, +0.62] | +0.25 [-0.25, +0.89] | +0.40 [-0.55, +1.27] |
+| D: scan borders | 92.4 | 92.3 | **92.3** | 92.6 | 92.6 | **92.6** | 94.6 | 92.5 | **93.5** | – | +0.50 [-0.11, +1.12] | **+4.37 [+3.44, +5.35]** | **+2.38 [+1.54, +3.23]** |
+| C: nothing | 91.9 | 91.9 | **91.8** | 90.9 | 90.9 | **90.9** | 90.7 | 93.4 | **92.0** | – | +0.05 [-0.57, +0.68] | **+2.66 [+1.89, +3.44]** | **+0.86 [+0.06, +1.66]** |
 
 ## Borders from the page edge heads
 
